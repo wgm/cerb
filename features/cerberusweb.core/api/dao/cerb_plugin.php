@@ -26,26 +26,6 @@ class DAO_CerbPlugin extends Cerb_ORMHelper {
 	const LINK = 'link';
 	const MANIFEST_CACHE_JSON = 'manifest_cache_json';
 
-// 	static function create($fields) {
-// 		$db = DevblocksPlatform::getDatabaseService();
-		
-// 		$sql = "INSERT INTO cerb_plugin () VALUES ()";
-// 		$db->Execute($sql);
-// 		$id = $db->LastInsertId();
-		
-// 		self::update($id, $fields);
-		
-// 		return $id;
-// 	}
-	
-// 	static function update($ids, $fields) {
-// 		parent::_update($ids, 'cerb_plugin', $fields);
-// 	}
-	
-// 	static function updateWhere($fields, $where) {
-// 		parent::_updateWhere('cerb_plugin', $fields, $where);
-// 	}
-	
 	/**
 	 * @param string $where
 	 * @param mixed $sortBy
@@ -92,7 +72,7 @@ class DAO_CerbPlugin extends Cerb_ORMHelper {
 	static private function _getObjectsFromResult($rs) {
 		$objects = array();
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$object = new Model_CerbPlugin();
 			$object->id = $row['id'];
 			$object->enabled = $row['enabled'];
@@ -106,7 +86,7 @@ class DAO_CerbPlugin extends Cerb_ORMHelper {
 			$objects[$object->id] = $object;
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return $objects;
 	}
@@ -197,13 +177,12 @@ class DAO_CerbPlugin extends Cerb_ORMHelper {
 			$rs = $db->SelectLimit($sql,$limit,$page*$limit) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs ADORecordSet */
 		} else {
 			$rs = $db->Execute($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs ADORecordSet */
-			$total = mysql_num_rows($rs);
+			$total = mysqli_num_rows($rs);
 		}
 		
 		$results = array();
-		$total = -1;
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$result = array();
 			foreach($row as $f => $v) {
 				$result[$f] = $v;
@@ -212,16 +191,20 @@ class DAO_CerbPlugin extends Cerb_ORMHelper {
 			$results[$object_id] = $result;
 		}
 
-		// [JAS]: Count all
+		$total = count($results);
+		
 		if($withCounts) {
-			$count_sql =
-				($has_multiple_values ? "SELECT COUNT(DISTINCT cerb_plugin.id) " : "SELECT COUNT(cerb_plugin.id) ").
-				$join_sql.
-				$where_sql;
-			$total = $db->GetOne($count_sql);
+			// We can skip counting if we have a less-than-full single page
+			if(!(0 == $page && $total < $limit)) {
+				$count_sql =
+					($has_multiple_values ? "SELECT COUNT(DISTINCT cerb_plugin.id) " : "SELECT COUNT(cerb_plugin.id) ").
+					$join_sql.
+					$where_sql;
+				$total = $db->GetOne($count_sql);
+			}
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return array($results,$total);
 	}

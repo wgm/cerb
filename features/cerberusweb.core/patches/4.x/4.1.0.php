@@ -44,11 +44,11 @@ if(isset($columns['sla_id'])) {
 		$sql = "SELECT id, name FROM sla ORDER BY name";
 		$rs = $db->Execute($sql);
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$slas[$row['id']] = $row['name'];
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 	}
 	
 	if(!empty($count) && !empty($slas)) { // Move to a custom field before dropping
@@ -274,31 +274,31 @@ if(isset($tables['worker_pref'])) {
 
 // ===========================================================================
 // Ophaned org notes
-$db->Execute("DELETE QUICK note FROM note LEFT JOIN contact_org ON (contact_org.id=note.source_id) WHERE note.source_extension_id = 'cerberusweb.notes.source.org' AND contact_org.id IS NULL");
+$db->Execute("DELETE note FROM note LEFT JOIN contact_org ON (contact_org.id=note.source_id) WHERE note.source_extension_id = 'cerberusweb.notes.source.org' AND contact_org.id IS NULL");
 
 // ===========================================================================
 // Ophaned address custom fields
-$db->Execute("DELETE QUICK custom_field_stringvalue FROM custom_field_stringvalue LEFT JOIN address ON (address.id=custom_field_stringvalue.source_id) WHERE custom_field_stringvalue.source_extension = 'cerberusweb.fields.source.address' AND address.id IS NULL");
-$db->Execute("DELETE QUICK custom_field_numbervalue FROM custom_field_numbervalue LEFT JOIN address ON (address.id=custom_field_numbervalue.source_id) WHERE custom_field_numbervalue.source_extension = 'cerberusweb.fields.source.address' AND address.id IS NULL");
-$db->Execute("DELETE QUICK custom_field_clobvalue FROM custom_field_clobvalue LEFT JOIN address ON (address.id=custom_field_clobvalue.source_id) WHERE custom_field_clobvalue.source_extension = 'cerberusweb.fields.source.address' AND address.id IS NULL");
+$db->Execute("DELETE custom_field_stringvalue FROM custom_field_stringvalue LEFT JOIN address ON (address.id=custom_field_stringvalue.source_id) WHERE custom_field_stringvalue.source_extension = 'cerberusweb.fields.source.address' AND address.id IS NULL");
+$db->Execute("DELETE custom_field_numbervalue FROM custom_field_numbervalue LEFT JOIN address ON (address.id=custom_field_numbervalue.source_id) WHERE custom_field_numbervalue.source_extension = 'cerberusweb.fields.source.address' AND address.id IS NULL");
+$db->Execute("DELETE custom_field_clobvalue FROM custom_field_clobvalue LEFT JOIN address ON (address.id=custom_field_clobvalue.source_id) WHERE custom_field_clobvalue.source_extension = 'cerberusweb.fields.source.address' AND address.id IS NULL");
 
 // ===========================================================================
 // Ophaned org custom fields
-$db->Execute("DELETE QUICK custom_field_stringvalue FROM custom_field_stringvalue LEFT JOIN contact_org ON (contact_org.id=custom_field_stringvalue.source_id) WHERE custom_field_stringvalue.source_extension = 'cerberusweb.fields.source.org' AND contact_org.id IS NULL");
-$db->Execute("DELETE QUICK custom_field_numbervalue FROM custom_field_numbervalue LEFT JOIN contact_org ON (contact_org.id=custom_field_numbervalue.source_id) WHERE custom_field_numbervalue.source_extension = 'cerberusweb.fields.source.org' AND contact_org.id IS NULL");
-$db->Execute("DELETE QUICK custom_field_clobvalue FROM custom_field_clobvalue LEFT JOIN contact_org ON (contact_org.id=custom_field_clobvalue.source_id) WHERE custom_field_clobvalue.source_extension = 'cerberusweb.fields.source.org' AND contact_org.id IS NULL");
+$db->Execute("DELETE custom_field_stringvalue FROM custom_field_stringvalue LEFT JOIN contact_org ON (contact_org.id=custom_field_stringvalue.source_id) WHERE custom_field_stringvalue.source_extension = 'cerberusweb.fields.source.org' AND contact_org.id IS NULL");
+$db->Execute("DELETE custom_field_numbervalue FROM custom_field_numbervalue LEFT JOIN contact_org ON (contact_org.id=custom_field_numbervalue.source_id) WHERE custom_field_numbervalue.source_extension = 'cerberusweb.fields.source.org' AND contact_org.id IS NULL");
+$db->Execute("DELETE custom_field_clobvalue FROM custom_field_clobvalue LEFT JOIN contact_org ON (contact_org.id=custom_field_clobvalue.source_id) WHERE custom_field_clobvalue.source_extension = 'cerberusweb.fields.source.org' AND contact_org.id IS NULL");
 
 // ===========================================================================
 // Ophaned task custom fields
-$db->Execute("DELETE QUICK custom_field_stringvalue FROM custom_field_stringvalue LEFT JOIN task ON (task.id=custom_field_stringvalue.source_id) WHERE custom_field_stringvalue.source_extension = 'cerberusweb.fields.source.task' AND task.id IS NULL");
-$db->Execute("DELETE QUICK custom_field_numbervalue FROM custom_field_numbervalue LEFT JOIN task ON (task.id=custom_field_numbervalue.source_id) WHERE custom_field_numbervalue.source_extension = 'cerberusweb.fields.source.task' AND task.id IS NULL");
-$db->Execute("DELETE QUICK custom_field_clobvalue FROM custom_field_clobvalue LEFT JOIN task ON (task.id=custom_field_clobvalue.source_id) WHERE custom_field_clobvalue.source_extension = 'cerberusweb.fields.source.task' AND task.id IS NULL");
+$db->Execute("DELETE custom_field_stringvalue FROM custom_field_stringvalue LEFT JOIN task ON (task.id=custom_field_stringvalue.source_id) WHERE custom_field_stringvalue.source_extension = 'cerberusweb.fields.source.task' AND task.id IS NULL");
+$db->Execute("DELETE custom_field_numbervalue FROM custom_field_numbervalue LEFT JOIN task ON (task.id=custom_field_numbervalue.source_id) WHERE custom_field_numbervalue.source_extension = 'cerberusweb.fields.source.task' AND task.id IS NULL");
+$db->Execute("DELETE custom_field_clobvalue FROM custom_field_clobvalue LEFT JOIN task ON (task.id=custom_field_clobvalue.source_id) WHERE custom_field_clobvalue.source_extension = 'cerberusweb.fields.source.task' AND task.id IS NULL");
 
 // ===========================================================================
 // Ophaned ticket custom fields
-$db->Execute("DELETE QUICK custom_field_stringvalue FROM custom_field_stringvalue LEFT JOIN ticket ON (ticket.id=custom_field_stringvalue.source_id) WHERE custom_field_stringvalue.source_extension = 'cerberusweb.fields.source.ticket' AND ticket.id IS NULL");
-$db->Execute("DELETE QUICK custom_field_numbervalue FROM custom_field_numbervalue LEFT JOIN ticket ON (ticket.id=custom_field_numbervalue.source_id) WHERE custom_field_numbervalue.source_extension = 'cerberusweb.fields.source.ticket' AND ticket.id IS NULL");
-$db->Execute("DELETE QUICK custom_field_clobvalue FROM custom_field_clobvalue LEFT JOIN ticket ON (ticket.id=custom_field_clobvalue.source_id) WHERE custom_field_clobvalue.source_extension = 'cerberusweb.fields.source.ticket' AND ticket.id IS NULL");
+$db->Execute("DELETE custom_field_stringvalue FROM custom_field_stringvalue LEFT JOIN ticket ON (ticket.id=custom_field_stringvalue.source_id) WHERE custom_field_stringvalue.source_extension = 'cerberusweb.fields.source.ticket' AND ticket.id IS NULL");
+$db->Execute("DELETE custom_field_numbervalue FROM custom_field_numbervalue LEFT JOIN ticket ON (ticket.id=custom_field_numbervalue.source_id) WHERE custom_field_numbervalue.source_extension = 'cerberusweb.fields.source.ticket' AND ticket.id IS NULL");
+$db->Execute("DELETE custom_field_clobvalue FROM custom_field_clobvalue LEFT JOIN ticket ON (ticket.id=custom_field_clobvalue.source_id) WHERE custom_field_clobvalue.source_extension = 'cerberusweb.fields.source.ticket' AND ticket.id IS NULL");
 
 // ===========================================================================
 // Migrate team_routing_rule to group_inbox_filter
@@ -327,20 +327,20 @@ if(!isset($columns['actions_ser'])) {
     	$buckets = array();
     	$sql = sprintf("SELECT id,name,team_id FROM category");
     	$rs = $db->Execute($sql);
-    	while($row = mysql_fetch_assoc($rs)) {
+    	while($row = mysqli_fetch_assoc($rs)) {
     		$buckets[intval($row['id'])] = array(
     			'name' => $row['name'],
     			'group_id' => intval($row['team_id'])
     		);
     	}
     	
-    	mysql_free_result($rs);
+    	mysqli_free_result($rs);
     	
     	// Loop through the old style values
     	$sql = "SELECT id, do_assign, do_move, do_spam, do_status FROM group_inbox_filter";
     	$rs = $db->Execute($sql);
     	
-    	while($row = mysql_fetch_assoc($rs)) {
+    	while($row = mysqli_fetch_assoc($rs)) {
     		$actions = array();
     		
     		$rule_id = intval($row['id']);
@@ -376,7 +376,7 @@ if(!isset($columns['actions_ser'])) {
     		$db->Execute($sql);
     	}
     	
-    	mysql_free_result($rs);
+    	mysqli_free_result($rs);
     	
     	unset($buckets);
     }

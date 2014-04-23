@@ -12,7 +12,7 @@
 	</p>
 	
 	<p>
-		Depending on the plugins you have installed, a tab can be one of several <b>Types</b>.  The default is <i>Worklists</i>, which displays as many lists of specific information as you want.  The other tab types are specialized for specific purposes, such as browsing the knowledgebase by category.
+		Depending on the plugins you have installed, a tab can be one of several <b>Types</b>.  The default is <i>Worklists</i>, which displays as many lists of specific information as you want.  The other tab types are specialized for specific purposes, such as informational dashboards and browsing the knowledgebase by category.
 	</p>
 	
 	<p>
@@ -125,6 +125,8 @@ $frm.find('button.add').click(function(e) {
 		$tabs.tabs('refresh');
 		
 		$this.effect('transfer', { to:$new_tab, className:'effects-transfer' }, 500, function() { });
+		
+		$tabs.tabs('option', 'active', -2);
 		
 		$input.val('').focus();
 		$frm.find('textarea[name=import]').val('');

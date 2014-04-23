@@ -1,58 +1,104 @@
-<style type="text/css">
-DIV.dashboard-widget {
-	margin:5px 5px 10px 5px;
-}
-
-DIV.dashboard-widget DIV.dashboard-widget-title {
-	background-color:rgb(220,220,220);
-	padding:5px 10px;
-	font-size:120%;
-	font-weight:bold;
-	cursor:move;
-	border-radius:10px;
-	-webkit-border-radius:10px;
-	-moz-border-radius:10px;
-	-o-border-radius:10px;
-}
-
-DIV.dashboard-widget DIV.updated {
-	text-align:left;
-	color:rgb(200,200,200);
-	display:none;
-}
-</style>
+{if empty($columns)}
+<form action="#" onsubmit="return false;">
+<div class="help-box" style="padding:5px;border:0;">
+	<h1 style="margin-bottom:5px;text-align:left;">Let's put this dashboard to good use</h1>
+	
+	<p>
+		You now have a new dashboard tab. You can click the 
+		<button type="button" onclick="$btn=$('#frmWorkspacePage{$page->id} button.config-page.split-left'); $(this).effect('transfer', { to:$btn, className:'effects-transfer' }, 500, function() { $btn.effect('pulsate', {  times: 3 }, function(e) { $(this).click(); } ); } );"><span class="cerb-sprite2 sprite-gear"></span></button> 
+		button in the top right and select <b>Edit Tab</b> from the menu to configure how many columns of widgets this tab can display. Click the <button type="button" onclick="var $btn = $('#frmAddWidget{$workspace_tab->id} BUTTON.add_widget'); $(this).effect('transfer', { to:$btn, className:'effects-transfer' }, 500, function() { $btn.effect('pulsate', {  times: 3 }, function(e) { $(this).click(); } ); } );"><span class="cerb-sprite2 sprite-plus-circle"></span> Add Widget</button> button to add new widgets to the dashboard.
+	</p>
+</div>
+</form>
+{/if}
 
 <form id="frmAddWidget{$workspace_tab->id}" action="#">
 <button type="button" class="add_widget"><span class="cerb-sprite2 sprite-plus-circle"></span> Add Widget</button>
 </form>
 
+{$column_count = DevblocksPlatform::intClamp($workspace_tab->params.num_columns, 1, 4)}
+{$column_ids = range(0, $column_count-1)}
+
 <table cellpadding="0" cellspacing="0" border="0" width="100%" id="dashboard{$workspace_tab->id}">
 	<tr>
-		<td width="33%" valign="top" class="column">
-			{foreach from=$columns.0 item=widget key=widget_id}
-			<div class="dashboard-widget" id="widget{$widget_id}">
-				{include file="devblocks:cerberusweb.core::internal/workspaces/widgets/render.tpl" widget=$widget}
+		{$column_width_remaining = 100}
+		
+		{foreach from=$column_ids item=column_id name=columns}
+		{if $smarty.foreach.columns.last}{$column_width=$column_width_remaining}{else}{$column_width=floor(100/$column_count)}{$column_width_remaining = $column_width_remaining - $column_width}{/if}
+		<td width="{$column_width}%" valign="top" class="column">
+			{foreach from=$columns.$column_id item=widget key=widget_id name=widgets}
+			{capture name=widget_content}{$widget_is_preloaded = Extension_WorkspaceWidget::renderWidgetFromCache($widget, false)}{/capture}
+			
+			<div class="dashboard-widget{if $widget_is_preloaded} widget-preloaded{/if}" id="widget{$widget_id}">
+				{if $widget_is_preloaded}
+					{$smarty.capture.widget_content nofilter}
+					
+				{else}
+					<div class="dashboard-widget-title" style="margin-bottom:5px;">
+						{$widget->label}
+					</div>
+					<div style="text-align:center;">
+						<span class="cerb-ajax-spinner"></span>
+					</div>
+				{/if}
 			</div>
 			{/foreach}
 		</td>
-		<td width="34%" valign="top" class="column">
-			{foreach from=$columns.1 item=widget key=widget_id}
-			<div class="dashboard-widget" id="widget{$widget_id}">
-				{include file="devblocks:cerberusweb.core::internal/workspaces/widgets/render.tpl" widget=$widget}
-			</div>
-			{/foreach}
-		</td>
-		<td width="33%" valign="top" class="column">
-			{foreach from=$columns.2 item=widget key=widget_id}
-			<div class="dashboard-widget" id="widget{$widget_id}">
-				{include file="devblocks:cerberusweb.core::internal/workspaces/widgets/render.tpl" widget=$widget}
-			</div>
-			{/foreach}
-		</td>
+		{/foreach}
 	</tr>
 </table>
 
 <script type="text/javascript">
+	$.widgetAjaxLoader = function() {
+		this.widget_ids = [];
+		this.is_running = false;
+	};
+	
+	$.widgetAjaxLoader.prototype = {
+		add: function(widget_id) {
+			this.widget_ids.push(widget_id);
+			this.next();
+		},
+		
+		next: function() {
+			if(this.widget_ids.length == 0)
+				return;
+			
+			if(this.is_running == true)
+				return;
+			
+			var widget_id = this.widget_ids.shift();
+			var loader = this;
+			var $div = $('#widget' + widget_id);
+			
+			var cb = function(html) {
+				if(null != $div) {
+					$div.html(html);
+					$div.fadeTo("fast", 1.0);
+					
+					if($div.is('DIV[id^=view]'))
+						$div.trigger('view_refresh');
+				}
+				
+				loader.is_running = false;
+				loader.next();
+			}
+
+			$div.fadeTo("fast", 0.2);
+			
+			this.is_running = true;
+			genericAjaxGet('widget' + widget_id,'c=internal&a=handleSectionAction&section=dashboards&action=renderWidget&widget_id=' + widget_id, cb);
+		},
+	};
+	
+	var $widgetAjaxLoader = new $.widgetAjaxLoader();
+	
+	{foreach from=$columns item=widgets}
+		{foreach from=$widgets item=widget key=widget_id}
+			if(!$('#widget{$widget_id}').is('.widget-preloaded'))
+				$widgetAjaxLoader.add({$widget_id});
+		{/foreach}
+	{/foreach}
 	
 	try {
 		clearInterval(window.dashboardTimer{$workspace_tab->id});
@@ -69,7 +115,6 @@ DIV.dashboard-widget DIV.updated {
 			$dashboard.find('DIV.dashboard-widget').trigger('dashboard_heartbeat');
 		};
 		
-		//tick();
 		window.dashboardTimer{$workspace_tab->id} = setInterval(tick, 1000);
 		
 	} catch(e) {
@@ -118,14 +163,14 @@ DIV.dashboard-widget DIV.updated {
 	$dashboard.on('reorder', function(e) {
 		$dashboard = $(this);
 		
-		// [TODO] Number of columns
 		var $tr = $dashboard.find('TBODY > TR');
-		var $col1 = $tr.find('> TD:nth(0)').find('input:hidden[name="widget_pos[]"]').map(function() { return $(this).val(); }).get().join(',');
-		var $col2 = $tr.find('> TD:nth(1)').find('input:hidden[name="widget_pos[]"]').map(function() { return $(this).val(); }).get().join(',');
-		var $col3 = $tr.find('> TD:nth(2)').find('input:hidden[name="widget_pos[]"]').map(function() { return $(this).val(); }).get().join(',');
+		var widget_positions = '';
 		
-		var widget_positions = '&column[]=' + $col1 + '&column[]=' + $col2 + '&column[]=' + $col3;
-
+		{foreach from=$column_ids item=column_id}
+		var $col_widgets = $tr.find('> TD:nth({$column_id})').find('input:hidden[name="widget_pos[]"]').map(function() { return $(this).val(); }).get().join(',');
+		widget_positions += '&column[]=' + $col_widgets;
+		{/foreach}
+		
 		genericAjaxGet('', 'c=internal&a=handleSectionAction&section=dashboards&action=setWidgetPositions&workspace_tab_id={$workspace_tab->id}' + widget_positions)
 	});
 	

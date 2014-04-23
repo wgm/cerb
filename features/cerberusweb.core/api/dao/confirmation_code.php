@@ -111,7 +111,7 @@ class DAO_ConfirmationCode extends DevblocksORMHelper {
 	static private function _getObjectsFromResult($rs) {
 		$objects = array();
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$object = new Model_ConfirmationCode();
 			$object->id = $row['id'];
 			$object->namespace_key = $row['namespace_key'];
@@ -124,7 +124,7 @@ class DAO_ConfirmationCode extends DevblocksORMHelper {
 			$objects[$object->id] = $object;
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return $objects;
 	}
@@ -134,7 +134,7 @@ class DAO_ConfirmationCode extends DevblocksORMHelper {
 		$logger = DevblocksPlatform::getConsoleLog();
 		
 		// Delete confirmation codes older than 12 hours
-		$sql = sprintf("DELETE QUICK FROM confirmation_code WHERE created < %d", time() + 43200); // 60s*60m*12h
+		$sql = sprintf("DELETE FROM confirmation_code WHERE created < %d", time() + 43200); // 60s*60m*12h
 		$db->Execute($sql);
 		$logger->info('[Maint] Purged ' . $db->Affected_Rows() . ' confirmation_code records.');
 	}
@@ -236,13 +236,12 @@ class DAO_ConfirmationCode extends DevblocksORMHelper {
 			$rs = $db->SelectLimit($sql,$limit,$page*$limit) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs ADORecordSet */
 		} else {
 			$rs = $db->Execute($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs ADORecordSet */
-			$total = mysql_num_rows($rs);
+			$total = mysqli_num_rows($rs);
 		}
 		
 		$results = array();
-		$total = -1;
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$result = array();
 			foreach($row as $f => $v) {
 				$result[$f] = $v;
@@ -251,16 +250,20 @@ class DAO_ConfirmationCode extends DevblocksORMHelper {
 			$results[$object_id] = $result;
 		}
 
-		// [JAS]: Count all
+		$total = count($results);
+		
 		if($withCounts) {
-			$count_sql =
-				($has_multiple_values ? "SELECT COUNT(DISTINCT confirmation_code.id) " : "SELECT COUNT(confirmation_code.id) ").
-				$join_sql.
-				$where_sql;
-			$total = $db->GetOne($count_sql);
+			// We can skip counting if we have a less-than-full single page
+			if(!(0 == $page && $total < $limit)) {
+				$count_sql =
+					($has_multiple_values ? "SELECT COUNT(DISTINCT confirmation_code.id) " : "SELECT COUNT(confirmation_code.id) ").
+					$join_sql.
+					$where_sql;
+				$total = $db->GetOne($count_sql);
+			}
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return array($results,$total);
 	}

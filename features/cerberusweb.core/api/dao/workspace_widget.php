@@ -23,6 +23,7 @@ class DAO_WorkspaceWidget extends Cerb_ORMHelper {
 	const UPDATED_AT = 'updated_at';
 	const PARAMS_JSON = 'params_json';
 	const POS = 'pos';
+	const CACHE_TTL = 'cache_ttl';
 
 	static function create($fields) {
 		$db = DevblocksPlatform::getDatabaseService();
@@ -47,31 +48,8 @@ class DAO_WorkspaceWidget extends Cerb_ORMHelper {
 			if(empty($batch_ids))
 				continue;
 			
-			// Get state before changes
-			$object_changes = parent::_getUpdateDeltas($batch_ids, $fields, get_class());
-
 			// Make changes
 			parent::_update($batch_ids, 'workspace_widget', $fields);
-			
-			// Send events
-			if(!empty($object_changes)) {
-				// Local events
-				//self::_processUpdateEvents($object_changes);
-				
-				// Trigger an event about the changes
-				$eventMgr = DevblocksPlatform::getEventService();
-				$eventMgr->trigger(
-					new Model_DevblocksEvent(
-						'dao.workspace_widget.update',
-						array(
-							'objects' => $object_changes,
-						)
-					)
-				);
-				
-				// Log the context update
-				//DevblocksPlatform::markContextChanged(CerberusContexts::CONTEXT_, $batch_ids);
-			}
 		}
 	}
 	
@@ -92,7 +70,7 @@ class DAO_WorkspaceWidget extends Cerb_ORMHelper {
 		list($where_sql, $sort_sql, $limit_sql) = self::_getWhereSQL($where, $sortBy, $sortAsc, $limit);
 		
 		// SQL
-		$sql = "SELECT id, extension_id, workspace_tab_id, label, updated_at, params_json, pos ".
+		$sql = "SELECT id, extension_id, workspace_tab_id, label, updated_at, params_json, pos, cache_ttl ".
 			"FROM workspace_widget ".
 			$where_sql.
 			$sort_sql.
@@ -138,14 +116,15 @@ class DAO_WorkspaceWidget extends Cerb_ORMHelper {
 	static private function _getObjectsFromResult($rs) {
 		$objects = array();
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$object = new Model_WorkspaceWidget();
 			$object->id = intval($row['id']);
 			$object->extension_id = $row['extension_id'];
 			$object->workspace_tab_id = $row['workspace_tab_id'];
 			$object->label = $row['label'];
-			$object->updated_at = $row['updated_at'];
+			$object->updated_at = intval($row['updated_at']);
 			$object->pos = $row['pos'];
+			$object->cache_ttl = intval($row['cache_ttl']);
 			
 			if(false != ($params = @json_decode($row['params_json'], true)))
 				$object->params = $params;
@@ -153,9 +132,13 @@ class DAO_WorkspaceWidget extends Cerb_ORMHelper {
 			$objects[$object->id] = $object;
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return $objects;
+	}
+	
+	static function random() {
+		return self::_getRandom('workspace_widget');
 	}
 	
 	static function delete($ids) {
@@ -214,14 +197,16 @@ class DAO_WorkspaceWidget extends Cerb_ORMHelper {
 			"workspace_widget.label as %s, ".
 			"workspace_widget.updated_at as %s, ".
 			"workspace_widget.params_json as %s, ".
-			"workspace_widget.pos as %s ",
+			"workspace_widget.pos as %s, ".
+			"workspace_widget.cache_ttl as %s ",
 				SearchFields_WorkspaceWidget::ID,
 				SearchFields_WorkspaceWidget::EXTENSION_ID,
 				SearchFields_WorkspaceWidget::WORKSPACE_TAB_ID,
 				SearchFields_WorkspaceWidget::LABEL,
 				SearchFields_WorkspaceWidget::UPDATED_AT,
 				SearchFields_WorkspaceWidget::PARAMS_JSON,
-				SearchFields_WorkspaceWidget::POS
+				SearchFields_WorkspaceWidget::POS,
+				SearchFields_WorkspaceWidget::CACHE_TTL
 			);
 			
 		$join_sql = "FROM workspace_widget ";
@@ -309,13 +294,12 @@ class DAO_WorkspaceWidget extends Cerb_ORMHelper {
 			$rs = $db->SelectLimit($sql,$limit,$page*$limit) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs ADORecordSet */
 		} else {
 			$rs = $db->Execute($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs ADORecordSet */
-			$total = mysql_num_rows($rs);
+			$total = mysqli_num_rows($rs);
 		}
 		
 		$results = array();
-		$total = -1;
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$result = array();
 			foreach($row as $f => $v) {
 				$result[$f] = $v;
@@ -324,16 +308,20 @@ class DAO_WorkspaceWidget extends Cerb_ORMHelper {
 			$results[$object_id] = $result;
 		}
 
-		// [JAS]: Count all
+		$total = count($results);
+		
 		if($withCounts) {
-			$count_sql =
-				($has_multiple_values ? "SELECT COUNT(DISTINCT workspace_widget.id) " : "SELECT COUNT(workspace_widget.id) ").
-				$join_sql.
-				$where_sql;
-			$total = $db->GetOne($count_sql);
+			// We can skip counting if we have a less-than-full single page
+			if(!(0 == $page && $total < $limit)) {
+				$count_sql =
+					($has_multiple_values ? "SELECT COUNT(DISTINCT workspace_widget.id) " : "SELECT COUNT(workspace_widget.id) ").
+					$join_sql.
+					$where_sql;
+				$total = $db->GetOne($count_sql);
+			}
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return array($results,$total);
 	}
@@ -348,6 +336,7 @@ class SearchFields_WorkspaceWidget implements IDevblocksSearchFields {
 	const UPDATED_AT = 'w_updated_at';
 	const PARAMS_JSON = 'w_params_json';
 	const POS = 'w_pos';
+	const CACHE_TTL = 'w_cache_ttl';
 	
 	/**
 	 * @return DevblocksSearchField[]
@@ -363,6 +352,7 @@ class SearchFields_WorkspaceWidget implements IDevblocksSearchFields {
 			self::UPDATED_AT => new DevblocksSearchField(self::UPDATED_AT, 'workspace_widget', 'updated_at', $translate->_('common.updated')),
 			self::PARAMS_JSON => new DevblocksSearchField(self::PARAMS_JSON, 'workspace_widget', 'params_json', $translate->_('common.params')),
 			self::POS => new DevblocksSearchField(self::POS, 'workspace_widget', 'pos', null),
+			self::CACHE_TTL => new DevblocksSearchField(self::CACHE_TL, 'workspace_widget', 'cache_ttl', null, Model_CustomField::TYPE_NUMBER),
 		);
 		
 		// Sort by label (translation-conscious)
@@ -379,12 +369,13 @@ class Model_WorkspaceWidget {
 	public $label = '';
 	public $updated_at = 0;
 	public $pos = '0000';
+	public $cache_ttl = 60;
 	public $params = array();
 };
 
 class Context_WorkspaceWidget extends Extension_DevblocksContext {
 	function getRandom() {
-		//return DAO_WorkspaceTab::random();
+		return DAO_WorkspaceTab::random();
 	}
 	
 	function getMeta($context_id) {
@@ -418,6 +409,8 @@ class Context_WorkspaceWidget extends Extension_DevblocksContext {
 			$widget = DAO_WorkspaceWidget::get($widget);
 		} elseif($widget instanceof Model_WorkspaceWidget) {
 			// It's what we want already.
+		} elseif(is_array($widget)) {
+			$widget = Cerb_ORMHelper::recastArrayToModel($widget, 'Model_WorkspaceWidget');
 		} else {
 			$widget = null;
 		}
@@ -426,6 +419,7 @@ class Context_WorkspaceWidget extends Extension_DevblocksContext {
 		$token_labels = array(
 			'_label' => $prefix,
 			'extension_id' => $prefix.$translate->_('common.extension'),
+			'id' => $prefix.$translate->_('common.id'),
 			'label' => $prefix.$translate->_('common.label'),
 		);
 		
@@ -433,6 +427,7 @@ class Context_WorkspaceWidget extends Extension_DevblocksContext {
 		$token_types = array(
 			'_label' => 'context_url',
 			'extension_id' => Model_CustomField::TYPE_SINGLE_LINE,
+			'id' => Model_CustomField::TYPE_NUMBER,
 			'label' => Model_CustomField::TYPE_SINGLE_LINE,
 		);
 		
@@ -453,6 +448,9 @@ class Context_WorkspaceWidget extends Extension_DevblocksContext {
 			$token_values['id'] = $widget->id;
 			$token_values['extension_id'] = $widget->extension_id;
 			$token_values['label'] = $widget->label;
+			
+			// Custom fields
+			$token_values = $this->_importModelCustomFieldsAsValues($widget, $token_values);
 		}
 		
 		return true;

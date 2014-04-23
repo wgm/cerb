@@ -42,8 +42,43 @@ class DAO_VirtualAttendant extends Cerb_ORMHelper {
 		return $id;
 	}
 	
-	static function update($ids, $fields) {
-		parent::_update($ids, 'virtual_attendant', $fields);
+	static function update($ids, $fields, $check_deltas=true) {
+		if(!is_array($ids))
+			$ids = array($ids);
+		
+		// Make a diff for the requested objects in batches
+		
+		$chunks = array_chunk($ids, 100, true);
+		while($batch_ids = array_shift($chunks)) {
+			if(empty($batch_ids))
+				continue;
+			
+			// Send events
+			if($check_deltas) {
+				CerberusContexts::checkpointChanges(CerberusContexts::CONTEXT_VIRTUAL_ATTENDANT, $batch_ids);
+			}
+			
+			// Make changes
+			parent::_update($batch_ids, 'virtual_attendant', $fields);
+			
+			// Send events
+			if($check_deltas) {
+				
+				// Trigger an event about the changes
+				$eventMgr = DevblocksPlatform::getEventService();
+				$eventMgr->trigger(
+					new Model_DevblocksEvent(
+						'dao.virtual_attendant.update',
+						array(
+							'fields' => $fields,
+						)
+					)
+				);
+				
+				// Log the context update
+				DevblocksPlatform::markContextChanged(CerberusContexts::CONTEXT_VIRTUAL_ATTENDANT, $batch_ids);
+			}
+		}
 		
 		self::clearCache();
 	}
@@ -89,7 +124,7 @@ class DAO_VirtualAttendant extends Cerb_ORMHelper {
 		return null;
 	}
 
-	static function getRandom() {
+	static function random() {
 		return parent::_getRandom('virtual_attendant');
 	}
 	
@@ -156,7 +191,7 @@ class DAO_VirtualAttendant extends Cerb_ORMHelper {
 	static private function _getObjectsFromResult($rs) {
 		$objects = array();
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$object = new Model_VirtualAttendant();
 			$object->id = $row['id'];
 			$object->name = $row['name'];
@@ -172,7 +207,7 @@ class DAO_VirtualAttendant extends Cerb_ORMHelper {
 			$objects[$object->id] = $object;
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return $objects;
 	}
@@ -391,13 +426,12 @@ class DAO_VirtualAttendant extends Cerb_ORMHelper {
 			$rs = $db->SelectLimit($sql,$limit,$page*$limit) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs ADORecordSet */
 		} else {
 			$rs = $db->Execute($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs ADORecordSet */
-			$total = mysql_num_rows($rs);
+			$total = mysqli_num_rows($rs);
 		}
 		
 		$results = array();
-		$total = -1;
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$result = array();
 			foreach($row as $f => $v) {
 				$result[$f] = $v;
@@ -406,16 +440,20 @@ class DAO_VirtualAttendant extends Cerb_ORMHelper {
 			$results[$object_id] = $result;
 		}
 
-		// [JAS]: Count all
+		$total = count($results);
+		
 		if($withCounts) {
-			$count_sql =
-				($has_multiple_values ? "SELECT COUNT(DISTINCT virtual_attendant.id) " : "SELECT COUNT(virtual_attendant.id) ").
-				$join_sql.
-				$where_sql;
-			$total = $db->GetOne($count_sql);
+			// We can skip counting if we have a less-than-full single page
+			if(!(0 == $page && $total < $limit)) {
+				$count_sql =
+					($has_multiple_values ? "SELECT COUNT(DISTINCT virtual_attendant.id) " : "SELECT COUNT(virtual_attendant.id) ").
+					$join_sql.
+					$where_sql;
+				$total = $db->GetOne($count_sql);
+			}
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return array($results,$total);
 	}
@@ -955,7 +993,7 @@ class View_VirtualAttendant extends C4_AbstractView implements IAbstractView_Sub
 
 class Context_VirtualAttendant extends Extension_DevblocksContext implements IDevblocksContextProfile, IDevblocksContextPeek { // IDevblocksContextImport
 	function getRandom() {
-		//return DAO_VirtualAttendant::random();
+		return DAO_VirtualAttendant::random();
 	}
 	
 	function profileGetUrl($context_id) {
@@ -1027,6 +1065,8 @@ class Context_VirtualAttendant extends Extension_DevblocksContext implements IDe
 			$virtual_attendant = DAO_VirtualAttendant::get($virtual_attendant);
 		} elseif($virtual_attendant instanceof Model_VirtualAttendant) {
 			// It's what we want already.
+		} elseif(is_array($virtual_attendant)) {
+			$virtual_attendant = Cerb_ORMHelper::recastArrayToModel($virtual_attendant, 'Model_VirtualAttendant');
 		} else {
 			$virtual_attendant = null;
 		}
@@ -1081,6 +1121,9 @@ class Context_VirtualAttendant extends Extension_DevblocksContext implements IDe
 			$token_values['name'] = $virtual_attendant->name;
 			$token_values['is_disabled'] = $virtual_attendant->is_disabled;
 			$token_values['updated_at'] = $virtual_attendant->updated_at;
+			
+			// Custom fields
+			$token_values = $this->_importModelCustomFieldsAsValues($virtual_attendant, $token_values);
 			
 			// URL
 			$url_writer = DevblocksPlatform::getUrlService();

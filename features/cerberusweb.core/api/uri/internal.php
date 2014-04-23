@@ -669,7 +669,7 @@ class ChInternalController extends DevblocksControllerExtension {
 			
 			if(method_exists($event,'generateSampleEventModel')) {
 				$event_model = $event->generateSampleEventModel($trigger);
-				$event->setEvent($event_model);
+				$event->setEvent($event_model, $trigger);
 				$values = $event->getValues();
 				$view->setPlaceholderValues($values);
 			}
@@ -1925,136 +1925,418 @@ class ChInternalController extends DevblocksControllerExtension {
 			return;
 		$tpl->assign('view', $view);
 
-		$model_columns = $view->getColumnsAvailable();
-		$tpl->assign('model_columns', $model_columns);
-
-		$view_columns = $view->view_columns;
-		$tpl->assign('view_columns', $view_columns);
-
+		$context_mft = Extension_DevblocksContext::getByViewClass(get_class($view));
+		
+		$labels = array();
+		$values = array();
+		CerberusContexts::getContext($context_mft->id, null, $labels, $values, null, true);
+		
+		$tpl->assign('context_labels', $labels);
+		
 		$tpl->display('devblocks:cerberusweb.core::internal/views/view_export.tpl');
 	}
 
-	function viewDoExportAction() {
-		@$view_id = DevblocksPlatform::importGPC($_REQUEST['view_id']);
-		@$columns = DevblocksPlatform::importGPC($_REQUEST['columns'],'array',array());
-		@$export_as = DevblocksPlatform::importGPC($_REQUEST['export_as'],'string','csv');
-
-		// Scan through the columns and remove any blanks
-		if(is_array($columns))
-		foreach($columns as $idx => $col) {
-			if(empty($col))
-				unset($columns[$idx]);
+	function doViewExportAction() {
+		@$cursor_key = DevblocksPlatform::importGPC($_REQUEST['cursor_key'], 'string', '');
+		
+		header("Content-Type: application/json; charset=" . LANG_CHARSET_CODE);
+		
+		try {
+			if(empty($cursor_key)) {
+				@$view_id = DevblocksPlatform::importGPC($_REQUEST['view_id'], 'string', '');
+				@$tokens = DevblocksPlatform::importGPC($_REQUEST['tokens'], 'array', array());
+				@$export_as = DevblocksPlatform::importGPC($_REQUEST['export_as'], 'string', 'csv');
+				@$format_timestamps = DevblocksPlatform::importGPC($_REQUEST['format_timestamps'], 'integer', 0);
+				
+				if(!isset($_SESSION['view_export_cursors']))
+					$_SESSION['view_export_cursors']  = array();
+				
+				$cursor_key = sha1(serialize(array($view_id, $tokens, $export_as, time())));
+				
+				$_SESSION['view_export_cursors'][$cursor_key] = array(
+					'key' => $cursor_key,
+					'view_id' => $view_id,
+					'tokens' => $tokens,
+					'export_as' => $export_as,
+					'format_timestamps' => $format_timestamps,
+					'page' => 0,
+					'rows_exported' => 0,
+					'completed' => false,
+					'temp_file' => APP_TEMP_PATH . '/' . $cursor_key . '.tmp',
+					'attachment_name' => null,
+					'attachment_url' => null,
+				);
+			}
+			
+			$cursor = $this->_viewIncrementalExport($cursor_key);
+			echo json_encode($cursor);
+			
+		} catch (Exception_DevblocksAjaxError $e) {
+			echo json_encode(false);
+			return;
 		}
-
+		
+	}
+	
+	private function _viewIncrementalExport($cursor_key) {
+		if(!isset($_SESSION['view_export_cursors'][$cursor_key]))
+			throw new Exception_DevblocksAjaxError("Cursor not found.");
+		
+		// Load the cursor and do the next step, then return JSON
+		$cursor =& $_SESSION['view_export_cursors'][$cursor_key];
+		
+		if(!is_array($cursor))
+			throw new Exception_DevblocksAjaxError("Invalid cursor.");
+		
+		$mime_type = null;
+		
+		switch($cursor['export_as']) {
+			case 'csv':
+				$this->_viewIncrementExportAsCsv($cursor);
+				$mime_type = 'text/csv';
+				break;
+				
+			case 'json':
+				$this->_viewIncrementExportAsJson($cursor);
+				$mime_type = 'application/json';
+				break;
+				
+			case 'xml':
+				$this->_viewIncrementExportAsXml($cursor);
+				$mime_type = 'text/xml';
+				break;
+		}
+		
+		if($cursor['completed']) {
+			@$sha1_hash = sha1_file($cursor['temp_file'], false);
+			$file_name = 'export.' . $cursor['export_as'];
+			
+			$url_writer = DevblocksPlatform::getUrlService();
+			
+			// Move the temp file to attachments
+			$fields = array(
+				DAO_Attachment::DISPLAY_NAME => $file_name,
+				DAO_Attachment::MIME_TYPE => $mime_type,
+				DAO_Attachment::STORAGE_SHA1HASH => $sha1_hash,
+				DAO_Attachment::UPDATED => time(),
+			);
+			$id = DAO_Attachment::create($fields);
+			
+			$fp = fopen($cursor['temp_file'], 'r');
+			Storage_Attachments::put($id, $fp);
+			fclose($fp);
+			unlink($cursor['temp_file']);
+			
+			unset($_SESSION['view_export_cursors'][$cursor_key]);
+			
+			$cursor['attachment_name'] = $file_name;
+			$cursor['attachment_url'] = $url_writer->write('c=files&a=' . $sha1_hash . '&name=' . $file_name);
+		}
+		
+		return $cursor;
+	}
+	
+	private function _viewIncrementExportAsCsv(array &$cursor) {
+		$view_id = $cursor['view_id'];
+		
 		if(null == ($view = C4_AbstractViewLoader::getView($view_id)))
 			return;
 		
-		$column_manifests = $view->getColumnsAvailable();
-
+		if(null == ($context_mft = Extension_DevblocksContext::getByViewClass(get_class($view))))
+			return;
+		
+		$global_labels = array();
+		$global_values = array();
+		CerberusContexts::getContext($context_mft->id, null, $global_labels, $global_values, null, true);
+		$global_types = $global_values['_types'];
+		
 		// Override display
-		$view->view_columns = $columns;
-		$view->renderPage = 0;
-		$view->renderLimit = -1;
-
-		if('csv' == $export_as) {
-			header("Pragma: public");
-			header("Expires: 0");
-			header("Cache-Control: must-revalidate, post-check=0, pre-check=0");
-			header("Content-Type: text/plain; charset=".LANG_CHARSET_CODE);
-
-			// Column headers
-			if(is_array($columns)) {
-				$cols = array();
-				foreach($columns as $col) {
-					$cols[] = sprintf("\"%s\"",
-						str_replace('"','\"',mb_convert_case($column_manifests[$col]->db_label,MB_CASE_TITLE))
-					);
-				}
-				echo implode(',', $cols) . "\r\n";
-			}
-
-			// Get data
-			list($results, $null) = $view->getData();
-			if(is_array($results))
-			foreach($results as $row) {
-				if(is_array($row)) {
-					$cols = array();
-					if(is_array($columns))
-					foreach($columns as $col) {
-						$value = '';
-						
-						if(isset($row[$col]))
-							$value = sprintf("\"%s\"",
-								str_replace('"','\"',$row[$col])
-							);
-						
-						$cols[] = $value;
-					}
-					echo implode(',', $cols) . "\r\n";
-				}
-			}
-
-		} elseif('json' == $export_as) {
-			header("Pragma: public");
-			header("Expires: 0");
-			header("Cache-Control: must-revalidate, post-check=0, pre-check=0");
-			header("Content-Type: text/plain; charset=".LANG_CHARSET_CODE);
-
-			$objects = array();
+		$view->view_columns = array();
+		$view->renderPage = $cursor['page'];
+		$view->renderLimit = 200;
+		
+		// Append mode to the temp file
+		$fp = fopen($cursor['temp_file'], "a");
+		
+		// If the first page
+		if(0 == $cursor['page']) {
+			// Headings
+			$csv_labels = array();
 			
-			// Get data
-			list($results, $null) = $view->getData();
-			if(is_array($results))
-			foreach($results as $row) {
-				$object = array();
-				if(is_array($columns))
-				foreach($columns as $col) {
-					$value = '';
-					
-					if(isset($row[$col]))
-						$value = $row[$col];
-						
-					$object[$col] = $value;
-				}
-				
-				$objects[] = $object;
+			if(is_array($cursor['tokens']))
+			foreach($cursor['tokens'] as $token) {
+				$csv_labels[] = $global_labels[$token];
 			}
 			
-			echo json_encode($objects);
+			fputcsv($fp, $csv_labels);
 			
-		} elseif('xml' == $export_as) {
-			header("Pragma: public");
-			header("Expires: 0");
-			header("Cache-Control: must-revalidate, post-check=0, pre-check=0");
-			header("Content-Type: text/plain; charset=".LANG_CHARSET_CODE);
-
-			$xml = simplexml_load_string("<results/>"); /* @var $xml SimpleXMLElement */
-
-			// Get data
-			list($results, $null) = $view->getData();
-			if(is_array($results))
-			foreach($results as $row) {
-				$result = $xml->addChild("result");
-				if(is_array($columns))
-				foreach($columns as $col) {
-					if(isset($row[$col])) {
-						$field = $result->addChild("field",htmlspecialchars($row[$col],null,LANG_CHARSET_CODE));
-						$field->addAttribute("id", $col);
-					}
-				}
-			}
-
-			// Pretty format and output
-			$doc = new DOMDocument('1.0');
-			$doc->preserveWhiteSpace = false;
-			$doc->loadXML($xml->asXML());
-			$doc->formatOutput = true;
-			echo $doc->saveXML();
+			unset($csv_labels);
 		}
-
-		exit;
+		
+		// Rows
+		$results = $view->getDataAsObjects();
+		
+		$count = count($results);
+		$dicts = array();
+		
+		foreach($results as $row_id => $result) {
+			$labels = array(); // ignore
+			$values = array();
+			CerberusContexts::getContext($context_mft->id, $result, $labels, $values, null, true, true);
+			
+			$dicts[$row_id] = DevblocksDictionaryDelegate::instance($values);
+			unset($labels);
+			unset($values);
+		}
+		
+		unset($results);
+		
+		// Bulk lazy load the tokens across all the dictionaries with a temporary cache
+		foreach($cursor['tokens'] as $token) {
+			DevblocksDictionaryDelegate::bulkLazyLoad($dicts, $token);
+		}
+		
+		foreach($dicts as $dict) {
+			$fields = array();
+			
+			foreach($cursor['tokens'] as $token) {
+				$value = $dict->$token;
+				
+				if($global_types[$token] == Model_CustomField::TYPE_DATE && $cursor['format_timestamps'])
+					$value = date('r', $value);
+				
+				if(is_array($value))
+					$value = json_encode($value);
+				
+				if(!is_string($value) && !is_numeric($value))
+					$value = '';
+				
+				$fields[] = $value;
+			}
+			
+			fputcsv($fp, $fields);
+		}
+		
+		$cursor['page']++;
+		$cursor['rows_exported'] += $count;
+		
+		// If our page isn't full, we're done
+		if($count < $view->renderLimit) {
+			$cursor['completed'] = true;
+		}
+		
+		fclose($fp);
 	}
+	
+	private function _viewIncrementExportAsJson(array &$cursor) {
+		$view_id = $cursor['view_id'];
+		
+		if(null == ($view = C4_AbstractViewLoader::getView($view_id)))
+			return;
+		
+		if(null == ($context_mft = Extension_DevblocksContext::getByViewClass(get_class($view))))
+			return;
+		
+		$global_labels = array();
+		$global_values = array();
+		CerberusContexts::getContext($context_mft->id, null, $global_labels, $global_values, null, true);
+		$global_types = $global_values['_types'];
+		
+		// Override display
+		$view->view_columns = array();
+		$view->renderPage = $cursor['page'];
+		$view->renderLimit = 200;
+		
+		// Append mode to the temp file
+		$fp = fopen($cursor['temp_file'], "a");
+		
+		// If the first page
+		if(0 == $cursor['page']) {
+			fputs($fp, "{\n\"fields\":");
+			
+			$fields = array();
+			
+			// Fields
+			
+			if(is_array($global_labels))
+			foreach($cursor['tokens'] as $token) {
+				$fields[$token] = array(
+					'label' => @$global_labels[$token],
+					'type' => @$global_types[$token],
+				);
+			}
+			
+			fputs($fp, json_encode($fields));
+			
+			fputs($fp, ",\n\"results\": [\n");
+		}
+		
+		// Results
+		
+		// Rows
+		$results = $view->getDataAsObjects();
+		
+		$count = count($results);
+		$dicts = array();
+		
+		if($cursor['page'] > 0)
+			fputs($fp, ",\n");
+		
+		foreach($results as $row_id => $result) {
+			$labels = array(); // ignore
+			$values = array();
+			CerberusContexts::getContext($context_mft->id, $result, $labels, $values, null, true, true);
+			
+			$dicts[$row_id] = DevblocksDictionaryDelegate::instance($values);
+			unset($labels);
+			unset($values);
+		}
+		
+		unset($results);
+			
+		// Bulk lazy load the tokens across all the dictionaries with a temporary cache
+		foreach($cursor['tokens'] as $token) {
+			DevblocksDictionaryDelegate::bulkLazyLoad($dicts, $token);
+		}
+		
+		foreach($dicts as $dict) {
+			$object = array();
+			
+			if(is_array($cursor['tokens']))
+			foreach($cursor['tokens'] as $token) {
+				$value = $dict->$token;
+				
+				if($global_types[$token] == Model_CustomField::TYPE_DATE && $cursor['format_timestamps'])
+					$value = date('r', $value);
+				
+				$object[$token] = $value;
+			}
+			
+			$objects[] = $object;
+			
+		}
+		
+		$json = trim(json_encode($objects),'[]');
+		fputs($fp, $json);
 
+		$cursor['page']++;
+		$cursor['rows_exported'] += $count;
+		
+		// If our page isn't full, we're done
+		if($count < $view->renderLimit) {
+			$cursor['completed'] = true;
+			fputs($fp, "]\n}");
+		}
+		
+		fclose($fp);
+	}
+	
+	private function _viewIncrementExportAsXml(array &$cursor) {
+		$view_id = $cursor['view_id'];
+		
+		if(null == ($view = C4_AbstractViewLoader::getView($view_id)))
+			return;
+		
+		if(null == ($context_mft = Extension_DevblocksContext::getByViewClass(get_class($view))))
+			return;
+		
+		$global_labels = array();
+		$global_values = array();
+		CerberusContexts::getContext($context_mft->id, null, $global_labels, $global_values, null, true);
+		$global_types = $global_values['_types'];
+		
+		// Override display
+		$view->view_columns = array();
+		$view->renderPage = $cursor['page'];
+		$view->renderLimit = 200;
+		
+		// Append mode to the temp file
+		$fp = fopen($cursor['temp_file'], "a");
+		
+		// If the first page
+		if(0 == $cursor['page']) {
+			fputs($fp, "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n");
+			fputs($fp, "<export>\n");
+			
+			// Meta
+			
+			$xml_fields = simplexml_load_string("<fields/>"); /* @var $xml SimpleXMLElement */
+			
+			foreach($cursor['tokens'] as $token) {
+				$field = $xml_fields->addChild("field");
+				$field->addAttribute('key', $token);
+				$field->addChild('label', @$global_labels[$token]);
+				$field->addChild('type', @$global_types[$token]);
+			}
+			
+			$dom = dom_import_simplexml($xml_fields);
+			fputs($fp, $dom->ownerDocument->saveXML($dom->ownerDocument->documentElement));
+			unset($dom);
+			
+			fputs($fp, "\n<results>\n");
+		}
+		
+		// Content
+		
+		$results = $view->getDataAsObjects();
+		
+		$count = count($results);
+		$dicts = array();
+		
+		if(is_array($results))
+		foreach($results as $row_id => $result) {
+			$labels = array(); // ignore
+			$values = array();
+			CerberusContexts::getContext($context_mft->id, $result, $labels, $values, null, true, true);
+			
+			$dicts[$row_id] = DevblocksDictionaryDelegate::instance($values);
+			unset($labels);
+			unset($values);
+		}
+		
+		unset($results);
+		
+		// Bulk lazy load the tokens across all the dictionaries with a temporary cache
+		foreach($cursor['tokens'] as $token) {
+			DevblocksDictionaryDelegate::bulkLazyLoad($dicts, $token);
+		}
+		
+		foreach($dicts as $dict) {
+			$xml_result = simplexml_load_string("<result/>"); /* @var $xml SimpleXMLElement */
+			
+			if(is_array($cursor['tokens']))
+			foreach($cursor['tokens'] as $token) {
+				$value = $dict->$token;
+
+				if($global_types[$token] == Model_CustomField::TYPE_DATE && $cursor['format_timestamps'])
+					$value = date('r', $value);
+				
+				if(is_array($value))
+					$value = json_encode($value);
+				
+				if(!is_string($value) && !is_numeric($value))
+					$value = '';
+				
+				$field = $xml_result->addChild("field", htmlspecialchars($value, ENT_QUOTES, LANG_CHARSET_CODE));
+				$field->addAttribute("key", $token);
+			}
+			
+			$dom = dom_import_simplexml($xml_result);
+			fputs($fp, $dom->ownerDocument->saveXML($dom->ownerDocument->documentElement));
+		}
+		
+		$cursor['page']++;
+		$cursor['rows_exported'] += $count;
+		// If our page isn't full, we're done
+		if($count < $view->renderLimit) {
+			$cursor['completed'] = true;
+			fputs($fp, "</results>\n");
+			fputs($fp, "</export>\n");
+		}
+		
+		fclose($fp);
+	}
+	
 	function viewSaveCustomizeAction() {
 		$translate = DevblocksPlatform::getTranslationService();
 		$active_worker = CerberusApplication::getActiveWorker();
@@ -2273,7 +2555,7 @@ class ChInternalController extends DevblocksControllerExtension {
 			
 			$event = $macro->getEvent();
 			$event_model = $event->generateSampleEventModel($macro, $context_id);
-			$event->setEvent($event_model);
+			$event->setEvent($event_model, $macro);
 			$values = $event->getValues();
 			
 			$tpl_builder = DevblocksPlatform::getTemplateBuilder();
@@ -2456,7 +2738,7 @@ class ChInternalController extends DevblocksControllerExtension {
 			return;
 		
 		$event_model = $event->generateSampleEventModel($trigger, $job->context_id);
-		$event->setEvent($event_model);
+		$event->setEvent($event_model, $trigger);
 		$values = $event->getValues();
 		
 		$tpl_builder = DevblocksPlatform::getTemplateBuilder();
@@ -2826,7 +3108,7 @@ class ChInternalController extends DevblocksControllerExtension {
 			case 'outcome':
 				if(null != ($evt = $trigger->getEvent()))
 					$tpl->assign('conditions', $evt->getConditions($trigger));
-					
+				
 				// Action labels
 				$labels = $evt->getLabels($trigger);
 				$tpl->assign('labels', $labels);
@@ -2899,7 +3181,7 @@ class ChInternalController extends DevblocksControllerExtension {
 			return;
 
 		$event_model = $ext_event->generateSampleEventModel($trigger, $context_id);
-		$ext_event->setEvent($event_model);
+		$ext_event->setEvent($event_model, $trigger);
 		
 		$event_params_json = json_encode($event_model->params);
 		$tpl->assign('event_params_json', $event_params_json);
@@ -2915,17 +3197,43 @@ class ChInternalController extends DevblocksControllerExtension {
 
 		$dictionary = array();
 		
-		foreach($conditions as $k => $v) {
-			// [TODO] Test when this is possible (e.g. custom fields)
-			if(!isset($v['label']) || !isset($v['type']))
-				continue;
+		// Find all nodes on the behavior
+		$nodes = DAO_DecisionNode::getByTriggerParent($trigger->id);
+		
+		// Filter to outcomes
+		$outcomes = array_filter($nodes, function($node) {
+			if($node->node_type == 'outcome')
+				return true;
 			
-			if(isset($dict->$k)) {
-				$dictionary[$k] = array(
-					'label' => $v['label'],
-					'type' => $v['type'],
-					'value' => $dict->$k,
-				);
+			return false;
+		});
+		
+		// Build a list of the tokens used in outcomes, and only show those
+		if(is_array($outcomes))
+		foreach($outcomes as $outcome) {
+			if(isset($outcome->params['groups']))
+			foreach($outcome->params['groups'] as $group) {
+				if(isset($group['conditions']))
+				foreach($group['conditions'] as $condition_obj) {
+					if(null == (@$condition_token = $condition_obj['condition']))
+						continue;
+					
+					if(null == (@$condition = $conditions[$condition_token]))
+						continue;
+					
+					if(empty($condition['label']) || empty($condition['type']))
+						continue;
+					
+					// [TODO] List variables
+					// [TODO] Some types have options, like picklists
+					if(!isset($dictionary[$condition_token])) {
+						$dictionary[$condition_token] = array(
+							'label' => $condition['label'],
+							'type' => $condition['type'],
+							'value' => $dict->$condition_token,
+						);
+					}
+				}
 			}
 		}
 		
@@ -2973,7 +3281,7 @@ class ChInternalController extends DevblocksControllerExtension {
 				break;
 		}
 		
-		$ext_event->setEvent($event_model);
+		$ext_event->setEvent($event_model, $trigger);
 
 		$tpl->assign('event', $ext_event);
 		
@@ -3028,10 +3336,10 @@ class ChInternalController extends DevblocksControllerExtension {
 		$behavior_data = $trigger->getDecisionTreeData();
 		$tpl->assign('behavior_data', $behavior_data);
 
-		$behavior_path = $trigger->runDecisionTree($dict, true);
+		$behavior_path = $trigger->runDecisionTree($dict, true, $ext_event);
 		$tpl->assign('behavior_path', $behavior_path);
 		
-		if(isset($dict->_simulator_output))
+		if($dict->exists('_simulator_output'))
 			$tpl->assign('simulator_output', $dict->_simulator_output);
 		
 		$logger->setLogLevel(0);
@@ -3161,6 +3469,7 @@ class ChInternalController extends DevblocksControllerExtension {
 				DAO_TriggerEvent::EVENT_POINT => $event_point,
 				DAO_TriggerEvent::IS_PRIVATE => @$json['behavior']['is_private'] ? 1 : 0,
 				DAO_TriggerEvent::VARIABLES_JSON => isset($json['behavior']['variables']) ? json_encode($json['behavior']['variables']) : '',
+				DAO_TriggerEvent::EVENT_PARAMS_JSON => isset($json['behavior']['event']['params']) ? json_encode($json['behavior']['event']['params']) : '',
 				DAO_TriggerEvent::VIRTUAL_ATTENDANT_ID => $va->id,
 				DAO_TriggerEvent::POS => DAO_TriggerEvent::getNextPosByVirtualAttendantAndEvent($va->id, $event_point),
 				DAO_TriggerEvent::IS_DISABLED => 1, // default to disabled until successfully imported
@@ -3408,6 +3717,7 @@ class ChInternalController extends DevblocksControllerExtension {
 			@$title = DevblocksPlatform::importGPC($_REQUEST['title'],'string', '');
 			@$is_disabled = DevblocksPlatform::importGPC($_REQUEST['is_disabled'],'integer', 0);
 			@$is_private = DevblocksPlatform::importGPC($_REQUEST['is_private'],'integer', 0);
+			@$event_params = DevblocksPlatform::importGPC($_REQUEST['event_params'],'array', array());
 			@$json = DevblocksPlatform::importGPC($_REQUEST['json'],'integer', 0);
 
 			// Variables
@@ -3480,6 +3790,7 @@ class ChInternalController extends DevblocksControllerExtension {
 					DAO_TriggerEvent::IS_DISABLED => !empty($is_disabled) ? 1 : 0,
 					DAO_TriggerEvent::IS_PRIVATE => !empty($is_private) ? 1 : 0,
 					DAO_TriggerEvent::POS => $pos,
+					DAO_TriggerEvent::EVENT_PARAMS_JSON => json_encode($event_params),
 					DAO_TriggerEvent::VARIABLES_JSON => json_encode($variables),
 				));
 				
@@ -3523,6 +3834,7 @@ class ChInternalController extends DevblocksControllerExtension {
 						DAO_TriggerEvent::TITLE => $title,
 						DAO_TriggerEvent::IS_DISABLED => !empty($is_disabled) ? 1 : 0,
 						DAO_TriggerEvent::IS_PRIVATE => !empty($is_private) ? 1 : 0,
+						DAO_TriggerEvent::EVENT_PARAMS_JSON => json_encode($event_params),
 						DAO_TriggerEvent::VARIABLES_JSON => json_encode($variables),
 					));
 				}
@@ -3635,6 +3947,18 @@ class ChInternalController extends DevblocksControllerExtension {
 		}
 	}
 	
+	function getTriggerEventParamsAction() {
+		@$id = DevblocksPlatform::importGPC($_REQUEST['id'],'string', '');
+		
+		if(empty($id))
+			return;
+		
+		if(false == ($ext = Extension_DevblocksEvent::get($id))) /* @var $ext Extension_DevblocksEvent */
+			return;
+		
+		$ext->renderEventParams(null);
+	}
+	
 	function testDecisionEventSnippetsAction() {
 		@$prefix = DevblocksPlatform::importGPC($_REQUEST['prefix'],'string','');
 		@$trigger_id = DevblocksPlatform::importGPC($_REQUEST['trigger_id'],'integer',0);
@@ -3660,7 +3984,7 @@ class ChInternalController extends DevblocksControllerExtension {
 			
 		$event = $trigger->getEvent();
 		$event_model = $event->generateSampleEventModel($trigger);
-		$event->setEvent($event_model);
+		$event->setEvent($event_model, $trigger);
 		$values = $event->getValues();
 		
 		$tpl_builder = DevblocksPlatform::getTemplateBuilder();

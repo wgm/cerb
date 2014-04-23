@@ -367,10 +367,6 @@ class ChKbAjaxController extends DevblocksControllerExtension {
 				
 			}
 			
-			// Search index
-			$search = DevblocksPlatform::getSearchService();
-			$search->index('kb_article', $id, $title . ' ' . strip_tags($content), true);
-			
 			// Categories
 			DAO_KbArticle::setCategories($id, $category_ids, true);
 			
@@ -622,7 +618,7 @@ class DAO_KbCategory extends Cerb_ORMHelper {
 		$sql = "SELECT count(*) AS hits, kb_category_id FROM kb_article_to_category GROUP BY kb_category_id";
 		$rs = $db->Execute($sql);
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$count_cat = intval($row['kb_category_id']);
 			$count_hits = intval($row['hits']);
 			
@@ -636,7 +632,7 @@ class DAO_KbCategory extends Cerb_ORMHelper {
 		
 		// [TODO] Filter out empty categories on public
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return $tree;
 	}
@@ -723,7 +719,7 @@ class DAO_KbCategory extends Cerb_ORMHelper {
 	static private function _getObjectsFromResult($rs) {
 		$objects = array();
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$object = new Model_KbCategory();
 			$object->id = $row['id'];
 			$object->parent_id = $row['parent_id'];
@@ -731,7 +727,7 @@ class DAO_KbCategory extends Cerb_ORMHelper {
 			$objects[$object->id] = $object;
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return $objects;
 	}
@@ -745,9 +741,9 @@ class DAO_KbCategory extends Cerb_ORMHelper {
 		
 		$ids_list = implode(',', $ids);
 		
-		$db->Execute(sprintf("DELETE QUICK FROM kb_category WHERE id IN (%s)", $ids_list));
+		$db->Execute(sprintf("DELETE FROM kb_category WHERE id IN (%s)", $ids_list));
 
-		$db->Execute(sprintf("DELETE QUICK FROM kb_article_to_category WHERE kb_category_id IN (%s)", $ids_list));
+		$db->Execute(sprintf("DELETE FROM kb_article_to_category WHERE kb_category_id IN (%s)", $ids_list));
 		
 		self::clearCache();
 		
@@ -831,7 +827,7 @@ class DAO_KbCategory extends Cerb_ORMHelper {
 		
 		$results = array();
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$result = array();
 			foreach($row as $f => $v) {
 				$result[$f] = $v;
@@ -840,17 +836,20 @@ class DAO_KbCategory extends Cerb_ORMHelper {
 			$results[$id] = $result;
 		}
 
-		// [JAS]: Count all
-		$total = -1;
+		$total = count($results);
+		
 		if($withCounts) {
-			$count_sql =
-				($has_multiple_values ? "SELECT COUNT(DISTINCT kbc.id) " : "SELECT COUNT(kbc.id) ").
-				$join_sql.
-				$where_sql;
-			$total = $db->GetOne($count_sql);
+			// We can skip counting if we have a less-than-full single page
+			if(!(0 == $page && $total < $limit)) {
+				$count_sql =
+					($has_multiple_values ? "SELECT COUNT(DISTINCT kbc.id) " : "SELECT COUNT(kbc.id) ").
+					$join_sql.
+					$where_sql;
+				$total = $db->GetOne($count_sql);
+			}
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return array($results,$total);
 	}
@@ -928,6 +927,8 @@ class Context_KbCategory extends Extension_DevblocksContext {
 			$category = DAO_KbCategory::get($category);
 		} elseif($category instanceof Model_KbCategory) {
 			// It's what we want already.
+		} elseif(is_array($category)) {
+			$category = Cerb_ORMHelper::recastArrayToModel($category, 'Model_KbCategory');
 		} else {
 			$category = null;
 		}
@@ -970,6 +971,9 @@ class Context_KbCategory extends Extension_DevblocksContext {
 			$token_values['id'] = $category->id;
 			$token_values['name'] = $category->name;
 			$token_values['parent_id'] = $category->parent_id;
+			
+			// Custom fields
+			$token_values = $this->_importModelCustomFieldsAsValues($category, $token_values);
 		}
 		
 		return TRUE;

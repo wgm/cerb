@@ -501,6 +501,45 @@ abstract class Extension_WorkspaceWidget extends DevblocksExtension {
 		return null;
 	}
 	
+	static function renderWidgetFromCache($widget, $autoload=true, $nocache=false) {
+		// Polymorph
+		if($widget instanceof Model_WorkspaceWidget) {
+			// Do nothing, it's what we want.
+			
+		} elseif (is_numeric($widget)) {
+			$widget = DAO_WorkspaceWidget::get($widget);
+			
+		} else {
+			$widget = null;
+		}
+		
+		$cache = DevblocksPlatform::getCacheService();
+		$is_cached = false;
+				
+		if($widget && $widget instanceof Model_WorkspaceWidget) {
+			$cache_key = sprintf("widget%d_render", $widget->id);
+			
+			// Fetch and cache
+			if($nocache || empty($widget->cache_ttl) || null === ($widget_contents = $cache->load($cache_key))) {
+				if($autoload) {
+					$tpl = DevblocksPlatform::getTemplateService();
+					$tpl->assign('widget', $widget);
+					$widget_contents = $tpl->fetch('devblocks:cerberusweb.core::internal/workspaces/widgets/render.tpl');
+					
+					$cache->save($widget_contents, $cache_key, null, $widget->cache_ttl);
+				}
+				
+			} else {
+				$is_cached = true;
+			}
+			
+			if(isset($widget_contents))
+				echo $widget_contents;
+		}
+		
+		return $is_cached;
+	}
+	
 	abstract function render(Model_WorkspaceWidget $widget);
 	abstract function renderConfig(Model_WorkspaceWidget $widget);
 	abstract function saveConfig(Model_WorkspaceWidget $widget);
@@ -602,17 +641,18 @@ abstract class CerberusCronPageExtension extends DevblocksExtension {
 	 * runs scheduled task
 	 *
 	 */
-	function run() {
-		// Overloaded by child
-	}
+	abstract function run();
 	
 	function _run() {
-		$this->setParam(self::PARAM_LOCKED,time());
-		$this->run();
-		
 		$duration = $this->getParam(self::PARAM_DURATION, 5);
 		$term = $this->getParam(self::PARAM_TERM, 'm');
 		$lastrun = $this->getParam(self::PARAM_LASTRUN, time());
+		
+		// [TODO] By setting the locks directly on these extensions, we're invalidating them during the same /cron
+		//	and causing redundant retrievals of the params from the DB
+		$this->setParam(self::PARAM_LOCKED, time());
+		
+		$this->run();
 
 		$secs = self::getIntervalAsSeconds($duration, $term);
 		$ran_at = time();
@@ -623,8 +663,8 @@ abstract class CerberusCronPageExtension extends DevblocksExtension {
 			$ran_at = time() - $extra; // go back in time and lie
 		}
 		
-		$this->setParam(self::PARAM_LASTRUN,$ran_at);
-		$this->setParam(self::PARAM_LOCKED,0);
+		$this->setParam(self::PARAM_LASTRUN, $ran_at);
+		$this->setParam(self::PARAM_LOCKED, 0);
 	}
 	
 	/**

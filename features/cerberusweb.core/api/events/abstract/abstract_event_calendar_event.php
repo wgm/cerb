@@ -20,12 +20,12 @@ abstract class AbstractEvent_CalendarEvent extends Extension_DevblocksEvent {
 
 	/**
 	 *
-	 * @param integer $calendar_event_id
+	 * @param integer $context_id
 	 * @return Model_DevblocksEvent
 	 */
-	function generateSampleEventModel(Model_TriggerEvent $trigger, $calendar_event_id=null) {
+	function generateSampleEventModel(Model_TriggerEvent $trigger, $context_id=null) {
 		
-		if(empty($calendar_event_id)) {
+		if(empty($context_id)) {
 			// Pull the latest record
 			list($results) = DAO_CalendarEvent::search(
 				array(),
@@ -42,29 +42,31 @@ abstract class AbstractEvent_CalendarEvent extends Extension_DevblocksEvent {
 			
 			$result = array_shift($results);
 			
-			$calendar_event_id = $result[SearchFields_CalendarEvent::ID];
+			$context_id = $result[SearchFields_CalendarEvent::ID];
 		}
 		
 		return new Model_DevblocksEvent(
 			$this->_event_id,
 			array(
-				'calendar_event_id' => $calendar_event_id,
+				'context_id' => $context_id,
 			)
 		);
 	}
 	
-	function setEvent(Model_DevblocksEvent $event_model=null) {
+	function setEvent(Model_DevblocksEvent $event_model=null, Model_TriggerEvent $trigger=null) {
 		$labels = array();
 		$values = array();
 
+		// We can accept a model object or a context_id
+		@$model = $event_model->params['context_model'] ?: $event_model->params['context_id'];
+		
 		/**
 		 * Calendar Event
 		 */
 		
-		@$calendar_event_id = $event_model->params['calendar_event_id'];
 		$merge_labels = array();
 		$merge_values = array();
-		CerberusContexts::getContext(CerberusContexts::CONTEXT_CALENDAR_EVENT, $calendar_event_id, $merge_labels, $merge_values, null, true);
+		CerberusContexts::getContext(CerberusContexts::CONTEXT_CALENDAR_EVENT, $model, $merge_labels, $merge_values, null, true);
 
 			// Merge
 			CerberusContexts::merge(
@@ -100,8 +102,8 @@ abstract class AbstractEvent_CalendarEvent extends Extension_DevblocksEvent {
 		return $vals_to_ctx;
 	}
 	
-	function getConditionExtensions() {
-		$labels = $this->getLabels();
+	function getConditionExtensions(Model_TriggerEvent $trigger) {
+		$labels = $this->getLabels($trigger);
 		$types = $this->getTypes();
 		
 		$conditions = $this->_importLabelsTypesAsConditions($labels, $types);
@@ -135,7 +137,7 @@ abstract class AbstractEvent_CalendarEvent extends Extension_DevblocksEvent {
 		return $pass;
 	}
 	
-	function getActionExtensions() {
+	function getActionExtensions(Model_TriggerEvent $trigger) {
 		$actions =
 			array(
 // 				'add_watchers' => array('label' =>'Add watchers'),
@@ -145,7 +147,7 @@ abstract class AbstractEvent_CalendarEvent extends Extension_DevblocksEvent {
 				'create_ticket' => array('label' =>'Create a ticket'),
 				'send_email' => array('label' => 'Send email'),
 			)
-			+ DevblocksEventHelper::getActionCustomFieldsFromLabels($this->getLabels())
+			+ DevblocksEventHelper::getActionCustomFieldsFromLabels($this->getLabels($trigger))
 			;
 			
 		return $actions;

@@ -20,35 +20,37 @@ abstract class AbstractEvent_ContactPerson extends Extension_DevblocksEvent {
 
 	/**
 	 *
-	 * @param integer $contact_id
+	 * @param integer $context_id
 	 * @return Model_DevblocksEvent
 	 */
-	function generateSampleEventModel(Model_TriggerEvent $trigger, $contact_id=null) {
+	function generateSampleEventModel(Model_TriggerEvent $trigger, $context_id=null) {
 		
-		if(empty($contact_id)) {
-			$contact_id = DAO_ContactPerson::random();
+		if(empty($context_id)) {
+			$context_id = DAO_ContactPerson::random();
 		}
 		
 		return new Model_DevblocksEvent(
 			$this->_event_id,
 			array(
-				'contact_id' => $contact_id,
+				'context_id' => $context_id,
 			)
 		);
 	}
 	
-	function setEvent(Model_DevblocksEvent $event_model=null) {
+	function setEvent(Model_DevblocksEvent $event_model=null, Model_TriggerEvent $trigger=null) {
 		$labels = array();
 		$values = array();
 
+		// We can accept a model object or a context_id
+		@$model = $event_model->params['context_model'] ?: $event_model->params['context_id'];
+		
 		/**
 		 * Contact Person
 		 */
 		
-		@$contact_id = $event_model->params['contact_id'];
 		$contact_labels = array();
 		$contact_values = array();
-		CerberusContexts::getContext(CerberusContexts::CONTEXT_CONTACT_PERSON, $contact_id, $contact_labels, $contact_values, null, true);
+		CerberusContexts::getContext(CerberusContexts::CONTEXT_CONTACT_PERSON, $model, $contact_labels, $contact_values, null, true);
 
 			// Merge
 			CerberusContexts::merge(
@@ -70,7 +72,7 @@ abstract class AbstractEvent_ContactPerson extends Extension_DevblocksEvent {
 	
 	function renderSimulatorTarget($trigger, $event_model) {
 		$context = CerberusContexts::CONTEXT_CONTACT_PERSON;
-		$context_id = $event_model->params['contact_id'];
+		$context_id = $event_model->params['context_id'];
 		DevblocksEventHelper::renderSimulatorTarget($context, $context_id, $trigger, $event_model);
 	}
 	
@@ -102,8 +104,8 @@ abstract class AbstractEvent_ContactPerson extends Extension_DevblocksEvent {
 		return $vals_to_ctx;
 	}
 	
-	function getConditionExtensions() {
-		$labels = $this->getLabels();
+	function getConditionExtensions(Model_TriggerEvent $trigger) {
+		$labels = $this->getLabels($trigger);
 		$types = $this->getTypes();
 		
 		$labels['contact_link'] = 'Contact is linked';
@@ -215,7 +217,7 @@ abstract class AbstractEvent_ContactPerson extends Extension_DevblocksEvent {
 		return $pass;
 	}
 	
-	function getActionExtensions() {
+	function getActionExtensions(Model_TriggerEvent $trigger) {
 		$actions =
 			array(
 				'add_watchers' => array('label' =>'Add watchers'),
@@ -226,7 +228,7 @@ abstract class AbstractEvent_ContactPerson extends Extension_DevblocksEvent {
 				'send_email' => array('label' => 'Send email'),
 				'set_links' => array('label' => 'Set links'),
 			)
-			+ DevblocksEventHelper::getActionCustomFieldsFromLabels($this->getLabels())
+			+ DevblocksEventHelper::getActionCustomFieldsFromLabels($this->getLabels($trigger))
 			;
 			
 		return $actions;

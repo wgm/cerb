@@ -18,7 +18,7 @@
 	
 	<select name="field">
 		{$smarty.capture.options nofilter}
-	</select><input type="text" name="query" class="input_search" size="32" value="" autocomplete="off">
+	</select><input type="text" name="query" class="input_search" size="32" value="" autocomplete="off" spellcheck="false">
 	
 	<div class="hints{if !$is_popup} hints-float{/if} hints-shadow">
 		<b>examples:</b> 
@@ -31,6 +31,15 @@
 var $frm = $('#{$uniqid}').each(function(e) {
 	var $frm = $(this);
 	var $select = $frm.find('select[name=field]');
+	var $input = $frm.find('input:text');
+
+	var $bubbles = $select.siblings('div.hints').find('ul.bubbles');
+	$bubbles.css('cursor', 'pointer');
+	
+	$bubbles.on('click', function(e) {
+		var txt = $(e.target).text();
+		$input.insertAtCursor(txt).select();
+	});
 	
 	$select.bind('load_hints', function(e) {
 		var $this = $(this);
@@ -39,11 +48,28 @@ var $frm = $('#{$uniqid}').each(function(e) {
 		var cf_id = $token.attr('cf_id');
 		var field_type = $token.attr('field_type');
 		
-		var $bubbles = $this.siblings('div.hints').find('ul.bubbles');
 		$bubbles.find('li').remove();
 		
 {capture "field_hints"}
 {foreach from=$view->getParamsAvailable() item=field key=token}
+
+{if $field->type == 'FT' && $field->ft_schema}
+	{$schema = Extension_DevblocksSearchSchema::get($field->ft_schema)}
+	{if $schema}
+	{$engine = $schema->getEngine()}
+	{if $engine}
+	{$examples = $engine->getQuickSearchExamples($schema)}
+	{if $examples}
+	else if (token == '{$token}') {
+		{foreach from=$examples item=example}
+		$bubbles.append($('<li><tt>{$example|escape:'javascript'}</tt></li>'));
+		{/foreach}
+	}
+	{/if}
+	{/if}
+	{/if}
+{/if}
+
 {$cf_id = substr($token,3)}
 {if substr($token,0,3) == 'cf_' && !empty($cf_id)}
 {$cf = DAO_CustomField::get($cf_id)}
@@ -139,7 +165,6 @@ var $frm = $('#{$uniqid}').each(function(e) {
 				$bubbles.append($('<li><tt>1</tt></li>'));
 			
 			}
-			
 		}
 	});
 	
@@ -152,11 +177,15 @@ var $frm = $('#{$uniqid}').each(function(e) {
 	
 	$select.trigger('load_hints');
 	
-	var $input = $frm.find('input:text');
-	
 	$input.keydown(function(e) {
 		if(e.which == 13) {
 			var $txt = $(this);
+			
+			// [TODO] Store quick search history in HTML localStorage and use it as new hints?
+			// [TODO] Adapt examples as text is entered?
+			// [TODO] Convert this to autocomplete instead?
+			// [TODO] Make them with with TAB focus
+			// [TODO] Don't hide the popup until we actually intend to (e.g. not on blur from textbox to popup or SELECT)
 			
 			genericAjaxPost('{$uniqid}','',null,function(json) {
 				if(json.status == true) {

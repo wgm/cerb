@@ -132,11 +132,11 @@ class DAO_Ticket extends Cerb_ORMHelper {
 		);
 		$rs = $db->Execute($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
 		
-		if($row = mysql_fetch_assoc($rs)) {
+		if($row = mysqli_fetch_assoc($rs)) {
 			$ticket_id = intval($row['ticket_id']);
 			$message_id = intval($row['message_id']);
 			
-			mysql_free_result($rs);
+			mysqli_free_result($rs);
 			
 			return array(
 				'ticket_id' => $ticket_id,
@@ -239,7 +239,7 @@ class DAO_Ticket extends Cerb_ORMHelper {
 		$db->Execute($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
 		$id = $db->LastInsertId();
 		
-		self::update($id, $fields);
+		self::update($id, $fields, false);
 		
 		return $id;
 	}
@@ -248,17 +248,14 @@ class DAO_Ticket extends Cerb_ORMHelper {
 		$db = DevblocksPlatform::getDatabaseService();
 		$logger = DevblocksPlatform::getConsoleLog();
 		
-		$sql = "DELETE QUICK ticket_mask_forward FROM ticket_mask_forward LEFT JOIN ticket ON ticket_mask_forward.new_ticket_id=ticket.id WHERE ticket.id IS NULL";
-		$db->Execute($sql);
+		$db->Execute("DELETE FROM ticket_mask_forward WHERE new_ticket_id NOT IN (SELECT id FROM ticket)");
 		$logger->info('[Maint] Purged ' . $db->Affected_Rows() . ' ticket_mask_forward records.');
 
-		$sql = "DELETE QUICK requester FROM requester LEFT JOIN ticket ON requester.ticket_id = ticket.id WHERE ticket.id IS NULL";
-		$db->Execute($sql);
+		$db->Execute("DELETE FROM requester WHERE ticket_id NOT IN (SELECT id FROM ticket)");
 		$logger->info('[Maint] Purged ' . $db->Affected_Rows() . ' requester records.');
 		
 		// Recover any tickets assigned to a NULL bucket
-		$sql = "UPDATE ticket LEFT JOIN bucket ON ticket.bucket_id = bucket.id SET ticket.bucket_id = 0 WHERE ticket.bucket_id > 0 AND bucket.id IS NULL";
-		$db->Execute($sql);
+		$db->Execute("UPDATE ticket SET bucket_id = 0 WHERE bucket_id != 0 AND bucket_id NOT IN (SELECT id FROM bucket)");
 		$logger->info('[Maint] Fixed ' . $db->Affected_Rows() . ' tickets in missing buckets.');
 		
 		// Fire event
@@ -393,7 +390,7 @@ class DAO_Ticket extends Cerb_ORMHelper {
 			
 			// Clear old ticket meta
 			
-			DAO_Ticket::update($merge_ticket_ids, array(
+			$fields = array(
 				DAO_Ticket::IS_CLOSED => 1,
 				DAO_Ticket::IS_DELETED => 1,
 				DAO_Ticket::REOPEN_AT => 0,
@@ -404,7 +401,8 @@ class DAO_Ticket extends Cerb_ORMHelper {
 				DAO_Ticket::NUM_MESSAGES => 0,
 				DAO_Ticket::ELAPSED_RESPONSE_FIRST => 0,
 				DAO_Ticket::ELAPSED_RESOLUTION_FIRST => 0,
-			));
+			);
+			DAO_Ticket::update($merge_ticket_ids, $fields, false);
 
 			// Sort merge tickets by updated date ascending to find the latest touched
 			$tickets = $merged_tickets;
@@ -413,13 +411,14 @@ class DAO_Ticket extends Cerb_ORMHelper {
 			$most_recent_updated_ticket = end($tickets);
 
 			// Set our destination ticket to the latest touched details
-			DAO_Ticket::update($oldest_id, array(
+			$fields = array(
 				DAO_Ticket::LAST_ACTION_CODE => $most_recent_updated_ticket[SearchFields_Ticket::TICKET_LAST_ACTION_CODE],
 				DAO_Ticket::UPDATED_DATE => $most_recent_updated_ticket[SearchFields_Ticket::TICKET_UPDATED_DATE],
 				DAO_Ticket::IS_CLOSED => $most_recent_updated_ticket[SearchFields_Ticket::TICKET_CLOSED],
 				DAO_Ticket::IS_WAITING => $most_recent_updated_ticket[SearchFields_Ticket::TICKET_WAITING],
 				DAO_Ticket::IS_DELETED => $most_recent_updated_ticket[SearchFields_Ticket::TICKET_DELETED],
-			));
+			);
+			DAO_Ticket::update($oldest_id, $fields, false);
 			
 			DAO_Ticket::rebuild($oldest_id);
 			
@@ -494,11 +493,12 @@ class DAO_Ticket extends Cerb_ORMHelper {
 		
 		// If no messages, delete the ticket
 		if(empty($first_message) && empty($last_message)) {
-			DAO_Ticket::update($id, array(
+			$fields = array(
 				DAO_Ticket::IS_WAITING => 0,
 				DAO_Ticket::IS_CLOSED => 1,
 				DAO_Ticket::IS_DELETED => 1,
-			));
+			);
+			DAO_Ticket::update($id, $fields, false);
 			
 			return FALSE;
 		}
@@ -536,7 +536,7 @@ class DAO_Ticket extends Cerb_ORMHelper {
 		
 		// Update
 		if(!empty($fields)) {
-			DAO_Ticket::update($id, $fields);
+			DAO_Ticket::update($id, $fields, false);
 		}
 		
 		// Reindex message count
@@ -554,27 +554,12 @@ class DAO_Ticket extends Cerb_ORMHelper {
 	static function get($id) {
 		if(empty($id)) return NULL;
 		
-		$tickets = self::getTickets(array($id));
+		$tickets = self::getIds(array($id));
 		
 		if(isset($tickets[$id]))
 			return $tickets[$id];
 			
 		return NULL;
-	}
-	
-	/**
-	 * Enter description here...
-	 *
-	 * @param array $ids
-	 * @return Model_Ticket[]
-	 */
-	static function getTickets($ids=array()) {
-		if(!is_array($ids))
-			$ids = array($ids);
-		
-		return self::getWhere(
-			(!empty($ids) ? sprintf("id IN (%s) ",implode(',',$ids)) : " ")
-		);
 	}
 	
 	static function getWhere($where=null, $sortBy='updated_date', $sortAsc=true, $limit=null) {
@@ -603,7 +588,7 @@ class DAO_Ticket extends Cerb_ORMHelper {
 	static private function _createObjectsFromResultSet($rs=null) {
 		$objects = array();
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$object = new Model_Ticket();
 			$object->id = intval($row['id']);
 			$object->mask = $row['mask'];
@@ -633,7 +618,7 @@ class DAO_Ticket extends Cerb_ORMHelper {
 			$objects[$object->id] = $object;
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return $objects;
 	}
@@ -642,7 +627,10 @@ class DAO_Ticket extends Cerb_ORMHelper {
 		parent::_updateWhere('ticket', $fields, $where);
 	}
 	
-	static function update($ids, $fields) {
+	static function update($ids, $fields, $check_deltas=true) {
+		if(empty($fields))
+			return;
+		
 		if(!is_array($ids))
 			$ids = array($ids);
 		
@@ -652,17 +640,18 @@ class DAO_Ticket extends Cerb_ORMHelper {
 		while($batch_ids = array_shift($chunks)) {
 			if(empty($batch_ids))
 				continue;
-			
-			// Get state before changes
-			$object_changes = parent::_getUpdateDeltas($batch_ids, $fields, get_class());
 
+			// Send events
+			if($check_deltas) {
+				CerberusContexts::checkpointChanges(CerberusContexts::CONTEXT_TICKET, $batch_ids);
+			}
+			
 			// Make changes
 			parent::_update($batch_ids, 'ticket', $fields);
 			
-			// Send events
-			if(!empty($object_changes)) {
-				// Local events
-				self::_processUpdateEvents($object_changes);
+			if($check_deltas) {
+				// Trigger local events
+				self::_processUpdateEvents($batch_ids, $fields);
 				
 				// Trigger an event about the changes
 				$eventMgr = DevblocksPlatform::getEventService();
@@ -670,7 +659,8 @@ class DAO_Ticket extends Cerb_ORMHelper {
 					new Model_DevblocksEvent(
 						'dao.ticket.update',
 						array(
-							'objects' => $object_changes,
+							'ids' => $batch_ids,
+							'fields' => $fields,
 						)
 					)
 				);
@@ -681,64 +671,89 @@ class DAO_Ticket extends Cerb_ORMHelper {
 		}
 	}
 	
-	static function _processUpdateEvents($objects) {
-		if(is_array($objects))
-		foreach($objects as $object_id => $object) {
-			@$model = $object['model'];
-			@$changes = $object['changes'];
-			
-			if(empty($model) || empty($changes))
+	static function _processUpdateEvents($ids, $change_fields) {
+
+		// We only care about these fields, so abort if they aren't referenced
+
+		$observed_fields = array(
+			DAO_Ticket::OWNER_ID,
+			DAO_Ticket::GROUP_ID,
+			DAO_Ticket::BUCKET_ID,
+			DAO_Ticket::IS_CLOSED,
+			DAO_Ticket::IS_DELETED,
+			DAO_Ticket::IS_WAITING,
+		);
+		
+		$used_fields = array_intersect($observed_fields, array_keys($change_fields));
+		
+		if(empty($used_fields))
+			return;
+		
+		// Load records only if they're needed
+		
+		if(false == ($before_models = CerberusContexts::getCheckpoints(CerberusContexts::CONTEXT_TICKET, $ids)))
+			return;
+		
+		if(false == ($models = DAO_Ticket::getIds($ids)))
+			return;
+		
+		foreach($models as $id => $model) {
+			if(!isset($before_models[$id]))
 				continue;
+			
+			$before_model = (object) $before_models[$id];
 			
 			/*
 			 * Owner changed
 			 */
-			if(isset($changes[DAO_Ticket::OWNER_ID])) {
-				@$owner_id = $changes[DAO_Ticket::OWNER_ID];
+			
+			@$owner_id = $change_fields[DAO_Ticket::OWNER_ID];
+			
+			if($owner_id == $before_model->owner_id)
+				unset($change_fields[DAO_Ticket::OWNER_ID]);
+			
+			if(isset($change_fields[DAO_Ticket::OWNER_ID])) {
 				
-				/*
-				* Mail assigned in group
-				*/
-				Event_MailAssignedInGroup::trigger($object_id, $model[DAO_Ticket::GROUP_ID]);
+				// Mail assigned in group
 				
-				/*
-				 * Log activity (ticket.unassigned)
-				 */
-				if(empty($owner_id['to'])) {
+				Event_MailAssignedInGroup::trigger($model->id, $model->group_id);
+				
+				// Log activity (ticket.unassigned)
+				
+				if(empty($model->owner_id)) {
 					$activity_point = 'ticket.owner.unassigned';
 					
 					$entry = array(
 						// {{actor}} unassigned ticket {{target}}
 						'message' => 'activities.ticket.unassigned',
 						'variables' => array(
-							'target' => sprintf("[%s] %s", $model[DAO_Ticket::MASK], $model[DAO_Ticket::SUBJECT]),
+							'target' => sprintf("[%s] %s", $model->mask, $model->subject),
 							),
 						'urls' => array(
-							'target' => sprintf("ctx://%s:%d/%s", CerberusContexts::CONTEXT_TICKET, $object_id, $model[DAO_Ticket::MASK]),
+							'target' => sprintf("ctx://%s:%d/%s", CerberusContexts::CONTEXT_TICKET, $model->id, $model->mask),
 							)
 					);
-					CerberusContexts::logActivity($activity_point, CerberusContexts::CONTEXT_TICKET, $object_id, $entry);
+					CerberusContexts::logActivity($activity_point, CerberusContexts::CONTEXT_TICKET, $model->id, $entry);
 				}
 				
-				/*
-				 * Log activity (ticket.assigned)
-				 */
-				if(!empty($owner_id['to'])) {
+				// Log activity (ticket.assigned)
+				
+				elseif($model->owner_id) {
 					$activity_point = 'ticket.owner.assigned';
-					$target_worker = DAO_Worker::get($changes[DAO_Ticket::OWNER_ID]['to']);
-
+					$target_worker = DAO_Worker::get($model->owner_id);
+	
 					$entry = array(
 						//{{actor}} assigned ticket {{target}} to worker {{worker}}
 						'message' => 'activities.ticket.assigned',
 						'variables' => array(
-							'target' => sprintf("[%s] %s", $model[DAO_Ticket::MASK], $model[DAO_Ticket::SUBJECT]),
+							'target' => sprintf("[%s] %s", $model->mask, $model->subject),
 							'worker' => (!empty($target_worker) && $target_worker instanceof Model_Worker) ? $target_worker->getName() : '',
 							),
 						'urls' => array(
-							'target' => sprintf("ctx://%s:%d/%s", CerberusContexts::CONTEXT_TICKET, $object_id, $model[DAO_Ticket::MASK]),
+							'target' => sprintf("ctx://%s:%d/%s", CerberusContexts::CONTEXT_TICKET, $model->id, $model->mask),
 							)
 					);
-					CerberusContexts::logActivity($activity_point, CerberusContexts::CONTEXT_TICKET, $object_id, $entry);
+					CerberusContexts::logActivity($activity_point, CerberusContexts::CONTEXT_TICKET, $model->id, $entry);
 					
 				}
 			}
@@ -746,60 +761,82 @@ class DAO_Ticket extends Cerb_ORMHelper {
 			/*
 			 * Ticket moved
 			 */
-			@$group_id = $changes[DAO_Ticket::GROUP_ID];
-			@$bucket_id = $changes[DAO_Ticket::BUCKET_ID];
 			
-			if(!empty($group_id) || !empty($bucket_id)) {
+			@$group_id = $change_fields[DAO_Ticket::GROUP_ID];
+			@$bucket_id = $change_fields[DAO_Ticket::BUCKET_ID];
+			
+			if($group_id == $before_model->group_id)
+				unset($change_fields[DAO_Ticket::GROUP_ID]);
+			
+			if($bucket_id == $before_model->bucket_id)
+				unset($change_fields[DAO_Ticket::BUCKET_ID]);
+			
+			if(isset($change_fields[DAO_Ticket::GROUP_ID]) || isset($change_fields[DAO_Ticket::BUCKET_ID])) {
 				// VAs
-				
-				Event_MailMovedToGroup::trigger($object_id, $model[DAO_Ticket::GROUP_ID]);
+
+				Event_MailMovedToGroup::trigger($model->id, $model->group_id);
 
 				// Activity log
 				
-				@$to_group = DAO_Group::get($group_id['to']);
-				@$to_bucket = DAO_Bucket::get($bucket_id['to']);
+				@$to_group = DAO_Group::get($model->group_id);
+				@$to_bucket = DAO_Bucket::get($model->bucket_id);
 				
 				if(empty($to_group))
-					$to_group = DAO_Group::get($model[DAO_Ticket::GROUP_ID]);
+					$to_group = DAO_Group::get($model->group_id);
 				
 				$entry = array(
 					//{{actor}} moved ticket {{target}} to {{group}} {{bucket}}
 					'message' => 'activities.ticket.moved',
 					'variables' => array(
-						'target' => sprintf("[%s] %s", $model[DAO_Ticket::MASK], $model[DAO_Ticket::SUBJECT]),
+						'target' => sprintf("[%s] %s", $model->mask, $model->subject),
 						'group' => $to_group->name,
 						'bucket' => (empty($to_bucket) ? 'Inbox' : $to_bucket->name),
 						),
 					'urls' => array(
-						'target' => sprintf("ctx://%s:%d/%s", CerberusContexts::CONTEXT_TICKET, $object_id, $model[DAO_Ticket::MASK]),
+						'target' => sprintf("ctx://%s:%d/%s", CerberusContexts::CONTEXT_TICKET, $model->id, $model->mask),
 						'group' => sprintf("ctx://%s:%d/%s", CerberusContexts::CONTEXT_GROUP, $to_group->id, $to_group->name),
 						)
 				);
-				CerberusContexts::logActivity('ticket.moved', CerberusContexts::CONTEXT_TICKET, $object_id, $entry);
+				CerberusContexts::logActivity('ticket.moved', CerberusContexts::CONTEXT_TICKET, $model->id, $entry);
 			}
 			
 			/*
 			 * Ticket status change
 			 */
+
+			@$waiting = $change_fields[DAO_Ticket::IS_WAITING];
+			@$closed = $change_fields[DAO_Ticket::IS_CLOSED];
+			@$deleted = $change_fields[DAO_Ticket::IS_DELETED];
+			
+			if($waiting == $before_model->is_waiting)
+				unset($change_fields[DAO_Ticket::IS_WAITING]);
+			
+			if($closed == $before_model->is_closed)
+				unset($change_fields[DAO_Ticket::IS_CLOSED]);
+			
+			if($deleted == $before_model->is_deleted)
+				unset($change_fields[DAO_Ticket::IS_DELETED]);
+			
 			if(
-				isset($changes[DAO_Ticket::IS_WAITING])
-				|| isset($changes[DAO_Ticket::IS_CLOSED])
-				|| isset($changes[DAO_Ticket::IS_DELETED])
+				isset($change_fields[DAO_Ticket::IS_WAITING])
+				|| isset($change_fields[DAO_Ticket::IS_CLOSED])
+				|| isset($change_fields[DAO_Ticket::IS_DELETED])
 			) {
-				@$waiting = $changes[DAO_Ticket::IS_WAITING];
-				@$closed = $changes[DAO_Ticket::IS_CLOSED];
-				@$deleted = $changes[DAO_Ticket::IS_DELETED];
 
 				/*
-				 * If closing for the first time
+				 * If closing for the first time, record the date and elapsed time
 				 */
 
-				if(isset($changes[DAO_Ticket::IS_CLOSED]) && $closed) {
-					if(empty($model['closed_at'])) {
-						DAO_Ticket::update($object_id, array(
-							DAO_Ticket::CLOSED_AT => time(),
-							DAO_Ticket::ELAPSED_RESOLUTION_FIRST => (time()-intval($model['created_date'])),
-						));
+				if(isset($change_fields[DAO_Ticket::IS_CLOSED]) && $closed) {
+					if(empty($model->closed_at)) {
+						DAO_Ticket::update(
+							$model->id,
+							array(
+								DAO_Ticket::CLOSED_AT => time(),
+								DAO_Ticket::ELAPSED_RESOLUTION_FIRST => (time()-intval($model->created_date)),
+							),
+							false
+						);
 					}
 				}
 				
@@ -810,20 +847,17 @@ class DAO_Ticket extends Cerb_ORMHelper {
 				$status_to = null;
 				$activity_point = null;
 				
-				if(!empty($model[DAO_Ticket::IS_DELETED])) {
+				if($model->is_deleted) {
 					$status_to = 'deleted';
 					$activity_point = 'ticket.status.deleted';
 					
-				} else if(!empty($model[DAO_Ticket::IS_CLOSED])) {
+				} else if($model->is_closed) {
 					$status_to = 'closed';
 					$activity_point = 'ticket.status.closed';
 					
-					//$logger = DevblocksPlatform::getConsoleLog();
-					//$log_level = $logger->setLogLevel(7);
-					Event_MailClosedInGroup::trigger($object_id, $model[DAO_Ticket::GROUP_ID]);
-					//$logger->setLogLevel($log_level);
+					Event_MailClosedInGroup::trigger($model->id, $model->group_id);
 					
-				} else if(!empty($model[DAO_Ticket::IS_WAITING])) {
+				} else if($model->is_waiting) {
 					$status_to = 'waiting';
 					$activity_point = 'ticket.status.waiting';
 					
@@ -841,22 +875,24 @@ class DAO_Ticket extends Cerb_ORMHelper {
 						//{{actor}} changed ticket {{target}} to status {{status}}
 						'message' => 'activities.ticket.status',
 						'variables' => array(
-							'target' => sprintf("[%s] %s", $model[DAO_Ticket::MASK], $model[DAO_Ticket::SUBJECT]),
+							'target' => sprintf("[%s] %s", $model->mask, $model->subject),
 							'status' => $status_to,
 							),
 						'urls' => array(
-							'target' => sprintf("ctx://%s:%d/%s", CerberusContexts::CONTEXT_TICKET, $object_id, $model[DAO_Ticket::MASK]),
+							'target' => sprintf("ctx://%s:%d/%s", CerberusContexts::CONTEXT_TICKET, $model->id, $model->mask),
 							)
 					);
-					CerberusContexts::logActivity($activity_point, CerberusContexts::CONTEXT_TICKET, $object_id, $entry);
+					CerberusContexts::logActivity($activity_point, CerberusContexts::CONTEXT_TICKET, $model->id, $entry);
 				}
-				
-			} //foreach
-		}
+			}
+			
+		} // end $model loop
+		
 	}
 	
 	static function updateMessageCount($id) {
 		$db = DevblocksPlatform::getDatabaseService();
+		
 		$db->Execute(sprintf("UPDATE ticket ".
 			"SET num_messages = (SELECT count(id) FROM message WHERE message.ticket_id = ticket.id) ".
 			"WHERE ticket.id = %d",
@@ -881,7 +917,7 @@ class DAO_Ticket extends Cerb_ORMHelper {
 		);
 		$rs = $db->Execute($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
 		 
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$address = new Model_Address();
 			$address->id = intval($row['id']);
 			$address->email = $row['email'];
@@ -892,7 +928,7 @@ class DAO_Ticket extends Cerb_ORMHelper {
 			$addresses[$address->id] = $address;
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 
 		return $addresses;
 	}
@@ -1001,7 +1037,7 @@ class DAO_Ticket extends Cerb_ORMHelper {
 			
 		$db = DevblocksPlatform::getDatabaseService();
 
-		$sql = sprintf("DELETE QUICK FROM requester WHERE ticket_id = %d AND address_id = %d",
+		$sql = sprintf("DELETE FROM requester WHERE ticket_id = %d AND address_id = %d",
 			$id,
 			$address_id
 		);
@@ -1036,13 +1072,13 @@ class DAO_Ticket extends Cerb_ORMHelper {
 			$rs = $db->SelectLimit($sql, $limit, 0) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
 			
 			$domains = array(); // [TODO] Temporary
-			while($row = mysql_fetch_assoc($rs)) {
+			while($row = mysqli_fetch_assoc($rs)) {
 				$hash = md5('domain'.$row['domain']);
 				$domains[] = $row['domain']; // [TODO] Temporary
 				$tops[$hash] = array('domain',$row['domain'],$row['hits']);
 			}
 			
-			mysql_free_result($rs);
+			mysqli_free_result($rs);
 			
 			// [JAS]: Most common senders in work pile
 			$sql = "SELECT count(*) AS hits, a1.email ".
@@ -1055,12 +1091,12 @@ class DAO_Ticket extends Cerb_ORMHelper {
 				"ORDER BY hits DESC ";
 			$rs = $db->SelectLimit($sql, $limit*2, 0) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
 			
-			while($row = mysql_fetch_assoc($rs)) {
+			while($row = mysqli_fetch_assoc($rs)) {
 				$hash = md5('sender'.$row['email']);
 				$senders[$hash] = array('sender',$row['email'],$row['hits']);
 			}
 			
-			mysql_free_result($rs);
+			mysqli_free_result($rs);
 			
 			uasort($senders, array('DAO_Ticket','sortByCount'));
 			
@@ -1097,11 +1133,11 @@ class DAO_Ticket extends Cerb_ORMHelper {
 			
 			$prefixes = array(); // [TODO] Temporary
 
-			while($row = mysql_fetch_assoc($rs)) {
+			while($row = mysqli_fetch_assoc($rs)) {
 				$prefixes[] = $row['prefix'];
 			}
 			
-			mysql_free_result($rs);
+			mysqli_free_result($rs);
 
 			foreach($prefixes as $prefix_idx => $prefix) {
 				// [JAS]: Most common subjects in work pile
@@ -1115,10 +1151,10 @@ class DAO_Ticket extends Cerb_ORMHelper {
 					"ORDER BY hits DESC ";
 				
 				$rs = $db->SelectLimit($sql, 15, 0) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
-				$num_rows = mysql_num_rows($rs);
+				$num_rows = mysqli_num_rows($rs);
 
 				$lines = array();
-				while($row = mysql_fetch_assoc($rs)) {
+				while($row = mysqli_fetch_assoc($rs)) {
 					$lines[$row['subject']] = $row['hits'];
 				}
 				
@@ -1141,7 +1177,7 @@ class DAO_Ticket extends Cerb_ORMHelper {
 					$tops[$tophash] = array('subject',key($prefix),current($prefix));
 				}
 				
-				mysql_free_result($rs);
+				mysqli_free_result($rs);
 			}
 
 		} elseif ($mode=="headers") {
@@ -1166,12 +1202,12 @@ class DAO_Ticket extends Cerb_ORMHelper {
 			
 			$rs = $db->SelectLimit($sql, 25, 0) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
 
-			while($row = mysql_fetch_assoc($rs)) {
+			while($row = mysqli_fetch_assoc($rs)) {
 				$hash = md5('header'.$row['header_value']);
 				$tops[$hash] = array('header',$row['header_value'],$row['hits'],array(),$mode_param);
 			}
 			
-			mysql_free_result($rs);
+			mysqli_free_result($rs);
 		}
 
 		uasort($tops, array('DAO_Ticket','sortByCount'));
@@ -1325,11 +1361,6 @@ class DAO_Ticket extends Cerb_ORMHelper {
 			((isset($tables['r']) || isset($tables['ra'])) ? "INNER JOIN requester r ON (r.ticket_id=t.id) " : " ").
 			(isset($tables['ra']) ? "INNER JOIN address ra ON (ra.id=r.address_id) " : " ").
 			(isset($tables['msg']) || isset($tables['ftmc']) || isset($tables['ftnc']) ? "INNER JOIN message msg ON (msg.ticket_id=t.id) " : " ").
-			(isset($tables['ftcc']) ? "INNER JOIN comment ON (comment.context = 'cerberusweb.contexts.ticket' AND comment.context_id = t.id) " : " ").
-			(isset($tables['ftcc']) ? "INNER JOIN fulltext_comment_content ftcc ON (ftcc.id=comment.id) " : " ").
-			(isset($tables['ftmc']) ? "INNER JOIN fulltext_message_content ftmc ON (ftmc.id=msg.id) " : " ").
-			(isset($tables['ftnc']) ? "INNER JOIN comment AS note ON (note.context = 'cerberusweb.contexts.message' AND note.context_id = msg.id) " : " ").
-			(isset($tables['ftnc']) ? "INNER JOIN fulltext_comment_content AS ftnc ON (ftnc.id=note.id) " : " ").
 			(isset($tables['mh']) ? "INNER JOIN message_header mh ON (mh.message_id=t.first_message_id) " : " "). // [TODO] Choose between first message and all?
 			(isset($tables['context_link']) ? "INNER JOIN context_link ON (context_link.to_context = 'cerberusweb.contexts.ticket' AND context_link.to_context_id = t.id) " : " ")
 			;
@@ -1403,6 +1434,45 @@ class DAO_Ticket extends Cerb_ORMHelper {
 		settype($param_key, 'string');
 
 		switch($param_key) {
+			case SearchFields_Ticket::FULLTEXT_COMMENT_CONTENT:
+				$search = Extension_DevblocksSearchSchema::get(Search_CommentContent::ID);
+				$query = $search->getQueryFromParam($param);
+				$ids = $search->query($query, array('context_crc32' => sprintf("%u", crc32($from_context))));
+				
+				$from_ids = DAO_Comment::getContextIdsByContextAndIds($from_context, $ids);
+				
+				$args['where_sql'] .= sprintf('AND %s IN (%s) ',
+					$from_index,
+					implode(', ', (!empty($from_ids) ? $from_ids : array(-1)))
+				);
+				break;
+				
+			case SearchFields_Ticket::FULLTEXT_MESSAGE_CONTENT:
+				$search = Extension_DevblocksSearchSchema::get(Search_MessageContent::ID);
+				$query = $search->getQueryFromParam($param);
+				$ids = $search->query($query, array());
+				
+				if(empty($ids))
+					$ids = array(-1);
+				
+				$args['where_sql'] .= sprintf('AND msg.id IN (%s) ',
+					implode(', ', $ids)
+				);
+				break;
+				
+			case SearchFields_Ticket::FULLTEXT_NOTE_CONTENT:
+				$search = Extension_DevblocksSearchSchema::get(Search_CommentContent::ID);
+				$query = $search->getQueryFromParam($param);
+				$ids = $search->query($query, array('context_crc32' => sprintf("%u", crc32(CerberusContexts::CONTEXT_MESSAGE))), 250);
+				
+				$from_ids = DAO_Comment::getContextIdsByContextAndIds(CerberusContexts::CONTEXT_MESSAGE, $ids);
+				
+				// [TODO] This approach doesn't stack with comment searching, because they're "id in (1,2,3) AND id IN (4,5,6)"
+				$args['where_sql'] .= sprintf('AND msg.id IN (%s) ',
+					implode(', ', (!empty($from_ids) ? $from_ids : array(-1)))
+				);
+				break;
+			
 			case SearchFields_Ticket::VIRTUAL_CONTEXT_LINK:
 				$args['has_multiple_values'] = true;
 				self::_searchComponentsVirtualContextLinks($param, $from_context, $from_index, $args['join_sql'], $args['where_sql']);
@@ -1515,7 +1585,7 @@ class DAO_Ticket extends Cerb_ORMHelper {
 		
 		$results = array();
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$result = array();
 			foreach($row as $f => $v) {
 				$result[$f] = $v;
@@ -1524,17 +1594,20 @@ class DAO_Ticket extends Cerb_ORMHelper {
 			$results[$id] = $result;
 		}
 
-		// [JAS]: Count all
-		$total = -1;
+		$total = count($results);
+		
 		if($withCounts) {
-			$count_sql =
-				(($has_multiple_values) ? "SELECT COUNT(DISTINCT t.id) " : "SELECT COUNT(t.id) ").
-				$join_sql.
-				$where_sql;
-			$total = $db->GetOne($count_sql);
+			// We can skip counting if we have a less-than-full single page
+			if(!(0 == $page && $total < $limit)) {
+				$count_sql =
+					(($has_multiple_values) ? "SELECT COUNT(DISTINCT t.id) " : "SELECT COUNT(t.id) ").
+					$join_sql.
+					$where_sql;
+				$total = $db->GetOne($count_sql);
+			}
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return array($results, $total);
 	}
@@ -1680,18 +1753,17 @@ class SearchFields_Ticket implements IDevblocksSearchFields {
 			SearchFields_Ticket::VIRTUAL_HAS_FIELDSET => new DevblocksSearchField(SearchFields_Ticket::VIRTUAL_HAS_FIELDSET, '*', 'has_fieldset', $translate->_('common.fieldset'), null),
 			SearchFields_Ticket::VIRTUAL_STATUS => new DevblocksSearchField(SearchFields_Ticket::VIRTUAL_STATUS, '*', 'status', $translate->_('ticket.status')),
 			SearchFields_Ticket::VIRTUAL_WATCHERS => new DevblocksSearchField(SearchFields_Ticket::VIRTUAL_WATCHERS, '*', 'workers', $translate->_('common.watchers'), 'WS'),
+				
+			SearchFields_Ticket::FULLTEXT_COMMENT_CONTENT => new DevblocksSearchField(self::FULLTEXT_COMMENT_CONTENT, 'ftcc', 'content', $translate->_('comment.filters.content'), 'FT'),
+			SearchFields_Ticket::FULLTEXT_MESSAGE_CONTENT => new DevblocksSearchField(self::FULLTEXT_MESSAGE_CONTENT, 'ftmc', 'content', $translate->_('message.content'), 'FT'),
+			SearchFields_Ticket::FULLTEXT_NOTE_CONTENT => new DevblocksSearchField(self::FULLTEXT_NOTE_CONTENT, 'ftnc', 'content', $translate->_('message.note.content'), 'FT'),
 		);
-
-		$tables = DevblocksPlatform::getDatabaseTables();
-		if(isset($tables['fulltext_comment_content'])) {
-			$columns[self::FULLTEXT_COMMENT_CONTENT] = new DevblocksSearchField(self::FULLTEXT_COMMENT_CONTENT, 'ftcc', 'content', $translate->_('comment.filters.content'), 'FT');
-		}
-		if(isset($tables['fulltext_message_content'])) {
-			$columns[self::FULLTEXT_MESSAGE_CONTENT] = new DevblocksSearchField(self::FULLTEXT_MESSAGE_CONTENT, 'ftmc', 'content', $translate->_('message.content'), 'FT');
-		}
-		if(isset($tables['fulltext_comment_content'])) {
-			$columns[self::FULLTEXT_NOTE_CONTENT] = new DevblocksSearchField(self::FULLTEXT_NOTE_CONTENT, 'ftnc', 'content', $translate->_('message.note.content'), 'FT');
-		}
+		
+		// Fulltext indexes
+		
+		$columns[self::FULLTEXT_COMMENT_CONTENT]->ft_schema = Search_CommentContent::ID;
+		$columns[self::FULLTEXT_MESSAGE_CONTENT]->ft_schema = Search_MessageContent::ID;
+		$columns[self::FULLTEXT_NOTE_CONTENT]->ft_schema = Search_CommentContent::ID;
 		
 		// Custom fields with fieldsets
 		
@@ -3216,6 +3288,9 @@ class Context_Ticket extends Extension_DevblocksContext implements IDevblocksCon
 			$ticket = DAO_Ticket::get($ticket);
 		} elseif($ticket instanceof Model_Ticket) {
 			// It's what we want
+		} elseif(is_array($ticket)) {
+			// [TODO] Cfields?
+			$ticket = Cerb_ORMHelper::recastArrayToModel($ticket, 'Model_Ticket');
 		} else {
 			$ticket = null;
 		}
@@ -3302,7 +3377,8 @@ class Context_Ticket extends Extension_DevblocksContext implements IDevblocksCon
 				$token_values['status'] = 'open';
 			}
 			
-			$token_values['custom'] = array();
+			// Custom fields
+			$token_values = $this->_importModelCustomFieldsAsValues($ticket, $token_values);
 			
 			// URL
 			$url_writer = DevblocksPlatform::getUrlService();

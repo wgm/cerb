@@ -195,7 +195,7 @@ class DAO_CustomFieldset extends Cerb_ORMHelper {
 	static private function _getObjectsFromResult($rs) {
 		$objects = array();
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$object = new Model_CustomFieldset();
 			$object->id = $row['id'];
 			$object->name = $row['name'];
@@ -205,9 +205,13 @@ class DAO_CustomFieldset extends Cerb_ORMHelper {
 			$objects[$object->id] = $object;
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return $objects;
+	}
+	
+	static function random() {
+		return self::_getRandom('custom_fieldset');
 	}
 	
 	static function delete($ids) {
@@ -403,13 +407,12 @@ class DAO_CustomFieldset extends Cerb_ORMHelper {
 			$rs = $db->SelectLimit($sql,$limit,$page*$limit) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs ADORecordSet */
 		} else {
 			$rs = $db->Execute($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs ADORecordSet */
-			$total = mysql_num_rows($rs);
+			$total = mysqli_num_rows($rs);
 		}
 		
 		$results = array();
-		$total = -1;
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$result = array();
 			foreach($row as $f => $v) {
 				$result[$f] = $v;
@@ -418,16 +421,20 @@ class DAO_CustomFieldset extends Cerb_ORMHelper {
 			$results[$object_id] = $result;
 		}
 
-		// [JAS]: Count all
+		$total = count($results);
+		
 		if($withCounts) {
-			$count_sql =
-				($has_multiple_values ? "SELECT COUNT(DISTINCT custom_fieldset.id) " : "SELECT COUNT(custom_fieldset.id) ").
-				$join_sql.
-				$where_sql;
-			$total = $db->GetOne($count_sql);
+			// We can skip counting if we have a less-than-full single page
+			if(!(0 == $page && $total < $limit)) {
+				$count_sql =
+					($has_multiple_values ? "SELECT COUNT(DISTINCT custom_fieldset.id) " : "SELECT COUNT(custom_fieldset.id) ").
+					$join_sql.
+					$where_sql;
+				$total = $db->GetOne($count_sql);
+			}
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return array($results,$total);
 	}
@@ -944,7 +951,7 @@ class View_CustomFieldset extends C4_AbstractView implements IAbstractView_Subto
 
 class Context_CustomFieldset extends Extension_DevblocksContext {
 	function getRandom() {
-		//return DAO_CustomFieldset::random();
+		return DAO_CustomFieldset::random();
 	}
 	
 	function getMeta($context_id) {
@@ -999,6 +1006,8 @@ class Context_CustomFieldset extends Extension_DevblocksContext {
 			$cfieldset = DAO_CustomFieldset::get($cfieldset);
 		} elseif($cfieldset instanceof Model_CustomFieldset) {
 			// It's what we want already.
+		} elseif(is_array($cfieldset)) {
+			$cfieldset = Cerb_ORMHelper::recastArrayToModel($cfieldset, 'Model_CustomFieldset');
 		} else {
 			$cfieldset = null;
 		}
@@ -1006,6 +1015,7 @@ class Context_CustomFieldset extends Extension_DevblocksContext {
 		// Token labels
 		$token_labels = array(
 			'_label' => $prefix,
+			'id' => $prefix.$translate->_('common.id'),
 			'context' => $prefix.$translate->_('common.context'),
 			'name' => $prefix.$translate->_('common.name'),
 			'owner__label' => $prefix.$translate->_('common.owner'),
@@ -1014,6 +1024,7 @@ class Context_CustomFieldset extends Extension_DevblocksContext {
 		// Token types
 		$token_types = array(
 			'_label' => 'context_url',
+			'id' => Model_CustomField::TYPE_NUMBER,
 			'content' => Model_CustomField::TYPE_MULTI_LINE,
 			'name' => Model_CustomField::TYPE_SINGLE_LINE,
 			'owner__label' => 'context_url',
@@ -1028,6 +1039,7 @@ class Context_CustomFieldset extends Extension_DevblocksContext {
 		if($cfieldset) {
 			$token_values['_loaded'] = true;
 			$token_values['_label'] = $cfieldset->name;
+			$token_values['id'] = $cfieldset->id;
 			$token_values['context'] = $cfieldset->context;
 			$token_values['name'] = $cfieldset->name;
 			

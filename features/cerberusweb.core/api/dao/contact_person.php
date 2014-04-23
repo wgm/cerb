@@ -38,7 +38,7 @@ class DAO_ContactPerson extends Cerb_ORMHelper {
 		return $id;
 	}
 	
-	static function update($ids, $fields) {
+	static function update($ids, $fields, $check_deltas=true) {
 		if(!is_array($ids))
 			$ids = array($ids);
 		
@@ -49,24 +49,23 @@ class DAO_ContactPerson extends Cerb_ORMHelper {
 			if(empty($batch_ids))
 				continue;
 			
-			// Get state before changes
-			$object_changes = parent::_getUpdateDeltas($batch_ids, $fields, get_class());
-
+			// Send events
+			if($check_deltas) {
+				CerberusContexts::checkpointChanges(CerberusContexts::CONTEXT_CONTACT_PERSON, $batch_ids);
+			}
+			
 			// Make changes
 			parent::_update($batch_ids, 'contact_person', $fields);
 			
 			// Send events
-			if(!empty($object_changes)) {
-				// Local events
-				//self::_processUpdateEvents($object_changes);
-				
+			if($check_deltas) {
 				// Trigger an event about the changes
 				$eventMgr = DevblocksPlatform::getEventService();
 				$eventMgr->trigger(
 					new Model_DevblocksEvent(
 						'dao.contact_person.update',
 						array(
-							'objects' => $object_changes,
+							'fields' => $fields,
 						)
 					)
 				);
@@ -128,7 +127,7 @@ class DAO_ContactPerson extends Cerb_ORMHelper {
 	static private function _getObjectsFromResult($rs) {
 		$objects = array();
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$object = new Model_ContactPerson();
 			$object->id = intval($row['id']);
 			$object->email_id = intval($row['email_id']);
@@ -139,7 +138,7 @@ class DAO_ContactPerson extends Cerb_ORMHelper {
 			$objects[$object->id] = $object;
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return $objects;
 	}
@@ -333,13 +332,12 @@ class DAO_ContactPerson extends Cerb_ORMHelper {
 			$rs = $db->SelectLimit($sql,$limit,$page*$limit) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs ADORecordSet */
 		} else {
 			$rs = $db->Execute($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs ADORecordSet */
-			$total = mysql_num_rows($rs);
+			$total = mysqli_num_rows($rs);
 		}
 		
 		$results = array();
-		$total = -1;
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$result = array();
 			foreach($row as $f => $v) {
 				$result[$f] = $v;
@@ -348,30 +346,27 @@ class DAO_ContactPerson extends Cerb_ORMHelper {
 			$results[$object_id] = $result;
 		}
 
-		// [JAS]: Count all
+		$total = count($results);
+		
 		if($withCounts) {
-			$count_sql =
-				($has_multiple_values ? "SELECT COUNT(DISTINCT contact_person.id) " : "SELECT COUNT(contact_person.id) ").
-				$join_sql.
-				$where_sql;
-			$total = $db->GetOne($count_sql);
+			// We can skip counting if we have a less-than-full single page
+			if(!(0 == $page && $total < $limit)) {
+				$count_sql =
+					($has_multiple_values ? "SELECT COUNT(DISTINCT contact_person.id) " : "SELECT COUNT(contact_person.id) ").
+					$join_sql.
+					$where_sql;
+				$total = $db->GetOne($count_sql);
+			}
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return array($results,$total);
 	}
 	
 	static function maint() {
 		$db = DevblocksPlatform::getDatabaseService();
-		
-		$sql = "UPDATE address ".
-			"LEFT JOIN contact_person ON (address.contact_person_id=contact_person.id) ".
-			"SET address.contact_person_id = 0 ".
-			"WHERE address.contact_person_id != 0 ".
-			"AND contact_person.id IS NULL"
-		;
-		$db->Execute($sql);
+		$db->Execute("UPDATE address SET contact_person_id = 0 WHERE contact_person_id != 0 AND contact_person_id NOT IN (SELECT id FROM contact_person)");
 
 		// Fire event
 		$eventMgr = DevblocksPlatform::getEventService();
@@ -965,6 +960,8 @@ class Context_ContactPerson extends Extension_DevblocksContext implements IDevbl
 			$person = DAO_ContactPerson::get($person);
 		} elseif($person instanceof Model_ContactPerson) {
 			// It's what we want already.
+		} elseif(is_array($person)) {
+			$person = Cerb_ORMHelper::recastArrayToModel($person, 'Model_ContactPerson');
 		} else {
 			$person = null;
 		}
@@ -1013,6 +1010,9 @@ class Context_ContactPerson extends Extension_DevblocksContext implements IDevbl
 				$token_values['created'] = $person->created;
 			if(!empty($person->last_login))
 				$token_values['last_login'] = $person->last_login;
+			
+			// Custom fields
+			$token_values = $this->_importModelCustomFieldsAsValues($person, $token_values);
 			
 			// URL
 			$url_writer = DevblocksPlatform::getUrlService();

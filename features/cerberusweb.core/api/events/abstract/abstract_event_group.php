@@ -20,12 +20,12 @@ abstract class AbstractEvent_Group extends Extension_DevblocksEvent {
 
 	/**
 	 *
-	 * @param integer $group_id
+	 * @param integer $context_id
 	 * @return Model_DevblocksEvent
 	 */
-	function generateSampleEventModel(Model_TriggerEvent $trigger, $group_id=null) {
+	function generateSampleEventModel(Model_TriggerEvent $trigger, $context_id=null) {
 		
-		if(empty($group_id)) {
+		if(empty($context_id)) {
 			// Pull the latest record
 			list($results) = DAO_Group::search(
 				array(),
@@ -42,29 +42,31 @@ abstract class AbstractEvent_Group extends Extension_DevblocksEvent {
 			
 			$result = array_shift($results);
 			
-			$group_id = $result[SearchFields_Group::ID];
+			$context_id = $result[SearchFields_Group::ID];
 		}
 		
 		return new Model_DevblocksEvent(
 			$this->_event_id,
 			array(
-				'group_id' => $group_id,
+				'context_id' => $context_id,
 			)
 		);
 	}
 	
-	function setEvent(Model_DevblocksEvent $event_model=null) {
+	function setEvent(Model_DevblocksEvent $event_model=null, Model_TriggerEvent $trigger=null) {
 		$labels = array();
 		$values = array();
 
+		// We can accept a model object or a context_id
+		@$model = $event_model->params['context_model'] ?: $event_model->params['context_id'];
+		
 		/**
 		 * Group
 		 */
 		
-		@$group_id = $event_model->params['group_id'];
 		$merge_labels = array();
 		$merge_values = array();
-		CerberusContexts::getContext(CerberusContexts::CONTEXT_GROUP, $group_id, $merge_labels, $merge_values, null, true);
+		CerberusContexts::getContext(CerberusContexts::CONTEXT_GROUP, $model, $merge_labels, $merge_values, null, true);
 
 			// Merge
 			CerberusContexts::merge(
@@ -86,7 +88,7 @@ abstract class AbstractEvent_Group extends Extension_DevblocksEvent {
 	
 	function renderSimulatorTarget($trigger, $event_model) {
 		$context = CerberusContexts::CONTEXT_GROUP;
-		$context_id = $event_model->params['group_id'];
+		$context_id = $event_model->params['context_id'];
 		DevblocksEventHelper::renderSimulatorTarget($context, $context_id, $trigger, $event_model);
 	}
 	
@@ -106,8 +108,8 @@ abstract class AbstractEvent_Group extends Extension_DevblocksEvent {
 		return $vals_to_ctx;
 	}
 	
-	function getConditionExtensions() {
-		$labels = $this->getLabels();
+	function getConditionExtensions(Model_TriggerEvent $trigger) {
+		$labels = $this->getLabels($trigger);
 		$types = $this->getTypes();
 		
 		$conditions = $this->_importLabelsTypesAsConditions($labels, $types);
@@ -141,7 +143,7 @@ abstract class AbstractEvent_Group extends Extension_DevblocksEvent {
 		return $pass;
 	}
 	
-	function getActionExtensions() {
+	function getActionExtensions(Model_TriggerEvent $trigger) {
 		$actions =
 			array(
 // 				'add_watchers' => array('label' =>'Add watchers'),
@@ -151,7 +153,7 @@ abstract class AbstractEvent_Group extends Extension_DevblocksEvent {
 				'create_ticket' => array('label' =>'Create a ticket'),
 				'send_email' => array('label' => 'Send email'),
 			)
-			+ DevblocksEventHelper::getActionCustomFieldsFromLabels($this->getLabels())
+			+ DevblocksEventHelper::getActionCustomFieldsFromLabels($this->getLabels($trigger))
 			;
 			
 		return $actions;

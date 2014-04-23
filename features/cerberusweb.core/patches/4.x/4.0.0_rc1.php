@@ -13,7 +13,7 @@ if(!isset($indexes['message_id'])) {
 if(!isset($tables['kb_category'])) {
 	$sql = sprintf("
 		CREATE TABLE IF NOT EXISTS kb_category (
-			id INT UNSIGNED NOT NULL AUTO_INCREMENT UNIQUE,
+			id INT UNSIGNED NOT NULL AUTO_INCREMENT,
 			parent_id INT UNSIGNED DEFAULT 0 NOT NULL,
 			name VARCHAR(64) DEFAULT '' NOT NULL,
 			PRIMARY KEY (id)
@@ -33,7 +33,7 @@ if(isset($columns['id'])
 	&& ('int(10) unsigned' != $columns['id']['type'] 
 	|| 'auto_increment' != $columns['id']['extra'])
 ) {
-	$db->Execute("ALTER TABLE kb_category MODIFY COLUMN id INT UNSIGNED NOT NULL AUTO_INCREMENT UNIQUE");
+	$db->Execute("ALTER TABLE kb_category MODIFY COLUMN id INT UNSIGNED NOT NULL AUTO_INCREMENT");
 }
 
 // `kb_article_to_category` =============================
@@ -108,7 +108,7 @@ if(isset($columns['code'])) {
 	
 	$num = 1;
 	
-    while($row = mysql_fetch_assoc($rs)) {
+    while($row = mysqli_fetch_assoc($rs)) {
     	$code = $row['code'];
 
     	if(empty($code))
@@ -125,7 +125,7 @@ if(isset($columns['code'])) {
     		$db->qstr($code)
     	));
     	
-    	while($row2 = mysql_fetch_assoc($rs2)) {
+    	while($row2 = mysqli_fetch_assoc($rs2)) {
     		$article_id = intval($row2['id']);
     		$db->Execute("REPLACE INTO kb_article_to_category (kb_article_id, kb_category_id, kb_top_category_id) ".
     			"VALUES (%d, %d, %d)",
@@ -135,10 +135,10 @@ if(isset($columns['code'])) {
     		);
     	}
     	
-    	mysql_free_result($rs2);
+    	mysqli_free_result($rs2);
     }
     
-    mysql_free_result($rs);
+    mysqli_free_result($rs);
     
     unset($num);
 	
@@ -182,7 +182,7 @@ if(!isset($indexes['message_id'])) {
 if(!isset($tables['note'])) {
 	$sql = sprintf("
 		CREATE TABLE IF NOT EXISTS note (
-			id INT UNSIGNED NOT NULL AUTO_INCREMENT UNIQUE,
+			id INT UNSIGNED NOT NULL AUTO_INCREMENT,
 			source_extension_id VARCHAR(128) DEFAULT '' NOT NULL,
 			source_id INT UNSIGNED DEFAULT 0 NOT NULL,
 			created INT UNSIGNED DEFAULT 0 NOT NULL,
@@ -200,7 +200,7 @@ if(isset($columns['id'])
 	&& ('int(10) unsigned' != $columns['id']['type'] 
 	|| 'auto_increment' != $columns['id']['extra'])
 ) {
-	$db->Execute("ALTER TABLE note MODIFY COLUMN id INT UNSIGNED NOT NULL AUTO_INCREMENT UNIQUE");
+	$db->Execute("ALTER TABLE note MODIFY COLUMN id INT UNSIGNED NOT NULL AUTO_INCREMENT");
 }
 
 if(!isset($indexes['source_extension_id'])) {
@@ -256,7 +256,7 @@ if(isset($columns['header']) && isset($columns['pattern'])) {
 	$sql = "SELECT id,header,pattern FROM team_routing_rule";
 	$rs = $db->Execute($sql);
 	
-	while($row = mysql_fetch_assoc($rs)) {
+	while($row = mysqli_fetch_assoc($rs)) {
 		@$id = intval($row['id']);
 		@$header = strtolower($row['header']);
 		@$pattern = $row['pattern'];
@@ -282,7 +282,7 @@ if(isset($columns['header']) && isset($columns['pattern'])) {
 		$db->Execute($sql);
 	}
 	
-	mysql_free_result($rs);
+	mysqli_free_result($rs);
 
 	// Drop columns
 	$db->Execute('ALTER TABLE team_routing_rule DROP COLUMN header');
@@ -333,7 +333,7 @@ if(isset($columns['worker_id'])) {
 	$sql = "SELECT w.id, a.id AS address_id FROM worker w INNER JOIN address a ON (w.email=a.email)";
 	$rs = $db->Execute($sql);
 	
-	while($row = mysql_fetch_assoc($rs)) {
+	while($row = mysqli_fetch_assoc($rs)) {
 		$worker_id = intval($row['id']);
 		$address_id = intval($row['address_id']);
 		
@@ -343,7 +343,7 @@ if(isset($columns['worker_id'])) {
 		));
 	}
 	
-	mysql_free_result($rs);
+	mysqli_free_result($rs);
 	
 	$db->Execute("ALTER TABLE ticket_comment DROP COLUMN worker_id");
 }
@@ -396,7 +396,7 @@ if(isset($columns['id'])
 	&& ('int(10) unsigned' != $columns['id']['type'] 
 	|| 'auto_increment' != $columns['id']['extra'])
 ) {
-	$db->Execute("ALTER TABLE custom_field MODIFY COLUMN id INT UNSIGNED NOT NULL AUTO_INCREMENT UNIQUE");
+	$db->Execute("ALTER TABLE custom_field MODIFY COLUMN id INT UNSIGNED NOT NULL AUTO_INCREMENT");
 }
 
 // `custom_field_value` ========================

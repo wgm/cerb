@@ -1,7 +1,4 @@
 <?php
-if(!defined('APP_DB_DRIVER'))
-	define('APP_DB_DRIVER','mysql');
-
 if(!defined('APP_DB_HOST'))
 	define('APP_DB_HOST','localhost');
 
@@ -28,9 +25,6 @@ if(!defined('DEVBLOCKS_LANGUAGE'))
 
 if(!defined('DEVBLOCKS_REWRITE'))
 	define('DEVBLOCKS_REWRITE',false);
-
-if(!defined('DEVBLOCKS_CACHE_PREFIX'))
-	define('DEVBLOCKS_CACHE_PREFIX','');
 
 if(!defined('APP_DEFAULT_CONTROLLER'))
 	define('APP_DEFAULT_CONTROLLER',''); // 404?

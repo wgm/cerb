@@ -72,7 +72,7 @@ class DAO_ContactOrg extends Cerb_ORMHelper {
 	 * @param array $fields
 	 * @return Model_ContactOrg
 	 */
-	static function update($ids, $fields) {
+	static function update($ids, $fields, $check_deltas=true) {
 		if(!is_array($ids))
 			$ids = array($ids);
 		
@@ -83,16 +83,16 @@ class DAO_ContactOrg extends Cerb_ORMHelper {
 			if(empty($batch_ids))
 				continue;
 			
-			// Get state before changes
-			$object_changes = parent::_getUpdateDeltas($batch_ids, $fields, get_class());
-
+			// Send events
+			if($check_deltas) {
+				CerberusContexts::checkpointChanges(CerberusContexts::CONTEXT_ORG, $batch_ids);
+			}
+			
 			// Make changes
 			parent::_update($batch_ids, 'contact_org', $fields);
 			
 			// Send events
-			if(!empty($object_changes)) {
-				// Local events
-				//self::_processUpdateEvents($object_changes);
+			if($check_deltas) {
 				
 				// Trigger an event about the changes
 				$eventMgr = DevblocksPlatform::getEventService();
@@ -100,7 +100,7 @@ class DAO_ContactOrg extends Cerb_ORMHelper {
 					new Model_DevblocksEvent(
 						'dao.contact_org.update',
 						array(
-							'objects' => $object_changes,
+							'fields' => $fields,
 						)
 					)
 				);
@@ -192,7 +192,7 @@ class DAO_ContactOrg extends Cerb_ORMHelper {
 		$id_list = implode(',', $ids);
 		
 		// Orgs
-		$sql = sprintf("DELETE QUICK FROM contact_org WHERE id IN (%s)",
+		$sql = sprintf("DELETE FROM contact_org WHERE id IN (%s)",
 			$id_list
 		);
 		$db->Execute($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
@@ -260,7 +260,7 @@ class DAO_ContactOrg extends Cerb_ORMHelper {
 	static private function _getObjectsFromResultSet($rs) {
 		$objects = array();
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$object = new Model_ContactOrg();
 			$object->id = intval($row['id']);
 			$object->name = $row['name'];
@@ -275,7 +275,7 @@ class DAO_ContactOrg extends Cerb_ORMHelper {
 			$objects[$object->id] = $object;
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return $objects;
 	}
@@ -367,9 +367,7 @@ class DAO_ContactOrg extends Cerb_ORMHelper {
 			"FROM contact_org c ".
 			
 			// [JAS]: Dynamic table joins
-			(isset($tables['context_link']) ? "INNER JOIN context_link ON (context_link.to_context = 'cerberusweb.contexts.org' AND context_link.to_context_id = c.id) " : " ").
-			(isset($tables['ftcc']) ? "INNER JOIN comment ON (comment.context = 'cerberusweb.contexts.org' AND comment.context_id = c.id) " : " ").
-			(isset($tables['ftcc']) ? "INNER JOIN fulltext_comment_content ftcc ON (ftcc.id=comment.id) " : " ")
+			(isset($tables['context_link']) ? "INNER JOIN context_link ON (context_link.to_context = 'cerberusweb.contexts.org' AND context_link.to_context_id = c.id) " : " ")
 			;
 		
 		// Custom field joins
@@ -424,6 +422,19 @@ class DAO_ContactOrg extends Cerb_ORMHelper {
 		settype($param_key, 'string');
 		
 		switch($param_key) {
+			case SearchFields_ContactOrg::FULLTEXT_COMMENT_CONTENT:
+				$search = Extension_DevblocksSearchSchema::get(Search_CommentContent::ID);
+				$query = $search->getQueryFromParam($param);
+				$ids = $search->query($query, array('context_crc32' => sprintf("%u", crc32($from_context))));
+				
+				$from_ids = DAO_Comment::getContextIdsByContextAndIds($from_context, $ids);
+				
+				$args['where_sql'] .= sprintf('AND %s IN (%s) ',
+					$from_index,
+					implode(', ', (!empty($from_ids) ? $from_ids : array(-1)))
+				);
+				break;
+			
 			case SearchFields_ContactOrg::VIRTUAL_CONTEXT_LINK:
 				$args['has_multiple_values'] = true;
 				self::_searchComponentsVirtualContextLinks($param, $from_context, $from_index, $args['join_sql'], $args['where_sql']);
@@ -474,13 +485,12 @@ class DAO_ContactOrg extends Cerb_ORMHelper {
 			$rs = $db->SelectLimit($sql,$limit,$page*$limit) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
 		} else {
 			$rs = $db->Execute($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
-			$total = mysql_num_rows($rs);
+			$total = mysqli_num_rows($rs);
 		}
 		
 		$results = array();
-		$total = -1;
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$result = array();
 			foreach($row as $f => $v) {
 				$result[$f] = $v;
@@ -489,16 +499,20 @@ class DAO_ContactOrg extends Cerb_ORMHelper {
 			$results[$ticket_id] = $result;
 		}
 
-		// [JAS]: Count all
+		$total = count($results);
+		
 		if($withCounts) {
-			$count_sql =
-				($has_multiple_values ? "SELECT COUNT(DISTINCT c.id) " : "SELECT COUNT(c.id) ").
-				$join_sql.
-				$where_sql;
-			$total = $db->GetOne($count_sql);
+			// We can skip counting if we have a less-than-full single page
+			if(!(0 == $page && $total < $limit)) {
+				$count_sql =
+					($has_multiple_values ? "SELECT COUNT(DISTINCT c.id) " : "SELECT COUNT(c.id) ").
+					$join_sql.
+					$where_sql;
+				$total = $db->GetOne($count_sql);
+			}
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return array($results,$total);
 	}
@@ -552,13 +566,13 @@ class SearchFields_ContactOrg {
 			
 			self::CONTEXT_LINK => new DevblocksSearchField(self::CONTEXT_LINK, 'context_link', 'from_context', null),
 			self::CONTEXT_LINK_ID => new DevblocksSearchField(self::CONTEXT_LINK_ID, 'context_link', 'from_context_id', null),
+				
+			self::FULLTEXT_COMMENT_CONTENT => new DevblocksSearchField(self::FULLTEXT_COMMENT_CONTENT, 'ftcc', 'content', $translate->_('comment.filters.content'), 'FT'),
 		);
 		
-		// Comments
-		$tables = DevblocksPlatform::getDatabaseTables();
-		if(isset($tables['fulltext_comment_content'])) {
-			$columns[self::FULLTEXT_COMMENT_CONTENT] = new DevblocksSearchField(self::FULLTEXT_COMMENT_CONTENT, 'ftcc', 'content', $translate->_('comment.filters.content'), 'FT');
-		}
+		// Fulltext indexes
+		
+		$columns[self::FULLTEXT_COMMENT_CONTENT]->ft_schema = Search_CommentContent::ID;
 		
 		// Custom fields with fieldsets
 		
@@ -1053,6 +1067,8 @@ class Context_Org extends Extension_DevblocksContext implements IDevblocksContex
 			$org = DAO_ContactOrg::get($org);
 		} elseif($org instanceof Model_ContactOrg) {
 			// It's what we want already.
+		} elseif(is_array($org)) {
+			$org = Cerb_ORMHelper::recastArrayToModel($org, 'Model_ContactOrg');
 		} else {
 			$org = null;
 		}
@@ -1060,6 +1076,7 @@ class Context_Org extends Extension_DevblocksContext implements IDevblocksContex
 		// Token labels
 		$token_labels = array(
 			'_label' => $prefix,
+			'id' => $prefix.$translate->_('common.id'),
 			'name' => $prefix.$translate->_('common.name'),
 			'city' => $prefix.$translate->_('contact_org.city'),
 			'country' => $prefix.$translate->_('contact_org.country'),
@@ -1075,6 +1092,7 @@ class Context_Org extends Extension_DevblocksContext implements IDevblocksContex
 		// Token types
 		$token_types = array(
 			'_label' => 'context_url',
+			'id' => Model_CustomField::TYPE_NUMBER,
 			'name' => Model_CustomField::TYPE_SINGLE_LINE,
 			'city' => Model_CustomField::TYPE_SINGLE_LINE,
 			'country' => Model_CustomField::TYPE_SINGLE_LINE,
@@ -1115,6 +1133,9 @@ class Context_Org extends Extension_DevblocksContext implements IDevblocksContex
 			$token_values['province'] = $org->province;
 			$token_values['street'] = $org->street;
 			$token_values['website'] = $org->website;
+			
+			// Custom fields
+			$token_values = $this->_importModelCustomFieldsAsValues($org, $token_values);
 			
 			// URL
 			$url_writer = DevblocksPlatform::getUrlService();

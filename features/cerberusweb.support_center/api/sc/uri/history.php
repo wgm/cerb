@@ -1,5 +1,7 @@
 <?php
 class UmScHistoryController extends Extension_UmScController {
+	const PARAM_WORKLIST_COLUMNS_JSON = 'history.worklist.columns';
+	
 	function isVisible() {
 		$umsession = ChPortalHelper::getSession();
 		$active_contact = $umsession->getProperty('sc_login', null);
@@ -38,6 +40,16 @@ class UmScHistoryController extends Extension_UmScController {
 					new DevblocksSearchCriteria(SearchFields_Ticket::VIRTUAL_STATUS,'in',array('open','waiting')),
 				), true);
 			}
+			
+			@$params_columns = DAO_CommunityToolProperty::get(ChPortalHelper::getCode(), self::PARAM_WORKLIST_COLUMNS_JSON, '[]', true);
+			
+			if(empty($params_columns))
+				$params_columns = array(
+					SearchFields_Ticket::TICKET_LAST_ACTION_CODE,
+					SearchFields_Ticket::TICKET_UPDATED_DATE,
+				);
+				
+			$history_view->view_columns = $params_columns;
 			
 			// Lock to current visitor
 			$history_view->addParamsRequired(array(
@@ -113,7 +125,40 @@ class UmScHistoryController extends Extension_UmScController {
 				$tpl->display("devblocks:cerberusweb.support_center:portal_".ChPortalHelper::getCode() . ":support_center/history/display.tpl");
 			}
 		}
-				
+	}
+	
+	function configure(Model_CommunityTool $instance) {
+		$tpl = DevblocksPlatform::getTemplateService();
+
+		$params = array(
+			'columns' => DAO_CommunityToolProperty::get($instance->code, self::PARAM_WORKLIST_COLUMNS_JSON, '[]', true),
+		);
+		$tpl->assign('history_params', $params);
+		
+		$view = new View_Ticket();
+		
+		$columns = array_filter(
+			$view->getColumnsAvailable(),
+			function($column) {
+				return !empty($column->db_label);
+			}
+		);
+		
+		DevblocksPlatform::sortObjects($columns, 'db_label');
+		
+		$tpl->assign('history_columns', $columns);
+		
+		$tpl->display("devblocks:cerberusweb.support_center::portal/sc/config/module/history.tpl");
+	}
+	
+	function saveConfiguration(Model_CommunityTool $instance) {
+		@$columns = DevblocksPlatform::importGPC($_POST['history_columns'],'array',array());
+
+		$columns = array_filter($columns, function($column) {
+			return !empty($column);
+		});
+		
+		DAO_CommunityToolProperty::set($instance->code, self::PARAM_WORKLIST_COLUMNS_JSON, $columns, true);
 	}
 	
 	function saveTicketPropertiesAction() {
@@ -127,28 +172,22 @@ class UmScHistoryController extends Extension_UmScController {
 		if(empty($shared_address_ids))
 			$shared_address_ids = array(-1);
 		
-		// Secure retrieval (address + mask)
-		list($tickets) = DAO_Ticket::search(
-			array(),
-			array(
-				new DevblocksSearchCriteria(SearchFields_Ticket::TICKET_MASK,'=',$mask),
-				new DevblocksSearchCriteria(SearchFields_Ticket::REQUESTER_ID,'in',$shared_address_ids),
-			),
-			1,
-			0,
-			null,
-			null,
-			false
-		);
-		$ticket = array_shift($tickets);
-		$ticket_id = $ticket[SearchFields_Ticket::TICKET_ID];
-
+		if(false == ($ticket = DAO_Ticket::getTicketByMask($mask)))
+			return;
+		
+		// Only allow access if mask has one of the valid requesters
+		$requesters = $ticket->getRequesters();
+		$allowed_requester_ids = array_intersect(array_keys($requesters), $shared_address_ids);
+		
+		if(empty($allowed_requester_ids))
+			return;
+		
 		$fields = array(
 			DAO_Ticket::IS_CLOSED => ($closed) ? 1 : 0
 		);
-		DAO_Ticket::update($ticket_id,$fields);
+		DAO_Ticket::update($ticket->id, $fields);
 		
-		DevblocksPlatform::setHttpResponse(new DevblocksHttpResponse(array('portal',ChPortalHelper::getCode(),'history',$ticket[SearchFields_Ticket::TICKET_MASK])));
+		DevblocksPlatform::setHttpResponse(new DevblocksHttpResponse(array('portal',ChPortalHelper::getCode(),'history', $ticket->mask)));
 	}
 	
 	function doReplyAction() {
@@ -168,37 +207,32 @@ class UmScHistoryController extends Extension_UmScController {
 		if(null == ($from_address = DAO_Address::lookupAddress($from, false))
 			|| $from_address->contact_person_id != $active_contact->id)
 			return FALSE;
-			
-		// Secure retrieval (address + mask)
-		list($tickets) = DAO_Ticket::search(
-			array(),
-			array(
-				new DevblocksSearchCriteria(SearchFields_Ticket::TICKET_MASK,'=',$mask),
-				new DevblocksSearchCriteria(SearchFields_Ticket::REQUESTER_ID,'in',$shared_address_ids),
-			),
-			1,
-			0,
-			null,
-			null,
-			false
-		);
-		$ticket = array_shift($tickets);
 		
-		$messages = DAO_Message::getMessagesByTicket($ticket[SearchFields_Ticket::TICKET_ID]);
+		if(false == ($ticket = DAO_Ticket::getTicketByMask($mask)))
+			return;
+		
+		// Only allow access if mask has one of the valid requesters
+		$requesters = $ticket->getRequesters();
+		$allowed_requester_ids = array_intersect(array_keys($requesters), $shared_address_ids);
+		
+		if(empty($allowed_requester_ids))
+			return;
+		
+		$messages = DAO_Message::getMessagesByTicket($ticket->id);
 		$last_message = array_pop($messages); /* @var $last_message Model_Message */
 		$last_message_headers = $last_message->getHeaders();
 		unset($messages);
 
 		// Ticket group settings
-		$group = DAO_Group::get($ticket[SearchFields_Ticket::TICKET_GROUP_ID]);
-		@$group_replyto = $group->getReplyTo($ticket[SearchFields_Ticket::TICKET_BUCKET_ID]);
+		$group = DAO_Group::get($ticket->group_id);
+		@$group_replyto = $group->getReplyTo($ticket->bucket_id);
 		
 		// Headers
 		$message = new CerberusParserMessage();
 		$message->headers['from'] = $from_address->email;
 		$message->headers['to'] = $group_replyto->email;
 		$message->headers['date'] = date('r');
-		$message->headers['subject'] = 'Re: ' . $ticket[SearchFields_Ticket::TICKET_SUBJECT];
+		$message->headers['subject'] = 'Re: ' . $ticket->subject;
 		$message->headers['message-id'] = CerberusApplication::generateMessageId();
 		$message->headers['in-reply-to'] = @$last_message_headers['message-id'];
 		
@@ -206,7 +240,7 @@ class UmScHistoryController extends Extension_UmScController {
 			"%s",
 			$content
 		);
-   
+
 		// Attachments
 		if(is_array($_FILES) && !empty($_FILES))
 		foreach($_FILES as $name => $files) {
@@ -233,9 +267,9 @@ class UmScHistoryController extends Extension_UmScController {
 			}
 		}
 		
-		CerberusParser::parseMessage($message,array('no_autoreply'=>true));
+		CerberusParser::parseMessage($message, array('no_autoreply'=>true));
 		
-		DevblocksPlatform::setHttpResponse(new DevblocksHttpResponse(array('portal',ChPortalHelper::getCode(),'history',$ticket[SearchFields_Ticket::TICKET_MASK])));
+		DevblocksPlatform::setHttpResponse(new DevblocksHttpResponse(array('portal', ChPortalHelper::getCode(), 'history', $ticket->mask)));
 	}
 };
 
@@ -249,9 +283,9 @@ class UmSc_TicketHistoryView extends C4_AbstractView {
 		$this->renderSortAsc = false;
 
 		$this->view_columns = array(
-			SearchFields_Ticket::TICKET_SUBJECT,
-			SearchFields_Ticket::TICKET_LAST_WROTE,
 			SearchFields_Ticket::TICKET_UPDATED_DATE,
+			SearchFields_Ticket::TICKET_SUBJECT,
+			SearchFields_Ticket::TICKET_LAST_ACTION_CODE,
 		);
 		
 		$this->addParamsHidden(array(
@@ -262,10 +296,10 @@ class UmSc_TicketHistoryView extends C4_AbstractView {
 	}
 
 	function getData() {
+		$columns = array_merge($this->view_columns, array($this->renderSortBy));
+		
 		$objects = DAO_Ticket::search(
-			array(
-				$this->renderSortBy
-			),
+			$columns,
 			$this->getParams(),
 			$this->renderLimit,
 			$this->renderPage,

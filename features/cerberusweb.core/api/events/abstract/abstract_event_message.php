@@ -20,12 +20,12 @@ abstract class AbstractEvent_Message extends Extension_DevblocksEvent {
 	
 	/**
 	 *
-	 * @param integer $message_id
+	 * @param integer $context_id
 	 * @param integer $group_id
 	 * @return Model_DevblocksEvent
 	 */
-	function generateSampleEventModel(Model_TriggerEvent $trigger, $message_id=null, $group_id=null) {
-		if(empty($message_id)) {
+	function generateSampleEventModel(Model_TriggerEvent $trigger, $context_id=null, $group_id=null) {
+		if(empty($context_id)) {
 			// Pull the latest ticket
 			list($results) = DAO_Ticket::search(
 				array(),
@@ -43,28 +43,31 @@ abstract class AbstractEvent_Message extends Extension_DevblocksEvent {
 			
 			$result = array_shift($results);
 			
-			$message_id = $result[SearchFields_Ticket::TICKET_LAST_MESSAGE_ID];
+			$context_id = $result[SearchFields_Ticket::TICKET_LAST_MESSAGE_ID];
 			$group_id = $result[SearchFields_Ticket::TICKET_GROUP_ID];
 		}
 		
 		return new Model_DevblocksEvent(
 			$this->_event_id,
 			array(
-				'message_id' => $message_id,
+				'context_id' => $context_id,
 				'group_id' => $group_id,
 			)
 		);
 	}
 	
-	function setEvent(Model_DevblocksEvent $event_model=null) {
+	function setEvent(Model_DevblocksEvent $event_model=null, Model_TriggerEvent $trigger=null) {
+		
+		// We can accept a model object or a context_id
+		@$model = $event_model->params['context_model'] ?: $event_model->params['context_id'];
+		
 		/**
 		 * Message
 		 */
 		
-		@$message_id = $event_model->params['message_id'];
 		$labels = array();
 		$values = array();
-		CerberusContexts::getContext(CerberusContexts::CONTEXT_MESSAGE, $message_id, $labels, $values, null, true);
+		CerberusContexts::getContext(CerberusContexts::CONTEXT_MESSAGE, $model, $labels, $values, null, true);
 
 		// Fill in some custom values
 		$values['sender_is_worker'] = (!empty($values['worker_id'])) ? 1 : 0;
@@ -93,8 +96,8 @@ abstract class AbstractEvent_Message extends Extension_DevblocksEvent {
 				$ticket_labels,
 				$ticket_values,
 				array(
-					"#^initial_message_#",
-					"#^latest_message_#",
+					//"#^initial_message_#",
+					//"#^latest_message_#",
 					"#^group_#",
 					"#^id$#",
 				)
@@ -172,7 +175,7 @@ abstract class AbstractEvent_Message extends Extension_DevblocksEvent {
 	
 	function renderSimulatorTarget($trigger, $event_model) {
 		$context = CerberusContexts::CONTEXT_MESSAGE;
-		$context_id = $event_model->params['message_id'];
+		$context_id = $event_model->params['context_id'];
 		DevblocksEventHelper::renderSimulatorTarget($context, $context_id, $trigger, $event_model);
 	}
 	
@@ -238,8 +241,8 @@ abstract class AbstractEvent_Message extends Extension_DevblocksEvent {
 		return $vals_to_ctx;
 	}
 	
-	function getConditionExtensions() {
-		$labels = $this->getLabels();
+	function getConditionExtensions(Model_TriggerEvent $trigger) {
+		$labels = $this->getLabels($trigger);
 		$types = $this->getTypes();
 		
 		$labels['is_first'] = 'Message is first in conversation';
@@ -579,7 +582,7 @@ abstract class AbstractEvent_Message extends Extension_DevblocksEvent {
 		return $pass;
 	}
 	
-	function getActionExtensions() {
+	function getActionExtensions(Model_TriggerEvent $trigger) {
 		$actions =
 			array(
 				'add_recipients' => array('label' =>'Add recipients'),
@@ -601,7 +604,7 @@ abstract class AbstractEvent_Message extends Extension_DevblocksEvent {
 				'set_subject' => array('label' => 'Set ticket subject'),
 				'set_links' => array('label' => 'Set links'),
 			)
-			+ DevblocksEventHelper::getActionCustomFieldsFromLabels($this->getLabels())
+			+ DevblocksEventHelper::getActionCustomFieldsFromLabels($this->getLabels($trigger))
 			;
 		
 		return $actions;
@@ -973,9 +976,10 @@ abstract class AbstractEvent_Message extends Extension_DevblocksEvent {
 			case 'set_reopen_date':
 				DevblocksEventHelper::runActionSetDate('ticket_reopen_date', $params, $dict);
 				
-				DAO_Ticket::update($ticket_id, array(
+				$fields = array(
 					DAO_Ticket::REOPEN_AT => intval($dict->ticket_reopen_date),
-				));
+				);
+				DAO_Ticket::update($ticket_id, $fields);
 				break;
 			
 			case 'set_spam_training':
@@ -1096,7 +1100,7 @@ abstract class AbstractEvent_Message extends Extension_DevblocksEvent {
 				if($to_group_id != $current_group_id) {
 					$merge_token_labels = array();
 					$merge_token_values = array();
-					$labels = $this->getLabels();
+					$labels = $this->getLabels($trigger);
 					CerberusContexts::getContext(CerberusContexts::CONTEXT_GROUP, $to_group_id, $merge_token_labels, $merge_token_values, '', true);
 			
 					CerberusContexts::merge(
@@ -1112,7 +1116,7 @@ abstract class AbstractEvent_Message extends Extension_DevblocksEvent {
 				if(!empty($to_bucket_id)) {
 					$merge_token_labels = array();
 					$merge_token_values = array();
-					$labels = $this->getLabels();
+					$labels = $this->getLabels($trigger);
 					CerberusContexts::getContext(CerberusContexts::CONTEXT_BUCKET, $to_bucket_id, $merge_token_labels, $merge_token_values, '', true);
 			
 					CerberusContexts::merge(

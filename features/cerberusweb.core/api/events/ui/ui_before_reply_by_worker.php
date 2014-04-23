@@ -23,14 +23,14 @@ class Event_MailBeforeUiReplyByWorker extends AbstractEvent_Message {
 		$this->_event_id = self::ID;
 	}
 	
-	static function trigger($trigger_id, $message_id, &$actions) {
+	static function trigger($trigger_id, $context_id, &$actions) {
 		$events = DevblocksPlatform::getEventService();
 		return $events->trigger(
 			new Model_DevblocksEvent(
 				self::ID,
 				array(
 					'_caller_actions' => &$actions,
-					'message_id' => $message_id,
+					'context_id' => $context_id,
 					'_whisper' => array(
 						'_trigger_id' => array($trigger_id),
 					),
@@ -39,7 +39,7 @@ class Event_MailBeforeUiReplyByWorker extends AbstractEvent_Message {
 		);
 	}
 	
-	function getActionExtensions() {
+	function getActionExtensions(Model_TriggerEvent $trigger) {
 		$actions =
 			array(
 				'exec_jquery' => array('label' =>'Execute jQuery script'),

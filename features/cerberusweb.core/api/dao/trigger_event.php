@@ -25,6 +25,7 @@ class DAO_TriggerEvent extends Cerb_ORMHelper {
 	const EVENT_POINT = 'event_point';
 	const VIRTUAL_ATTENDANT_ID = 'virtual_attendant_id';
 	const POS = 'pos';
+	const EVENT_PARAMS_JSON = 'event_params_json';
 	const VARIABLES_JSON = 'variables_json';
 
 	static function create($fields) {
@@ -205,7 +206,7 @@ class DAO_TriggerEvent extends Cerb_ORMHelper {
 		list($where_sql, $sort_sql, $limit_sql) = self::_getWhereSQL($where, $sortBy, $sortAsc, $limit);
 		
 		// SQL
-		$sql = "SELECT id, title, is_disabled, is_private, event_point, virtual_attendant_id, pos, variables_json ".
+		$sql = "SELECT id, title, is_disabled, is_private, event_point, virtual_attendant_id, pos, event_params_json, variables_json ".
 			"FROM trigger_event ".
 			$where_sql.
 			$sort_sql.
@@ -223,10 +224,10 @@ class DAO_TriggerEvent extends Cerb_ORMHelper {
 	static private function _getObjectsFromResult($rs) {
 		$objects = array();
 		
-		if(!is_resource($rs))
+		if(!($rs instanceof mysqli_result))
 			return $objects;
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$object = new Model_TriggerEvent();
 			$object->id = intval($row['id']);
 			$object->title = $row['title'];
@@ -235,11 +236,12 @@ class DAO_TriggerEvent extends Cerb_ORMHelper {
 			$object->event_point = $row['event_point'];
 			$object->virtual_attendant_id = $row['virtual_attendant_id'];
 			$object->pos = intval($row['pos']);
+			$object->event_params = @json_decode($row['event_params_json'], true);
 			$object->variables = @json_decode($row['variables_json'], true);
 			$objects[$object->id] = $object;
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return $objects;
 	}
@@ -384,13 +386,12 @@ class DAO_TriggerEvent extends Cerb_ORMHelper {
 			$rs = $db->SelectLimit($sql,$limit,$page*$limit) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs ADORecordSet */
 		} else {
 			$rs = $db->Execute($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs ADORecordSet */
-			$total = mysql_num_rows($rs);
+			$total = mysqli_num_rows($rs);
 		}
 		
 		$results = array();
-		$total = -1;
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$result = array();
 			foreach($row as $f => $v) {
 				$result[$f] = $v;
@@ -399,16 +400,20 @@ class DAO_TriggerEvent extends Cerb_ORMHelper {
 			$results[$object_id] = $result;
 		}
 
-		// [JAS]: Count all
+		$total = count($results);
+		
 		if($withCounts) {
-			$count_sql =
-				($has_multiple_values ? "SELECT COUNT(DISTINCT trigger_event.id) " : "SELECT COUNT(trigger_event.id) ").
-				$join_sql.
-				$where_sql;
-			$total = $db->GetOne($count_sql);
+			// We can skip counting if we have a less-than-full single page
+			if(!(0 == $page && $total < $limit)) {
+				$count_sql =
+					($has_multiple_values ? "SELECT COUNT(DISTINCT trigger_event.id) " : "SELECT COUNT(trigger_event.id) ").
+					$join_sql.
+					$where_sql;
+				$total = $db->GetOne($count_sql);
+			}
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return array($results,$total);
 	}
@@ -492,6 +497,7 @@ class Model_TriggerEvent {
 	public $event_point;
 	public $virtual_attendant_id;
 	public $pos;
+	public $event_params = array();
 	public $variables = array();
 	
 	private $_nodes = array();
@@ -658,13 +664,14 @@ class Model_TriggerEvent {
 		}
 	}
 	
-	public function runDecisionTree(DevblocksDictionaryDelegate $dict, $dry_run=false) {
+	public function runDecisionTree(DevblocksDictionaryDelegate $dict, $dry_run=false, Extension_DevblocksEvent $event=null) {
 		$nodes = $this->_getNodes();
 		$tree = $this->_getTree();
 		$path = array();
-		
-		// [TODO] This could be more efficient
-		$event = DevblocksPlatform::getExtension($this->event_point, true); /* @var $event Extension_DevblocksEvent */
+
+		// Lazy load the event if necessary (otherwise reuse a passed scope)
+		if(is_null($event))
+			$event = $this->getEvent();
 		
 		// Add a convenience pointer
 		$dict->_trigger = $this;
@@ -843,6 +850,9 @@ class Model_TriggerEvent {
 				),
 			),
 		);
+		
+		if(isset($this->event_params) && !empty($this->event_params))
+			$array['behavior']['event']['params'] = $this->event_params;
 		
 		if(!empty($this->variables))
 			$array['behavior']['variables'] = $this->variables;

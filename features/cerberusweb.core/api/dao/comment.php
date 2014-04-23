@@ -134,6 +134,31 @@ class DAO_Comment extends Cerb_ORMHelper {
 		return self::_getObjectsFromResult($rs);
 	}
 	
+	// [TODO] Cache
+	static function getContextIdsByContextAndIds($context, $ids) {
+		$db = DevblocksPlatform::getDatabaseService();
+		
+		if(!is_array($ids))
+			$ids = array($ids);
+		
+		if(empty($ids))
+			return array();
+		
+		$sql = sprintf("SELECT DISTINCT context_id FROM comment WHERE context = %s AND id IN (%s)",
+			$db->qstr($context),
+			implode(',', $ids)
+		);
+		$rows = $db->GetArray($sql);
+		
+		$ids = array();
+		
+		foreach($rows as $row) {
+			$ids[] = intval($row['context_id']);
+		}
+		
+		return $ids;
+	}
+	
 	static function getByContext($context, $context_ids) {
 		if(!is_array($context_ids))
 			$context_ids = array($context_ids);
@@ -171,7 +196,7 @@ class DAO_Comment extends Cerb_ORMHelper {
 	static private function _getObjectsFromResult($rs) {
 		$objects = array();
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$object = new Model_Comment();
 			$object->id = $row['id'];
 			$object->context = $row['context'];
@@ -183,7 +208,7 @@ class DAO_Comment extends Cerb_ORMHelper {
 			$objects[$object->id] = $object;
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return $objects;
 	}
@@ -227,7 +252,8 @@ class DAO_Comment extends Cerb_ORMHelper {
 		$db->Execute(sprintf("DELETE FROM comment WHERE id IN (%s)", $ids_list));
 		
 		// Search index
-		Search_CommentContent::delete($ids);
+		$search = Extension_DevblocksSearchSchema::get(Search_CommentContent::ID, true);
+		$search->delete($ids);
 		
 		// Fire event
 		$eventMgr = DevblocksPlatform::getEventService();
@@ -427,13 +453,12 @@ class DAO_Comment extends Cerb_ORMHelper {
 			$rs = $db->SelectLimit($sql,$limit,$page*$limit) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs ADORecordSet */
 		} else {
 			$rs = $db->Execute($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs ADORecordSet */
-			$total = mysql_num_rows($rs);
+			$total = mysqli_num_rows($rs);
 		}
 		
 		$results = array();
-		$total = -1;
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$result = array();
 			foreach($row as $f => $v) {
 				$result[$f] = $v;
@@ -442,16 +467,20 @@ class DAO_Comment extends Cerb_ORMHelper {
 			$results[$object_id] = $result;
 		}
 
-		// [JAS]: Count all
+		$total = count($results);
+		
 		if($withCounts) {
-			$count_sql =
-				($has_multiple_values ? "SELECT COUNT(DISTINCT comment.id) " : "SELECT COUNT(comment.id) ").
-				$join_sql.
-				$where_sql;
-			$total = $db->GetOne($count_sql);
+			// We can skip counting if we have a less-than-full single page
+			if(!(0 == $page && $total < $limit)) {
+				$count_sql =
+					($has_multiple_values ? "SELECT COUNT(DISTINCT comment.id) " : "SELECT COUNT(comment.id) ").
+					$join_sql.
+					$where_sql;
+				$total = $db->GetOne($count_sql);
+			}
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return array($results,$total);
 	}
@@ -461,15 +490,9 @@ class DAO_Comment extends Cerb_ORMHelper {
 		$logger = DevblocksPlatform::getConsoleLog();
 		$tables = $db->metaTables();
 
-		// Attachments
-		$sql = "DELETE QUICK attachment_link FROM attachment_link LEFT JOIN comment ON (attachment_link.context_id=comment.id) WHERE attachment_link.context = 'cerberusweb.contexts.comment' AND comment.id IS NULL";
-		$db->Execute($sql);
-		$logger->info('[Maint] Purged ' . $db->Affected_Rows() . ' comment attachment_links.');
-		
 		// Search indexes
 		if(isset($tables['fulltext_comment_content'])) {
-			$sql = "DELETE QUICK fulltext_comment_content FROM fulltext_comment_content LEFT JOIN comment ON fulltext_comment_content.id = comment.id WHERE comment.id IS NULL";
-			$db->Execute($sql);
+			$db->Execute("DELETE FROM fulltext_comment_content WHERE id NOT IN (SELECT id FROM comment)");
 			$logger->info('[Maint] Purged ' . $db->Affected_Rows() . ' fulltext_comment_content records.');
 		}
 		
@@ -528,19 +551,74 @@ class SearchFields_Comment implements IDevblocksSearchFields {
 	}
 };
 
-class Search_CommentContent {
+class Search_CommentContent extends Extension_DevblocksSearchSchema {
 	const ID = 'cerberusweb.search.schema.comment_content';
 	
-	public static function index($stop_time=null) {
+	public function getNamespace() {
+		return 'comment_content';
+	}
+	
+	public function getAttributes() {
+		return array(
+			'context_crc32' => 'uint4',
+		);
+	}
+	
+	public function reindex() {
+		$engine = $this->getEngine();
+		$meta = $engine->getIndexMeta($this);
+		
+		// If the engine can tell us where the index left off
+		if(isset($meta['max_id']) && $meta['max_id']) {
+			$this->setParam('last_indexed_id', $meta['max_id']);
+		
+		// If the index has a delta, start from the current record
+		} elseif($meta['is_indexed_externally']) {
+			// Do nothing (let the remote tool update the DB)
+			
+		// Otherwise, start over
+		} else {
+			$this->setIndexPointer(self::INDEX_POINTER_RESET);
+		}
+	}
+	
+	public function setIndexPointer($pointer) {
+		switch($pointer) {
+			case self::INDEX_POINTER_RESET:
+				$this->setParam('last_indexed_id', 0);
+				$this->setParam('last_indexed_time', 0);
+				break;
+				
+			case self::INDEX_POINTER_CURRENT:
+				if(null != ($last_comments = DAO_Comment::getWhere('id is not null', 'id', false, 1))
+					&& is_array($last_comments)
+					&& null != ($last_comment = array_shift($last_comments))) {
+						$this->setParam('last_indexed_id', $last_comment->id);
+						$this->setParam('last_indexed_time', $last_comment->created);
+				} else {
+					$this->setParam('last_indexed_id', 0);
+					$this->setParam('last_indexed_time', 0);
+				}
+				break;
+		}
+	}
+	
+	public function query($query, $attributes=array(), $limit=500) {
+		if(false == ($engine = $this->getEngine()))
+			return false;
+		
+		$ids = $engine->query($this, $query, $attributes, $limit);
+		return $ids;
+	}
+	
+	public function index($stop_time=null) {
 		$logger = DevblocksPlatform::getConsoleLog();
 		
-		if(false == ($search = DevblocksPlatform::getSearchService())) {
-			$logger->error("[Search] The search engine is misconfigured.");
-			return;
-		}
+		if(false == ($engine = $this->getEngine()))
+			return false;
 		
-		$ns = 'comment_content';
-		$id = DAO_DevblocksExtensionPropertyStore::get(self::ID, 'last_indexed_id', 0);
+		$ns = self::getNamespace();
+		$id = $this->getParam('last_indexed_id', 0);
 		$done = false;
 		
 		while(!$done && time() < $stop_time) {
@@ -566,14 +644,14 @@ class Search_CommentContent {
 				$content = $comment->comment;
 				
 				if(!empty($content)) {
-					$content = $search->truncateOnWhitespace($content, 10000);
-					$search->index($ns, $id, $content, true);
+					$content = $engine->truncateOnWhitespace($content, 10000);
+					$engine->index($this, $id, $content, array('context_crc32' => sprintf("%u", crc32($comment->context))));
 				}
 
-				// Record our progress every 10th index
-				if(++$count % 10 == 0) {
+				// Record our progress every 25th index
+				if(++$count % 25 == 0) {
 					if(!empty($id))
-						DAO_DevblocksExtensionPropertyStore::put(self::ID, 'last_indexed_id', $id);
+						$this->setParam('last_indexed_id', $id);
 				}
 			}
 			
@@ -581,18 +659,15 @@ class Search_CommentContent {
 			
 			// Record our index every batch
 			if(!empty($id))
-				DAO_DevblocksExtensionPropertyStore::put(self::ID, 'last_indexed_id', $id);
+				$this->setParam('last_indexed_id', $id);
 		}
 	}
 	
-	public static function delete($ids) {
-		if(false == ($search = DevblocksPlatform::getSearchService())) {
-			$logger->error("[Search] The search engine is misconfigured.");
-			return;
-		}
+	public function delete($ids) {
+		if(false == ($engine = $this->getEngine()))
+			return false;
 		
-		$ns = 'comment_content';
-		return $search->delete($ns, $ids);
+		return $engine->delete($this, $ids);
 	}
 };
 
@@ -1016,6 +1091,8 @@ class Context_Comment extends Extension_DevblocksContext {
 			$comment = DAO_Comment::get($comment);
 		} elseif($comment instanceof Model_Comment) {
 			// It's what we want already.
+		} elseif(is_array($comment)) {
+			$comment = Cerb_ORMHelper::recastArrayToModel($comment, 'Model_Comment');
 		} else {
 			$comment = null;
 		}
@@ -1023,6 +1100,7 @@ class Context_Comment extends Extension_DevblocksContext {
 		// Token labels
 		$token_labels = array(
 			'_label' => $prefix,
+			'id' => $prefix.$translate->_('common.id'),
 			'comment' => $prefix.$translate->_('common.content'),
 			'created' => $prefix.$translate->_('common.created'),
 			'owner_context' => $prefix.'Author Context',
@@ -1040,6 +1118,7 @@ class Context_Comment extends Extension_DevblocksContext {
 		// Token types
 		$token_types = array(
 			'_label' => 'context_url',
+			'id' => Model_CustomField::TYPE_NUMBER,
 			'comment' => Model_CustomField::TYPE_MULTI_LINE,
 			'created' => Model_CustomField::TYPE_DATE,
 			'owner_context' => Model_CustomField::TYPE_SINGLE_LINE,
@@ -1074,6 +1153,9 @@ class Context_Comment extends Extension_DevblocksContext {
 			$token_values['record__context'] = $comment->context;
 			$token_values['record_id'] = $comment->context_id;
 			$token_values['comment'] = $comment->comment;
+			
+			// Custom fields
+			$token_values = $this->_importModelCustomFieldsAsValues($comment, $token_values);
 		}
 		
 		return true;

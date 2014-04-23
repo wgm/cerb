@@ -38,7 +38,7 @@ class DAO_WorkerRole extends DevblocksORMHelper {
 		return $id;
 	}
 	
-	static function update($ids, $fields) {
+	static function update($ids, $fields, $check_deltas=true) {
 		if(!is_array($ids))
 			$ids = array($ids);
 		
@@ -49,16 +49,16 @@ class DAO_WorkerRole extends DevblocksORMHelper {
 			if(empty($batch_ids))
 				continue;
 			
-			// Get state before changes
-			$object_changes = parent::_getUpdateDeltas($batch_ids, $fields, get_class());
-
+			// Send events
+			if($check_deltas) {
+				CerberusContexts::checkpointChanges(CerberusContexts::CONTEXT_ROLE, $batch_ids);
+			}
+			
 			// Make changes
 			parent::_update($batch_ids, 'worker_role', $fields);
 			
 			// Send events
-			if(!empty($object_changes)) {
-				// Local events
-				//self::_processUpdateEvents($object_changes);
+			if($check_deltas) {
 				
 				// Trigger an event about the changes
 				$eventMgr = DevblocksPlatform::getEventService();
@@ -66,7 +66,7 @@ class DAO_WorkerRole extends DevblocksORMHelper {
 					new Model_DevblocksEvent(
 						'dao.role.update',
 						array(
-							'objects' => $object_changes,
+							'fields' => $fields,
 						)
 					)
 				);
@@ -189,7 +189,7 @@ class DAO_WorkerRole extends DevblocksORMHelper {
 	static private function _getObjectsFromResult($rs) {
 		$objects = array();
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$object = new Model_WorkerRole();
 			$object->id = $row['id'];
 			$object->name = $row['name'];
@@ -199,9 +199,13 @@ class DAO_WorkerRole extends DevblocksORMHelper {
 			
 			$objects[$object->id] = $object;
 		}
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return $objects;
+	}
+	
+	static function random() {
+		return self::_getRandom('worker_role');
 	}
 	
 	static function delete($ids) {
@@ -326,7 +330,7 @@ class Context_WorkerRole extends Extension_DevblocksContext {
 	}
 	
 	function getRandom() {
-		//return DAO_WorkerRole::random();
+		return DAO_WorkerRole::random();
 	}
 	
 	function getMeta($context_id) {
@@ -365,6 +369,8 @@ class Context_WorkerRole extends Extension_DevblocksContext {
 			$role = DAO_WorkerRole::get($role);
 		} elseif($role instanceof Model_WorkerRole) {
 			// It's what we want already.
+		} elseif(is_array($role)) {
+			$role = Cerb_ORMHelper::recastArrayToModel($role, 'Model_WorkerRole');
 		} else {
 			$role = null;
 		}
@@ -372,13 +378,14 @@ class Context_WorkerRole extends Extension_DevblocksContext {
 		// Token labels
 		$token_labels = array(
 			'_label' => $prefix,
+			'id' => $prefix.$translate->_('common.id'),
 			'name' => $prefix.$translate->_('common.name'),
-			//'record_url' => $prefix.$translate->_('common.url.record'),
 		);
 		
 		// Token types
 		$token_types = array(
 			'_label' => 'context_url',
+			'id' => Model_CustomField::TYPE_NUMBER,
 			'name' => Model_CustomField::TYPE_SINGLE_LINE,
 		);
 		
@@ -402,6 +409,9 @@ class Context_WorkerRole extends Extension_DevblocksContext {
 			$token_values['_label'] = $role->name;
 			$token_values['id'] = $role->id;
 			$token_values['name'] = $role->name;
+			
+			// Custom fields
+			$token_values = $this->_importModelCustomFieldsAsValues($role, $token_values);
 			
 			// URL
 // 			$url_writer = DevblocksPlatform::getUrlService();

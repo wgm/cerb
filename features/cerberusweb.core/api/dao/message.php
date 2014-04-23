@@ -96,7 +96,7 @@ class DAO_Message extends Cerb_ORMHelper {
 		if(empty($rs))
 			return $objects;
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$object = new Model_Message();
 			$object->id = $row['id'];
 			$object->ticket_id = $row['ticket_id'];
@@ -113,7 +113,7 @@ class DAO_Message extends Cerb_ORMHelper {
 			$objects[$object->id] = $object;
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return $objects;
 	}
@@ -155,11 +155,12 @@ class DAO_Message extends Cerb_ORMHelper {
 		Storage_MessageContent::delete($ids);
 		
 		// Search indexes
-		Search_MessageContent::delete($ids);
+		$search = Extension_DevblocksSearchSchema::get(Search_MessageContent::ID, true);
+		$search->delete($ids);
 		
 		// Messages
 		$sql = sprintf("DELETE FROM message WHERE id IN (%s)",
-				$ids_list
+			$ids_list
 		);
 		$db->Execute($sql);
 		
@@ -187,13 +188,15 @@ class DAO_Message extends Cerb_ORMHelper {
 		$tables = $db->metaTables();
 		
 		// Purge message content (storage)
-		$sql = "SELECT message.id FROM message LEFT JOIN ticket ON message.ticket_id = ticket.id WHERE ticket.id IS NULL";
+		$db->Execute("CREATE TEMPORARY TABLE _tmp_maint_message SELECT id FROM message WHERE ticket_id NOT IN (SELECT id FROM ticket)");
+		
+		$sql = "SELECT id FROM _tmp_maint_message";
 		$rs = $db->Execute($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
 
 		$ids_buffer = array();
 		$count = 0;
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$ids_buffer[$count++] = $row['id'];
 			
 			// Flush buffer every 50
@@ -203,7 +206,7 @@ class DAO_Message extends Cerb_ORMHelper {
 				$count = 0;
 			}
 		}
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 
 		// Any remainder
 		if(!empty($ids_buffer)) {
@@ -213,26 +216,24 @@ class DAO_Message extends Cerb_ORMHelper {
 		}
 
 		// Purge messages without linked tickets
-		$sql = "DELETE QUICK message FROM message LEFT JOIN ticket ON message.ticket_id = ticket.id WHERE ticket.id IS NULL";
-		$db->Execute($sql);
+		$db->Execute("DELETE message FROM message INNER JOIN _tmp_maint_message ON (_tmp_maint_message.id=message.id)");
 		$logger->info('[Maint] Purged ' . $db->Affected_Rows() . ' message records.');
 		
 		// Headers
-		$sql = "DELETE QUICK message_header FROM message_header LEFT JOIN message ON message_header.message_id = message.id WHERE message.id IS NULL";
-		$db->Execute($sql);
+		$db->Execute("DELETE message_header FROM message_header INNER JOIN _tmp_maint_message ON (_tmp_maint_message.id=message_header.message_id)");
 		$logger->info('[Maint] Purged ' . $db->Affected_Rows() . ' message_header records.');
 
 		// Attachments
-		$sql = "DELETE QUICK attachment_link FROM attachment_link LEFT JOIN message ON (attachment_link.context_id=message.id) WHERE attachment_link.context = 'cerberusweb.contexts.message' AND message.id IS NULL";
-		$db->Execute($sql);
+		$db->Execute("DELETE attachment_link FROM attachment_link INNER JOIN _tmp_maint_message ON (_tmp_maint_message.id=attachment_link.context_id AND attachment_link.context = 'cerberusweb.contexts.message')");
 		$logger->info('[Maint] Purged ' . $db->Affected_Rows() . ' message attachment_links.');
 		
 		// Search indexes
 		if(isset($tables['fulltext_message_content'])) {
-			$sql = "DELETE QUICK fulltext_message_content FROM fulltext_message_content LEFT JOIN message ON fulltext_message_content.id = message.id WHERE message.id IS NULL";
-			$db->Execute($sql);
+			$db->Execute("DELETE fulltext_message_content FROM fulltext_message_content INNER JOIN _tmp_maint_message ON (_tmp_maint_message.id=fulltext_message_content.id)");
 			$logger->info('[Maint] Purged ' . $db->Affected_Rows() . ' fulltext_message_content records.');
 		}
+		
+		$db->Execute("DROP TABLE _tmp_maint_message");
 		
 		// Fire event
 		$eventMgr = DevblocksPlatform::getEventService();
@@ -299,9 +300,9 @@ class DAO_Message extends Cerb_ORMHelper {
 		$join_sql = "FROM message m ".
 			"INNER JOIN ticket t ON (m.ticket_id = t.id) ".
 			"INNER JOIN address a ON (m.address_id = a.id) ".
-			(isset($tables['mh']) ? "INNER JOIN message_header mh ON (mh.message_id=m.id)" : " ").
-			(isset($tables['ftmc']) ? "INNER JOIN fulltext_message_content ftmc ON (ftmc.id=m.id)" : " ");
-			
+			(isset($tables['mh']) ? "INNER JOIN message_header mh ON (mh.message_id=m.id)" : " ")
+			;
+		
 		$where_sql = "".
 			(!empty($wheres) ? sprintf("WHERE %s ",implode(' AND ',$wheres)) : "WHERE 1 ");
 			
@@ -347,6 +348,20 @@ class DAO_Message extends Cerb_ORMHelper {
 		settype($param_key, 'string');
 
 		switch($param_key) {
+			case SearchFields_Message::MESSAGE_CONTENT:
+				$search = Extension_DevblocksSearchSchema::get(Search_MessageContent::ID);
+				$query = $search->getQueryFromParam($param);
+				$ids = $search->query($query, array());
+				
+				if(empty($ids))
+					$ids = array(-1);
+				
+				$args['where_sql'] .= sprintf('AND %s IN (%s) ',
+					$from_index,
+					implode(', ', $ids)
+				);
+				break;
+			
 			case SearchFields_Message::VIRTUAL_TICKET_STATUS:
 				$values = $param->value;
 				if(!is_array($values))
@@ -426,7 +441,7 @@ class DAO_Message extends Cerb_ORMHelper {
 		
 		$results = array();
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$result = array();
 			foreach($row as $f => $v) {
 				$result[$f] = $v;
@@ -434,18 +449,21 @@ class DAO_Message extends Cerb_ORMHelper {
 			$ticket_id = intval($row[SearchFields_Message::ID]);
 			$results[$ticket_id] = $result;
 		}
+
+		$total = count($results);
 		
-		// [JAS]: Count all
-		$total = -1;
 		if($withCounts) {
-			$count_sql =
-				($has_multiple_values ? "SELECT COUNT(DISTINCT m.id) " : "SELECT COUNT(m.id) ").
-				$join_sql.
-				$where_sql;
-			$total = $db->GetOne($count_sql);
+			// We can skip counting if we have a less-than-full single page
+			if(!(0 == $page && $total < $limit)) {
+				$count_sql =
+					($has_multiple_values ? "SELECT COUNT(DISTINCT m.id) " : "SELECT COUNT(m.id) ").
+					$join_sql.
+					$where_sql;
+				$total = $db->GetOne($count_sql);
+			}
 		}
 
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return array($results,$total);
 	}
@@ -519,12 +537,13 @@ class SearchFields_Message implements IDevblocksSearchFields {
 			SearchFields_Message::TICKET_SUBJECT => new DevblocksSearchField(SearchFields_Message::TICKET_SUBJECT, 't', 'subject', $translate->_('ticket.subject'), Model_CustomField::TYPE_SINGLE_LINE),
 			
 			SearchFields_Message::VIRTUAL_TICKET_STATUS => new DevblocksSearchField(SearchFields_Message::VIRTUAL_TICKET_STATUS, '*', 'ticket_status', $translate->_('ticket.status')),
+				
+			SearchFields_Message::MESSAGE_CONTENT => new DevblocksSearchField(SearchFields_Message::MESSAGE_CONTENT, 'ftmc', 'content', $translate->_('common.content'), 'FT'),
 		);
-	
-		$tables = DevblocksPlatform::getDatabaseTables();
-		if(isset($tables['fulltext_message_content'])) {
-			$columns[SearchFields_Message::MESSAGE_CONTENT] = new DevblocksSearchField(SearchFields_Message::MESSAGE_CONTENT, 'ftmc', 'content', $translate->_('common.content'), 'FT');
-		}
+
+		// Fulltext indexes
+		
+		$columns[self::MESSAGE_CONTENT]->ft_schema = Search_MessageContent::ID;
 		
 		// Sort by label (translation-conscious)
 		DevblocksPlatform::sortObjects($columns, 'db_label');
@@ -590,18 +609,71 @@ class Model_Message {
 	}
 };
 
-class Search_MessageContent {
+class Search_MessageContent extends Extension_DevblocksSearchSchema {
 	const ID = 'cerberusweb.search.schema.message_content';
 	
-	public static function index($stop_time=null) {
+	public function getNamespace() {
+		return 'message_content';
+	}
+	
+	public function getAttributes() {
+		return array();
+	}
+	
+	public function reindex() {
+		$engine = $this->getEngine();
+		$meta = $engine->getIndexMeta($this);
+		
+		// If the engine can tell us where the index left off
+		if(isset($meta['max_id']) && $meta['max_id']) {
+			$this->setParam('last_indexed_id', $meta['max_id']);
+		
+		// If the index has a delta, start from the current record
+		} elseif($meta['is_indexed_externally']) {
+			// Do nothing (let the remote tool update the DB)
+			
+		// Otherwise, start over
+		} else {
+			$this->setIndexPointer(self::INDEX_POINTER_RESET);
+		}
+	}
+	
+	public function setIndexPointer($pointer) {
+		switch($pointer) {
+			case self::INDEX_POINTER_RESET:
+				$this->setParam('last_indexed_id', 0);
+				$this->setParam('last_indexed_time', 0);
+				break;
+				
+			case self::INDEX_POINTER_CURRENT:
+				if(null != ($last_msgs = DAO_Message::getWhere('id is not null', 'id', false, 1))
+					&& is_array($last_msgs)
+					&& null != ($last_msg = array_shift($last_msgs))) {
+						$this->setParam('last_indexed_id', $last_msg->id);
+						$this->setParam('last_indexed_time', $last_msg->created_date);
+				} else {
+					$this->setParam('last_indexed_id', 0);
+					$this->setParam('last_indexed_time', 0);
+				}
+				break;
+		}
+	}
+	
+	public function query($query, $attributes=array(), $limit=500) {
+		if(false == ($engine = $this->getEngine()))
+			return false;
+		
+		$ids = $engine->query($this, $query, $attributes, $limit);
+		return $ids;
+	}
+	
+	public function index($stop_time=null) {
 		$logger = DevblocksPlatform::getConsoleLog();
 		
-		if(false == ($search = DevblocksPlatform::getSearchService())) {
-			$logger->error("[Search] The search engine is misconfigured.");
-			return;
-		}
+		if(false == ($engine = $this->getEngine()))
+			return false;
 		
-		$ns = 'message_content';
+		$ns = self::getNamespace();
 		$id = DAO_DevblocksExtensionPropertyStore::get(self::ID, 'last_indexed_id', 0);
 		$done = false;
 		
@@ -631,17 +703,18 @@ class Search_MessageContent {
 					$content = preg_replace("/[\r\n]+/", "\n", $content);
 					
 					// Truncate to 10KB
-					$content = $search->truncateOnWhitespace($content, 10000);
+					$content = $engine->truncateOnWhitespace($content, 10000);
 					
-					// Prepend per-message subject
-					if(false !== ($subject = DAO_MessageHeader::getOne($id, 'subject')))
-						$content = $subject . ' ' . $content;
+					// Prepend subject
+					if(false !== ($ticket = DAO_Ticket::get($message->ticket_id))) {
+						$content = $ticket->subject . ' ' . $content;
+					}
 					
-					$search->index($ns, $id, $content, true);
+					$engine->index($this, $id, $content);
 				}
 
-				// Record our progress every 10th index
-				if(++$count % 10 == 0) {
+				// Record our progress every 25th index
+				if(++$count % 25 == 0) {
 					if(!empty($id))
 						DAO_DevblocksExtensionPropertyStore::put(self::ID, 'last_indexed_id', $id);
 				}
@@ -655,14 +728,11 @@ class Search_MessageContent {
 		}
 	}
 	
-	public static function delete($ids) {
-		if(false == ($search = DevblocksPlatform::getSearchService())) {
-			$logger->error("[Search] The search engine is misconfigured.");
-			return;
-		}
+	public function delete($ids) {
+		if(false == ($engine = $this->getEngine()))
+			return false;
 		
-		$ns = 'message_content';
-		return $search->delete($ns, $ids);
+		return $engine->delete($this, $ids);
 	}
 };
 
@@ -792,13 +862,13 @@ class Storage_MessageContent extends Extension_DevblocksStorageSchema {
 		
 		// Delete the physical files
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$profile = !empty($row['storage_profile_id']) ? $row['storage_profile_id'] : $row['storage_extension'];
 			if(null != ($storage = DevblocksPlatform::getStorageService($profile)))
 				$storage->delete('message_content', $row['storage_key']);
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return true;
 	}
@@ -835,7 +905,7 @@ class Storage_MessageContent extends Extension_DevblocksStorageSchema {
 		);
 		$rs = $db->Execute($sql);
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			self::_migrate($dst_profile, $row);
 
 			if(time() > $stop_time)
@@ -869,7 +939,7 @@ class Storage_MessageContent extends Extension_DevblocksStorageSchema {
 		);
 		$rs = $db->Execute($sql);
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			self::_migrate($dst_profile, $row, true);
 			
 			if(time() > $stop_time)
@@ -1004,8 +1074,6 @@ class DAO_MessageHeader {
 		if(empty($header) || empty($value) || empty($message_id))
 			return;
 		
-		$header = strtolower($header);
-
 		// Handle stacked headers
 		if(is_array($value)) {
 			$value = implode("\r\n",$value);
@@ -1014,8 +1082,47 @@ class DAO_MessageHeader {
 		$db->Execute(sprintf("INSERT INTO message_header (message_id, header_name, header_value) ".
 				"VALUES (%d, %s, %s)",
 				$message_id,
-				$db->qstr($header),
+				$db->qstr(strtolower($header)),
 				$db->qstr($value)
+		));
+	}
+	
+	/**
+	 * Insert multiple headers.
+	 *
+	 * @param integer $message_id
+	 * @param string $header
+	 * @param string $value
+	 */
+	static function creates($message_id, $headers) {
+		$db = DevblocksPlatform::getDatabaseService();
+		
+		if(empty($message_id) || empty($headers) || !is_array($headers))
+			return;
+		
+		$values = array();
+		
+		foreach($headers as $k => $v) {
+			if(empty($k))
+				continue;
+			
+			if(is_string($v) && empty($v))
+				continue;
+			
+			if(is_array($v) && empty($v))
+				continue;
+			
+			$values[] = sprintf("(%d, %s, %s)",
+				$message_id,
+				$db->qstr(strtolower($k)),
+				$db->qstr(is_array($v) ? implode("\r\n", $v) : $v)
+			);
+		}
+		
+		unset($headers);
+		
+		$db->Execute(sprintf("INSERT INTO message_header (message_id, header_name, header_value) VALUES %s",
+			implode(',', $values)
 		));
 	}
 
@@ -1032,11 +1139,11 @@ class DAO_MessageHeader {
 
 		$headers = array();
 
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$headers[$row['header_name']] = $row['header_value'];
 		}
 
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 
 		return $headers;
 	}
@@ -1061,11 +1168,11 @@ class DAO_MessageHeader {
 		$sql = "SELECT header_name FROM message_header GROUP BY header_name";
 		$rs = $db->Execute($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
 
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$headers[] = $row['header_name'];
 		}
 
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 
 		sort($headers);
 
@@ -1821,6 +1928,8 @@ class Context_Message extends Extension_DevblocksContext {
 			$message = DAO_Message::get($message);
 		} elseif($message instanceof Model_Message) {
 			// It's what we want already.
+		} elseif(is_array($message)) {
+			$message = Cerb_ORMHelper::recastArrayToModel($message, 'Model_Message');
 		} else {
 			$message = null;
 		}
@@ -1829,6 +1938,7 @@ class Context_Message extends Extension_DevblocksContext {
 		// Token labels
 		$token_labels = array(
 			'_label' => $prefix,
+			'id' => $prefix.$translate->_('common.id'),
 			'content' => $prefix.$translate->_('common.content'),
 			'created' => $prefix.$translate->_('common.created'),
 			'is_broadcast' => $prefix.$translate->_('message.is_broadcast'),
@@ -1842,6 +1952,7 @@ class Context_Message extends Extension_DevblocksContext {
 		// Token types
 		$token_types = array(
 			'_label' => 'context_url',
+			'id' => Model_CustomField::TYPE_NUMBER,
 			'content' => Model_CustomField::TYPE_MULTI_LINE,
 			'created' => Model_CustomField::TYPE_DATE,
 			'is_broadcast' => Model_CustomField::TYPE_CHECKBOX,
@@ -1860,24 +1971,19 @@ class Context_Message extends Extension_DevblocksContext {
 		
 		// Message token values
 		if($message) {
-			// [TODO] Cache these in a request registry
-			$sender = DAO_Address::get($message->address_id);
-			$ticket = DAO_Ticket::get($message->ticket_id);
-			
 			$token_values['_loaded'] = true;
-			$token_values['_label'] = sprintf("%s wrote on [%s] %s", $sender->email, $ticket->mask, $ticket->subject);
 			$token_values['created'] = $message->created_date;
 			$token_values['id'] = $message->id;
 			$token_values['is_broadcast'] = $message->is_broadcast;
 			$token_values['is_outgoing'] = $message->is_outgoing;
 			$token_values['response_time'] = $message->response_time;
+			$token_values['sender_id'] = $message->address_id;
 			$token_values['storage_size'] = $message->storage_size;
 			$token_values['ticket_id'] = $message->ticket_id;
 			$token_values['worker_id'] = $message->worker_id;
 			
-			// Sender
-			@$address_id = $message->address_id;
-			$token_values['sender_id'] = $address_id;
+			// Custom fields
+			$token_values = $this->_importModelCustomFieldsAsValues($message, $token_values);
 			
 			// URL
 			$url_writer = DevblocksPlatform::getUrlService();
@@ -1944,10 +2050,23 @@ class Context_Message extends Extension_DevblocksContext {
 		if(!$is_loaded) {
 			$labels = array();
 			CerberusContexts::getContext($context, $context_id, $labels, $values, null, true);
+			$dictionary = $values;
 		}
 		
 		switch($token) {
+			case '_label':
+				$dict = DevblocksDictionaryDelegate::instance($dictionary);
+				
+				$sender_address = $dict->sender_address;
+				$ticket_label = $dict->ticket__label;
+				
+				$values = array_merge($dict->getDictionary(), $values);
+				
+				$values['_label'] = sprintf("%s wrote on %s", $sender_address, $ticket_label);
+				break;
+				
 			case 'content':
+				// [TODO] Allow an array with storage meta here?  It removes an extra (n) SELECT in dictionaries for content
 				$values['content'] = Storage_MessageContent::get($context_id);
 				break;
 				

@@ -74,7 +74,7 @@ class DAO_KbArticle extends Cerb_ORMHelper {
 	static private function _createObjectsFromResultSet($rs=null) {
 		$objects = array();
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$object = new Model_KbArticle();
 			$object->id = intval($row['id']);
 			$object->title = $row['title'];
@@ -85,12 +85,12 @@ class DAO_KbArticle extends Cerb_ORMHelper {
 			$objects[$object->id] = $object;
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return $objects;
 	}
 
-	static function update($ids, $fields) {
+	static function update($ids, $fields, $check_deltas=true) {
 		if(!is_array($ids))
 			$ids = array($ids);
 		
@@ -101,16 +101,16 @@ class DAO_KbArticle extends Cerb_ORMHelper {
 			if(empty($batch_ids))
 				continue;
 			
-			// Get state before changes
-			$object_changes = parent::_getUpdateDeltas($batch_ids, $fields, get_class());
-
+			// Send events
+			if($check_deltas) {
+				CerberusContexts::checkpointChanges(CerberusContexts::CONTEXT_KB_ARTICLE, $batch_ids);
+			}
+			
 			// Make changes
 			parent::_update($batch_ids, 'kb_article', $fields);
 			
 			// Send events
-			if(!empty($object_changes)) {
-				// Local events
-				//self::_processUpdateEvents($object_changes);
+			if($check_deltas) {
 				
 				// Trigger an event about the changes
 				$eventMgr = DevblocksPlatform::getEventService();
@@ -118,7 +118,7 @@ class DAO_KbArticle extends Cerb_ORMHelper {
 					new Model_DevblocksEvent(
 						'dao.kb_article.update',
 						array(
-							'objects' => $object_changes,
+							'fields' => $fields,
 						)
 					)
 				);
@@ -140,13 +140,14 @@ class DAO_KbArticle extends Cerb_ORMHelper {
 		$id_string = implode(',', $ids);
 		
 		// Articles
-		$db->Execute(sprintf("DELETE QUICK FROM kb_article WHERE id IN (%s)", $id_string));
+		$db->Execute(sprintf("DELETE FROM kb_article WHERE id IN (%s)", $id_string));
 		
 		// Categories
-		$db->Execute(sprintf("DELETE QUICK FROM kb_article_to_category WHERE kb_article_id IN (%s)", $id_string));
+		$db->Execute(sprintf("DELETE FROM kb_article_to_category WHERE kb_article_id IN (%s)", $id_string));
 		
 		// Search indexes
-		$db->Execute(sprintf("DELETE QUICK FROM fulltext_kb_article WHERE id IN (%s)", $id_string));
+		$search = Extension_DevblocksSearchSchema::get(Search_KbArticle::ID, true);
+		$search->delete($ids);
 		
 		// Fire event
 		$eventMgr = DevblocksPlatform::getEventService();
@@ -190,12 +191,12 @@ class DAO_KbArticle extends Cerb_ORMHelper {
 			$article_id
 		));
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$cat_id = intval($row['kb_category_id']);
 			$categories[$cat_id] = $cat_id;
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return $categories;
 	}
@@ -210,7 +211,7 @@ class DAO_KbArticle extends Cerb_ORMHelper {
 			$category_ids = array($category_ids);
 		
 		if($replace) {
-			$db->Execute(sprintf("DELETE QUICK FROM kb_article_to_category WHERE kb_article_id IN (%s)",
+			$db->Execute(sprintf("DELETE FROM kb_article_to_category WHERE kb_article_id IN (%s)",
 				implode(',', $article_ids)
 			));
 		}
@@ -296,10 +297,6 @@ class DAO_KbArticle extends Cerb_ORMHelper {
 			$join_sql .= "LEFT JOIN kb_article_to_category katc ON (kb.id=katc.kb_article_id) ";
 		}
 		
-		if(isset($tables['ftkb'])) {
-			$join_sql .= 'LEFT JOIN fulltext_kb_article ftkb ON (ftkb.id=kb.id) ';
-		}
-		
 		// [JAS]: Dynamic table joins
 		if(isset($tables['context_link']))
 			$join_sql .= "INNER JOIN context_link ON (context_link.to_context = 'cerberusweb.contexts.kb_article' AND context_link.to_context_id = kb.id) ";
@@ -356,6 +353,20 @@ class DAO_KbArticle extends Cerb_ORMHelper {
 		settype($param_key, 'string');
 		
 		switch($param_key) {
+			case SearchFields_KbArticle::FULLTEXT_ARTICLE_CONTENT:
+				$search = Extension_DevblocksSearchSchema::get(Search_KbArticle::ID);
+				$query = $search->getQueryFromParam($param);
+				$ids = $search->query($query, array());
+				
+				if(empty($ids))
+					$ids = array(-1);
+				
+				$args['where_sql'] .= sprintf('AND %s IN (%s) ',
+					$from_index,
+					implode(', ', $ids)
+				);
+				break;
+			
 			case SearchFields_KbArticle::VIRTUAL_CONTEXT_LINK:
 				$args['has_multiple_values'] = true;
 				self::_searchComponentsVirtualContextLinks($param, $from_context, $from_index, $args['join_sql'], $args['where_sql']);
@@ -395,7 +406,7 @@ class DAO_KbArticle extends Cerb_ORMHelper {
 		
 		$results = array();
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$result = array();
 			foreach($row as $f => $v) {
 				$result[$f] = $v;
@@ -404,17 +415,20 @@ class DAO_KbArticle extends Cerb_ORMHelper {
 			$results[$id] = $result;
 		}
 
-		// [JAS]: Count all
-		$total = -1;
+		$total = count($results);
+		
 		if($withCounts) {
-			$count_sql =
-				($has_multiple_values ? "SELECT COUNT(DISTINCT kb.id) " : "SELECT COUNT(kb.id) ").
-				$join_sql.
-				$where_sql;
-			$total = $db->GetOne($count_sql);
+			// We can skip counting if we have a less-than-full single page
+			if(!(0 == $page && $total < $limit)) {
+				$count_sql =
+					($has_multiple_values ? "SELECT COUNT(DISTINCT kb.id) " : "SELECT COUNT(kb.id) ").
+					$join_sql.
+					$where_sql;
+				$total = $db->GetOne($count_sql);
+			}
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return array($results,$total);
 	}
@@ -464,14 +478,14 @@ class SearchFields_KbArticle implements IDevblocksSearchFields {
 			
 			self::CONTEXT_LINK => new DevblocksSearchField(self::CONTEXT_LINK, 'context_link', 'from_context', null),
 			self::CONTEXT_LINK_ID => new DevblocksSearchField(self::CONTEXT_LINK_ID, 'context_link', 'from_context_id', null),
+				
+			self::FULLTEXT_ARTICLE_CONTENT => new DevblocksSearchField(self::FULLTEXT_ARTICLE_CONTENT, 'ftkb', 'content', $translate->_('kb_article.content'), 'FT'),
 		);
-
-		// Fulltext
-		$tables = DevblocksPlatform::getDatabaseTables();
-		if(isset($tables['fulltext_kb_article'])) {
-			$columns[self::FULLTEXT_ARTICLE_CONTENT] = new DevblocksSearchField(self::FULLTEXT_ARTICLE_CONTENT, 'ftkb', 'content', $translate->_('kb_article.content'), 'FT');
-		}
 		
+		// Fulltext indexes
+		
+		$columns[self::FULLTEXT_ARTICLE_CONTENT]->ft_schema = Search_KbArticle::ID;
+
 		// Custom fields with fieldsets
 		
 		$custom_columns = DevblocksSearchField::getCustomSearchFieldsByContexts(array(
@@ -488,20 +502,63 @@ class SearchFields_KbArticle implements IDevblocksSearchFields {
 	}
 };
 
-class Search_KbArticle {
+class Search_KbArticle extends Extension_DevblocksSearchSchema {
 	const ID = 'cerberusweb.search.schema.kb_article';
 	
-	public static function index($stop_time=null) {
+	public function getNamespace() {
+		return 'kb_article';
+	}
+	
+	public function getAttributes() {
+		return array();
+	}
+	
+	public function reindex() {
+		$engine = $this->getEngine();
+		$meta = $engine->getIndexMeta($this);
+		
+		// If the index has a delta, start from the current record
+		if($meta['is_indexed_externally']) {
+			// Do nothing (let the remote tool update the DB)
+			
+		// Otherwise, start over
+		} else {
+			$this->setIndexPointer(self::INDEX_POINTER_RESET);
+		}
+	}
+
+	public function setIndexPointer($pointer) {
+		switch($pointer) {
+			case self::INDEX_POINTER_RESET:
+				$this->setParam('last_indexed_id', 0);
+				$this->setParam('last_indexed_time', 0);
+				break;
+				
+			case self::INDEX_POINTER_CURRENT:
+				$this->setParam('last_indexed_id', 0);
+				$this->setParam('last_indexed_time', time());
+				break;
+		}
+	}
+	
+	public function query($query, $attributes=array(), $limit=500) {
+		if(false == ($engine = $this->getEngine()))
+			return false;
+
+		$ids = $engine->query($this, $query, $attributes, $limit);
+		
+		return $ids;
+	}
+	
+	public function index($stop_time=null) {
 		$logger = DevblocksPlatform::getConsoleLog();
 		
-		if(false == ($search = DevblocksPlatform::getSearchService())) {
-			$logger->error("[Search] The search engine is misconfigured.");
-			return;
-		}
+		if(false == ($engine = $this->getEngine()))
+			return false;
 		
-		$ns = 'kb_article';
-		$id = DAO_DevblocksExtensionPropertyStore::get(self::ID, 'last_indexed_id', 0);
-		$ptr_time = DAO_DevblocksExtensionPropertyStore::get(self::ID, 'last_indexed_time', 0);
+		$ns = self::getNamespace();
+		$id = $this->getParam('last_indexed_id', 0);
+		$ptr_time = $this->getParam('last_indexed_time', 0);
 		$ptr_id = $id;
 		$done = false;
 
@@ -533,7 +590,7 @@ class Search_KbArticle {
 					$id
 				));
 				
-				$search->index($ns, $id, $article->title . ' ' . strip_tags($article->content), true);
+				$engine->index($this, $id, $article->title . ' ' . strip_tags($article->content));
 				
 				flush();
 			}
@@ -545,8 +602,15 @@ class Search_KbArticle {
 			$ptr_time = time();
 		}
 		
-		DAO_DevblocksExtensionPropertyStore::put(self::ID, 'last_indexed_id', $ptr_id);
-		DAO_DevblocksExtensionPropertyStore::put(self::ID, 'last_indexed_time', $ptr_time);
+		$this->setParam('last_indexed_id', $ptr_id);
+		$this->setParam('last_indexed_time', $ptr_time);
+	}
+	
+	public function delete($ids) {
+		if(false == ($engine = $this->getEngine()))
+			return false;
+		
+		return $engine->delete($this, $ids);
 	}
 };
 
@@ -707,6 +771,8 @@ class Context_KbArticle extends Extension_DevblocksContext implements IDevblocks
 			$article = DAO_KbArticle::get($article);
 		} elseif($article instanceof Model_KbArticle) {
 			// It's what we want already.
+		} elseif(is_array($article)) {
+			$article = Cerb_ORMHelper::recastArrayToModel($article, 'Model_KbArticle');
 		} else {
 			$article = null;
 		}
@@ -756,6 +822,9 @@ class Context_KbArticle extends Extension_DevblocksContext implements IDevblocks
 			$token_values['title'] = $article->title;
 			$token_values['updated'] = $article->updated;
 			$token_values['views'] = $article->views;
+			
+			// Custom fields
+			$token_values = $this->_importModelCustomFieldsAsValues($article, $token_values);
 			
 			// URL
 			$url_writer = DevblocksPlatform::getUrlService();

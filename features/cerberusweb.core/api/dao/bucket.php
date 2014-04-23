@@ -92,7 +92,7 @@ class DAO_Bucket extends DevblocksORMHelper {
 		
 		$buckets = array();
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$bucket = new Model_Bucket();
 			$bucket->id = intval($row['id']);
 			$bucket->pos = intval($row['pos']);
@@ -106,7 +106,7 @@ class DAO_Bucket extends DevblocksORMHelper {
 			$buckets[$bucket->id] = $bucket;
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return $buckets;
 	}
@@ -179,6 +179,10 @@ class DAO_Bucket extends DevblocksORMHelper {
 
 		self::clearCache();
 	}
+
+	static function random() {
+		return self::_getRandom('bucket');
+	}
 	
 	static function delete($ids) {
 		if(!is_array($ids)) $ids = array($ids);
@@ -200,7 +204,7 @@ class DAO_Bucket extends DevblocksORMHelper {
 			)
 		);
 		
-		$sql = sprintf("DELETE QUICK FROM bucket WHERE id IN (%s)", implode(',',$ids));
+		$sql = sprintf("DELETE FROM bucket WHERE id IN (%s)", implode(',',$ids));
 		$db->Execute($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
 		
 		// Reset any tickets using this bucket
@@ -417,9 +421,7 @@ class Context_Bucket extends Extension_DevblocksContext {
 	}
 	
 	function getRandom() {
-		// [TODO]
-		//return DAO_Bucket::random();
-		return null;
+		return DAO_Bucket::random();
 	}
 	
 	function getMeta($context_id) {
@@ -467,6 +469,10 @@ class Context_Bucket extends Extension_DevblocksContext {
 			
 		} elseif($bucket instanceof Model_Bucket) {
 			// It's what we want already.
+			
+		} elseif(is_array($bucket)) {
+			$bucket = Cerb_ORMHelper::recastArrayToModel($bucket, 'Model_Bucket');
+			
 		} else {
 			$bucket = null;
 		}
@@ -474,6 +480,7 @@ class Context_Bucket extends Extension_DevblocksContext {
 		// Token labels
 		$token_labels = array(
 			'_label' => $prefix,
+			'id' => $prefix.$translate->_('common.id'),
 			'name' => $prefix.$translate->_('common.name'),
 			//'record_url' => $prefix.$translate->_('common.url.record'),
 		);
@@ -481,6 +488,7 @@ class Context_Bucket extends Extension_DevblocksContext {
 		// Token types
 		$token_types = array(
 			'_label' => 'context_url',
+			'id' => Model_CustomField::TYPE_NUMBER,
 			'name' => Model_CustomField::TYPE_SINGLE_LINE,
 			//'record_url' => Model_CustomField::TYPE_URL,
 		);
@@ -505,6 +513,9 @@ class Context_Bucket extends Extension_DevblocksContext {
 			$token_values['id'] = $bucket->id;
 			$token_values['name'] = $bucket->name;
 			$token_values['reply_address_id'] = $bucket->reply_address_id;
+			
+			// Custom fields
+			$token_values = $this->_importModelCustomFieldsAsValues($bucket, $token_values);
 			
 			// URL
 			//$url_writer = DevblocksPlatform::getUrlService();

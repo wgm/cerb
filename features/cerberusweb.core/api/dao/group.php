@@ -87,7 +87,7 @@ class DAO_Group extends Cerb_ORMHelper {
 	static private function _getObjectsFromResultSet($rs) {
 		$objects = array();
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$object = new Model_Group();
 			$object->id = intval($row['id']);
 			$object->name = $row['name'];
@@ -99,7 +99,7 @@ class DAO_Group extends Cerb_ORMHelper {
 			$objects[$object->id] = $object;
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return $objects;
 	}
@@ -155,7 +155,7 @@ class DAO_Group extends Cerb_ORMHelper {
 	 * @param array $ids
 	 * @param array $fields
 	 */
-	static function update($ids, $fields) {
+	static function update($ids, $fields, $check_deltas=true) {
 		if(!is_array($ids))
 			$ids = array($ids);
 		
@@ -165,17 +165,17 @@ class DAO_Group extends Cerb_ORMHelper {
 		while($batch_ids = array_shift($chunks)) {
 			if(empty($batch_ids))
 				continue;
-			
-			// Get state before changes
-			$object_changes = parent::_getUpdateDeltas($batch_ids, $fields, get_class());
+
+			// Send events
+			if($check_deltas) {
+				CerberusContexts::checkpointChanges(CerberusContexts::CONTEXT_GROUP, $batch_ids);
+			}
 
 			// Make changes
 			parent::_update($batch_ids, 'worker_group', $fields);
 			
 			// Send events
-			if(!empty($object_changes)) {
-				// Local events
-				//self::_processUpdateEvents($object_changes);
+			if($check_deltas) {
 				
 				// Trigger an event about the changes
 				$eventMgr = DevblocksPlatform::getEventService();
@@ -183,7 +183,7 @@ class DAO_Group extends Cerb_ORMHelper {
 					new Model_DevblocksEvent(
 						'dao.group.update',
 						array(
-							'objects' => $object_changes,
+							'fields' => $fields,
 						)
 					)
 				);
@@ -219,16 +219,16 @@ class DAO_Group extends Cerb_ORMHelper {
 			)
 		);
 		
-		$sql = sprintf("DELETE QUICK FROM worker_group WHERE id = %d", $id);
+		$sql = sprintf("DELETE FROM worker_group WHERE id = %d", $id);
 		$db->Execute($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
 
-		$sql = sprintf("DELETE QUICK FROM bucket WHERE group_id = %d", $id);
+		$sql = sprintf("DELETE FROM bucket WHERE group_id = %d", $id);
 		$db->Execute($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
 		
-		$sql = sprintf("DELETE QUICK FROM group_setting WHERE group_id = %d", $id);
+		$sql = sprintf("DELETE FROM group_setting WHERE group_id = %d", $id);
 		$db->Execute($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
 		
-		$sql = sprintf("DELETE QUICK FROM worker_to_group WHERE group_id = %d", $id);
+		$sql = sprintf("DELETE FROM worker_to_group WHERE group_id = %d", $id);
 		$db->Execute($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
 
 		// Fire event
@@ -251,17 +251,11 @@ class DAO_Group extends Cerb_ORMHelper {
 		$db = DevblocksPlatform::getDatabaseService();
 		$logger = DevblocksPlatform::getConsoleLog();
 		
-		$sql = "DELETE QUICK bucket FROM bucket LEFT JOIN worker_group ON bucket.group_id = worker_group.id WHERE worker_group.id IS NULL";
-		$db->Execute($sql);
+		$db->Execute("DELETE FROM bucket WHERE group_id NOT IN (SELECT id FROM worker_group)");
 		$logger->info('[Maint] Purged ' . $db->Affected_Rows() . ' bucket records.');
 		
-		$sql = "DELETE QUICK group_setting FROM group_setting LEFT JOIN worker_group ON group_setting.group_id = worker_group.id WHERE worker_group.id IS NULL";
-		$db->Execute($sql);
+		$db->Execute("DELETE FROM group_setting WHERE group_id NOT IN (SELECT id FROM worker_group)");
 		$logger->info('[Maint] Purged ' . $db->Affected_Rows() . ' group_setting records.');
-		
-		$sql = "DELETE QUICK custom_field FROM custom_field LEFT JOIN custom_fieldset ON custom_field.custom_fieldset_id = custom_fieldset.id WHERE custom_field.custom_fieldset_id > 0 AND custom_fieldset.id IS NULL";
-		$db->Execute($sql);
-		$logger->info('[Maint] Purged ' . $db->Affected_Rows() . ' custom_field records.');
 		
 		// Fire event
 		$eventMgr = DevblocksPlatform::getEventService();
@@ -299,7 +293,7 @@ class DAO_Group extends Cerb_ORMHelper {
 			
 		$db = DevblocksPlatform::getDatabaseService();
 		
-		$sql = sprintf("DELETE QUICK FROM worker_to_group WHERE group_id = %d AND worker_id IN (%d)",
+		$sql = sprintf("DELETE FROM worker_to_group WHERE group_id = %d AND worker_id IN (%d)",
 			$group_id,
 			$worker_id
 		);
@@ -323,7 +317,7 @@ class DAO_Group extends Cerb_ORMHelper {
 			
 			$objects = array();
 			
-			while($row = mysql_fetch_assoc($rs)) {
+			while($row = mysqli_fetch_assoc($rs)) {
 				$worker_id = intval($row['worker_id']);
 				$group_id = intval($row['group_id']);
 				$is_manager = intval($row['is_manager']);
@@ -338,7 +332,7 @@ class DAO_Group extends Cerb_ORMHelper {
 				$objects[$group_id][$worker_id] = $member;
 			}
 			
-			mysql_free_result($rs);
+			mysqli_free_result($rs);
 			
 			$cache->save($objects, self::CACHE_ROSTERS);
 		}
@@ -471,13 +465,12 @@ class DAO_Group extends Cerb_ORMHelper {
 			$rs = $db->SelectLimit($sql,$limit,$page*$limit) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
 		} else {
 			$rs = $db->Execute($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
-			$total = mysql_num_rows($rs);
+			$total = mysqli_num_rows($rs);
 		}
 		
 		$results = array();
-		$total = -1;
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$result = array();
 			foreach($row as $f => $v) {
 				$result[$f] = $v;
@@ -485,17 +478,21 @@ class DAO_Group extends Cerb_ORMHelper {
 			$object_id = intval($row[SearchFields_Group::ID]);
 			$results[$object_id] = $result;
 		}
+
+		$total = count($results);
 		
-		// [JAS]: Count all
 		if($withCounts) {
-			$count_sql =
-				($has_multiple_values ? "SELECT COUNT(DISTINCT g.id) " : "SELECT COUNT(g.id) ").
-				$join_sql.
-				$where_sql;
-			$total = $db->GetOne($count_sql);
+			// We can skip counting if we have a less-than-full single page
+			if(!(0 == $page && $total < $limit)) {
+				$count_sql =
+					($has_multiple_values ? "SELECT COUNT(DISTINCT g.id) " : "SELECT COUNT(g.id) ").
+					$join_sql.
+					$where_sql;
+				$total = $db->GetOne($count_sql);
+			}
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return array($results,$total);
 	}
@@ -770,7 +767,7 @@ class DAO_GroupSettings {
 			$sql = "SELECT group_id, setting, value FROM group_setting";
 			$rs = $db->Execute($sql) or die(__CLASS__ . ':' . $db->ErrorMsg());
 			
-			while($row = mysql_fetch_assoc($rs)) {
+			while($row = mysqli_fetch_assoc($rs)) {
 				$gid = intval($row['group_id']);
 				
 				if(!isset($groups[$gid]))
@@ -779,7 +776,7 @@ class DAO_GroupSettings {
 				$groups[$gid][$row['setting']] = $row['value'];
 			}
 			
-			mysql_free_result($rs);
+			mysqli_free_result($rs);
 			
 			$cache->save($groups, self::CACHE_ALL);
 		}
@@ -1187,6 +1184,8 @@ class Context_Group extends Extension_DevblocksContext implements IDevblocksCont
 			$group = DAO_Group::get($group);
 		} elseif($group instanceof Model_Group) {
 			// It's what we want already.
+		} elseif(is_array($group)) {
+			$group = Cerb_ORMHelper::recastArrayToModel($group, 'Model_Group');
 		} else {
 			$group = null;
 		}
@@ -1194,6 +1193,7 @@ class Context_Group extends Extension_DevblocksContext implements IDevblocksCont
 		// Token labels
 		$token_labels = array(
 			'_label' => $prefix,
+			'id' => $prefix.$translate->_('common.id'),
 			'name' => $prefix.$translate->_('common.name'),
 			'record_url' => $prefix.$translate->_('common.url.record'),
 		);
@@ -1201,6 +1201,7 @@ class Context_Group extends Extension_DevblocksContext implements IDevblocksCont
 		// Token types
 		$token_types = array(
 			'_label' => 'context_url',
+			'id' => Model_CustomField::TYPE_NUMBER,
 			'name' => Model_CustomField::TYPE_SINGLE_LINE,
 			'record_url' => Model_CustomField::TYPE_URL,
 			'reply_address_id' => Model_CustomField::TYPE_NUMBER,
@@ -1228,9 +1229,12 @@ class Context_Group extends Extension_DevblocksContext implements IDevblocksCont
 			$token_values['name'] = $group->name;
 			$token_values['reply_address_id'] = $group->reply_address_id;
 			
+			// Custom fields
+			$token_values = $this->_importModelCustomFieldsAsValues($group, $token_values);
+			
 			// URL
 			$url_writer = DevblocksPlatform::getUrlService();
-			$token_values['record_url'] = $url_writer->writeNoProxy(sprintf("c=profiles&type=group&id=%d-%s",$group->id, DevblocksPlatform::strToPermalink($group->name)), true);
+			$token_values['record_url'] = $url_writer->writeNoProxy(sprintf("c=profiles&type=group&id=%d-%s", $group->id, DevblocksPlatform::strToPermalink($group->name)), true);
 		}
 		
 		return true;
@@ -1253,6 +1257,7 @@ class Context_Group extends Extension_DevblocksContext implements IDevblocksCont
 		
 		switch($token) {
 			case 'buckets':
+				// [TODO] Can't $values clobber the lazy load above here?
 				$values = $dictionary;
 
 				if(!isset($values['buckets']))
@@ -1350,7 +1355,7 @@ class Context_Group extends Extension_DevblocksContext implements IDevblocksCont
 					$member_dict = new DevblocksDictionaryDelegate($member_values);
 					$member_dict->address_;
 					$member_dict->custom_;
-					$member_values = $member_dict->getDictionary();
+					$member_values = $member_dict->getDictionary(null, false);
 					unset($member_dict);
 					
 					// Remove redundancy

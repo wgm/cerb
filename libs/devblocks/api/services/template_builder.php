@@ -122,6 +122,8 @@ class _DevblocksTemplateBuilder {
 
 class DevblocksDictionaryDelegate {
 	private $_dictionary = null;
+	private $_cached_contexts = null;
+	private $_null = null;
 	
 	function __construct($dictionary) {
 		$this->_dictionary = $dictionary;
@@ -139,21 +141,15 @@ class DevblocksDictionaryDelegate {
 		unset($this->_dictionary[$name]);
 	}
 	
-	public function &__get($name) {
-		if(isset($this->_dictionary[$name])) {
-			return $this->_dictionary[$name];
-		}
-		
-		// Lazy load
-		
+	private function _cacheContexts() {
 		$contexts = array();
 		
 		// Match our root context
 		if(isset($this->_dictionary['_context'])) {
-			$contexts[] = array(
+			$contexts[''] = array(
 				'key' => '_context',
 				'prefix' => '',
-				'token' => $name,
+				'context' => $this->_dictionary['_context'],
 				'len' => 0,
 			);
 		}
@@ -161,70 +157,99 @@ class DevblocksDictionaryDelegate {
 		// Find the embedded contexts for each token
 		foreach(array_keys($this->_dictionary) as $key) {
 			if(preg_match('#(.*)__context#', $key, $matches)) {
-				if(0 == strcmp(substr($name,0,strlen($matches[1])),$matches[1])) {
-					$contexts[$matches[1]] = array(
-						'key' => $key,
-						'prefix' => $matches[1] . '_',
-						'token' => substr($name, strlen($matches[1])+1),
-						'len' => strlen($matches[1]),
-					);
-				}
+				$contexts[$matches[1]] = array(
+					'key' => $key,
+					'prefix' => $matches[1] . '_',
+					'context' => $this->_dictionary[$key],
+					'len' => strlen($matches[1]),
+				);
 			}
 		}
-
-		if(empty($contexts))
-			return $this->_dictionary[$name];
 		
 		DevblocksPlatform::sortObjects($contexts, '[len]', true);
 		
+		$this->_cached_contexts = $contexts;
+	}
+	
+	public function getContextsForName($name) {
+		if(is_null($this->_cached_contexts))
+			$this->_cacheContexts();
+		
+		return array_filter($this->_cached_contexts, function($context) use ($name) {
+			return substr($name, 0, strlen($context['prefix'])) == $context['prefix'];
+		});
+	}
+	
+	public function &__get($name) {
+		if($this->exists($name))
+			return $this->_dictionary[$name];
+		
+		// Lazy load
+		
+		$contexts = $this->getContextsForName($name);
+		
 		while(null != ($context_data = array_shift($contexts))) {
 			$context_ext = $this->_dictionary[$context_data['key']];
+			
+			$token = substr($name, strlen($context_data['prefix']));
 	
 			if(null == ($context = Extension_DevblocksContext::get($context_ext)))
 				continue;
-	
+			
 			if(!method_exists($context, 'lazyLoadContextValues'))
 				continue;
 	
-			$local = $this->getDictionary($context_data['prefix']);
-			$loaded_values = $context->lazyLoadContextValues($context_data['token'], $local);
-	
+			$local = $this->getDictionary($context_data['prefix'], false);
+			
+			$loaded_values = $context->lazyLoadContextValues($token, $local);
+			
 			if(empty($loaded_values))
 				continue;
 			
-			//echo "<LAZYLOAD>";
-			
 			if(is_array($loaded_values))
 			foreach($loaded_values as $k => $v) {
-				// Don't cascade the labels + types on loaded contexts
-				if(in_array($k, array('_labels', '_types')))
-					continue;
-				
+				// The getDictionary() call above already filters out _labels and _types
 				$this->_dictionary[$context_data['prefix'] . $k] = $v;
 			}
+			
+			// [TODO] Is there a better way to test that we loaded new contexts?
+			$this->_cached_contexts = null;
 		}
+		
+		if(!$this->exists($name))
+			return $this->_null;
 		
 		return $this->_dictionary[$name];
 	}
 	
+	// This lazy loads, and 'exists' doesn't.
 	public function __isset($name) {
-		if(null !== ($this->__get($name)))
+		if(null !== (@$this->__get($name)))
 			return true;
 		
 		return false;
+	}
+	
+	public function exists($name) {
+		return isset($this->_dictionary[$name]);
 	}
 	
 	public function delegateUndefinedVariable($name) {
 		return $this->$name;
 	}
 	
-	public function getDictionary($with_prefix=null) {
+	public function getDictionary($with_prefix=null, $with_meta=true) {
 		$dict = $this->_dictionary;
-
+		
+		if(!$with_meta) {
+			unset($dict['_labels']);
+			unset($dict['_types']);
+		}
+		
 		// Convert any nested dictionaries to arrays
-		array_walk_recursive($dict, function(&$v) {
+		array_walk_recursive($dict, function(&$v) use ($with_meta) {
 			if($v instanceof DevblocksDictionaryDelegate)
-				$v = $v->getDictionary();
+				$v = $v->getDictionary(null, $with_meta);
 		});
 		
 		if(empty($with_prefix))
@@ -247,6 +272,71 @@ class DevblocksDictionaryDelegate {
 		foreach(array_keys($this->_dictionary) as $key) {
 			if($prefix == substr($key, 0, strlen($prefix)))
 				unset($this->_dictionary[$key]);
+		}
+	}
+	
+	public static function bulkLazyLoad(array $dicts, $token) {
+		// Examine contexts on the first dictionary
+		$first_dict = reset($dicts);
+
+		// Get the list of embedded contexts
+		$contexts = $first_dict->getContextsForName($token);
+
+		foreach($contexts as $context_prefix => $context_data) {
+			// The top-level context is always loaded
+			if(empty($context_prefix))
+				continue;
+			
+			// If the context is already loaded, skip it
+			$loaded_key = $context_prefix . '__loaded';
+			if($first_dict->exists($loaded_key))
+				continue;
+			
+			$id_counts = array();
+			
+			foreach($dicts as $dict) {
+				$id_key = $context_prefix . '_id';
+				$id = $dict->$id_key;
+				
+				if(!isset($id_counts[$id])) {
+					$id_counts[$id] = 1;
+					
+				} else {
+					$id_counts[$id]++;
+				}
+			}
+			
+			// Preload the contexts before lazy loading
+			if(false != ($context_ext = Extension_DevblocksContext::get($context_data['context']))) {
+				
+				// Load model objects from the context
+				$models = $context_ext->getModelObjects(array_keys($id_counts));
+				
+				CerberusContexts::setCacheLoads(true);
+				
+				// These context loads will be cached
+				if(is_array($models))
+				foreach($models as $model_id => $model) {
+					$labels = array();
+					$values = array();
+					CerberusContexts::getContext($context_data['context'], $model, $labels, $values, null, true);
+				}
+				
+				$prefix_key = $context_prefix . '_';
+				
+				// Load the contexts from the cache
+				foreach($dicts as $dict) {
+					$dict->$prefix_key;
+				}
+				
+				// Flush the temporary cache
+				CerberusContexts::setCacheLoads(false);
+			}
+		}
+		
+		// Now load the tokens, since we probably already lazy loaded the contexts
+		foreach($dicts as $dict) { /* @var $dict DevblocksDictionaryDelegate */
+			$dict->$token;
 		}
 	}
 };
@@ -290,6 +380,7 @@ class _DevblocksTwigExtensions extends Twig_Extension {
 			'json_decode' => new Twig_Function_Method($this, 'function_json_decode'),
 			'jsonpath_set' => new Twig_Function_Method($this, 'function_jsonpath_set'),
 			'xml_decode' => new Twig_Function_Method($this, 'function_xml_decode'),
+			'xml_xpath' => new Twig_Function_Method($this, 'function_xml_xpath'),
 		);
 	}
 	
@@ -349,9 +440,21 @@ class _DevblocksTwigExtensions extends Twig_Extension {
 	}
 	
 	function function_xml_decode($str) {
+		$str = str_replace('xmlns=','ns=', $str);
 		$xml = simplexml_load_string($str);
-		$array = json_decode(json_encode($xml), true);
-		return $array;
+		return $xml;
+	}
+	
+	function function_xml_xpath($xml, $path, $element=null) {
+		if(!($xml instanceof SimpleXMLElement))
+			return false;
+		
+		$result = $xml->xpath($path);
+		
+		if(!is_null($element) && isset($result[$element]))
+			return $result[$element];
+		
+		return $result;
 	}
 	
 	public function getFilters() {
@@ -361,6 +464,7 @@ class _DevblocksTwigExtensions extends Twig_Extension {
 			'json_pretty' => new Twig_Filter_Method($this, 'filter_json_pretty'),
 			'md5' => new Twig_Filter_Method($this, 'filter_md5'),
 			'regexp' => new Twig_Filter_Method($this, 'filter_regexp'),
+			'secs_pretty' => new Twig_Filter_Method($this, 'filter_secs_pretty'),
 			'truncate' => new Twig_Filter_Method($this, 'filter_truncate'),
 		);
 	}
@@ -392,6 +496,10 @@ class _DevblocksTwigExtensions extends Twig_Extension {
 		}
 		
 		return $string;
+	}
+	
+	function filter_secs_pretty($string, $precision=0) {
+		return DevblocksPlatform::strSecsToString($string, $precision);
 	}
 	
 	/**

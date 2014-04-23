@@ -95,7 +95,7 @@ class DAO_MailQueue extends DevblocksORMHelper {
 	static private function _getObjectsFromResult($rs) {
 		$objects = array();
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$object = new Model_MailQueue();
 			$object->id = $row['id'];
 			$object->worker_id = $row['worker_id'];
@@ -117,9 +117,13 @@ class DAO_MailQueue extends DevblocksORMHelper {
 			$objects[$object->id] = $object;
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return $objects;
+	}
+	
+	static function random() {
+		return self::_getRandom('mail_queue');
 	}
 	
 	static function delete($ids) {
@@ -223,13 +227,12 @@ class DAO_MailQueue extends DevblocksORMHelper {
 			$rs = $db->SelectLimit($sql,$limit,$page*$limit) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs ADORecordSet */
 		} else {
 			$rs = $db->Execute($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs ADORecordSet */
-			$total = mysql_num_rows($rs);
+			$total = mysqli_num_rows($rs);
 		}
 		
 		$results = array();
-		$total = -1;
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$result = array();
 			foreach($row as $f => $v) {
 				$result[$f] = $v;
@@ -238,16 +241,20 @@ class DAO_MailQueue extends DevblocksORMHelper {
 			$results[$object_id] = $result;
 		}
 
-		// [JAS]: Count all
+		$total = count($results);
+		
 		if($withCounts) {
-			$count_sql =
-				($has_multiple_values ? "SELECT COUNT(DISTINCT mail_queue.id) " : "SELECT COUNT(mail_queue.id) ").
-				$join_sql.
-				$where_sql;
-			$total = $db->GetOne($count_sql);
+			// We can skip counting if we have a less-than-full single page
+			if(!(0 == $page && $total < $limit)) {
+				$count_sql =
+					($has_multiple_values ? "SELECT COUNT(DISTINCT mail_queue.id) " : "SELECT COUNT(mail_queue.id) ").
+					$join_sql.
+					$where_sql;
+				$total = $db->GetOne($count_sql);
+			}
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return array($results,$total);
 	}
@@ -820,7 +827,7 @@ class Context_Draft extends Extension_DevblocksContext {
 	}
 	
 	function getRandom() {
-		//return DAO_MailQueue::random();
+		return DAO_MailQueue::random();
 	}
 	
 	function getPropertyLabels(DevblocksDictionaryDelegate $dict) {
@@ -866,6 +873,8 @@ class Context_Draft extends Extension_DevblocksContext {
 			$object = DAO_MailQueue::get($object);
 		} elseif($object instanceof Model_MailQueue) {
 			// It's what we want already.
+		} elseif(is_array($object)) {
+			$object = Cerb_ORMHelper::recastArrayToModel($object, 'Model_MailQueue');
 		} else {
 			$object = null;
 		}
@@ -904,6 +913,9 @@ class Context_Draft extends Extension_DevblocksContext {
 			$token_values['subject'] = $object->subject;
 			$token_values['to'] = $object->hint_to;
 			$token_values['updated'] = $object->updated;
+			
+			// Custom fields
+			$token_values = $this->_importModelCustomFieldsAsValues($object, $token_values);
 		}
 
 		return true;

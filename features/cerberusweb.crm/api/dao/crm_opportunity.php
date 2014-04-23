@@ -52,7 +52,7 @@ class DAO_CrmOpportunity extends Cerb_ORMHelper {
 		return $id;
 	}
 	
-	static function update($ids, $fields) {
+	static function update($ids, $fields, $check_deltas=true) {
 		if(!is_array($ids))
 			$ids = array($ids);
 		
@@ -62,17 +62,19 @@ class DAO_CrmOpportunity extends Cerb_ORMHelper {
 		while($batch_ids = array_shift($chunks)) {
 			if(empty($batch_ids))
 				continue;
-			
-			// Get state before changes
-			$object_changes = parent::_getUpdateDeltas($batch_ids, $fields, get_class());
 
+			// Send events
+			if($check_deltas) {
+				CerberusContexts::checkpointChanges(CerberusContexts::CONTEXT_OPPORTUNITY, $batch_ids);
+			}
+			
 			// Make changes
 			parent::_update($batch_ids, 'crm_opportunity', $fields);
 			
 			// Send events
-			if(!empty($object_changes)) {
+			if($check_deltas) {
 				// Local events
-				self::_processUpdateEvents($object_changes);
+				self::_processUpdateEvents($batch_ids, $fields);
 				
 				// Trigger an event about the changes
 				$eventMgr = DevblocksPlatform::getEventService();
@@ -80,7 +82,7 @@ class DAO_CrmOpportunity extends Cerb_ORMHelper {
 					new Model_DevblocksEvent(
 						'dao.crm_opportunity.update',
 						array(
-							'objects' => $object_changes,
+							'fields' => $fields,
 						)
 					)
 				);
@@ -91,29 +93,62 @@ class DAO_CrmOpportunity extends Cerb_ORMHelper {
 		}
 	}
 	
-	static function _processUpdateEvents($objects) {
-		if(is_array($objects))
-		foreach($objects as $object_id => $object) {
-			@$model = $object['model'];
-			@$changes = $object['changes'];
-			
-			if(empty($model) || empty($changes))
+	static function _processUpdateEvents($ids, $change_fields) {
+		// We only care about these fields, so abort if they aren't referenced
+
+		$observed_fields = array(
+			DAO_CrmOpportunity::IS_CLOSED,
+			DAO_CrmOpportunity::IS_WON,
+		);
+		
+		$used_fields = array_intersect($observed_fields, array_keys($change_fields));
+		
+		if(empty($used_fields))
+			return;
+		
+		// Load records only if they're needed
+		
+		if(false == ($before_models = CerberusContexts::getCheckpoints(CerberusContexts::CONTEXT_OPPORTUNITY, $ids)))
+			return;
+		
+		if(false == ($models = DAO_CrmOpportunity::getIds($ids)))
+			return;
+		
+		// [TODO] These can be merged with 'Record changed' now
+		foreach($models as $id => $model) {
+			if(!isset($before_models[$id]))
 				continue;
+			
+			$before_model = (object) $before_models[$id];
+			
+			/*
+			 * Opp status changed
+			 */
+			
+			@$is_closed = $change_fields[DAO_CrmOpportunity::IS_CLOSED];
+			@$is_won = $change_fields[DAO_CrmOpportunity::IS_WON];
+			
+			if($is_closed == $before_model->is_closed)
+				unset($change_fields[DAO_CrmOpportunity::IS_CLOSED]);
+			
+			if($is_won == $before_model->is_won)
+				unset($change_fields[DAO_CrmOpportunity::IS_WON]);
+			
+			if(
+				isset($change_fields[DAO_CrmOpportunity::IS_CLOSED])
+				|| isset($change_fields[DAO_CrmOpportunity::IS_WON])
+			) {
 				
-			if(!empty($changes[DAO_CrmOpportunity::IS_CLOSED])
-				|| !empty($changes[DAO_CrmOpportunity::IS_WON])) {
-				
-				// We only care about things that are closed.
-				if(empty($model[DAO_CrmOpportunity::IS_CLOSED])) {
+				if(!$model->is_closed) {
 					$activity_point = 'opp.status.open';
 					$status_to = 'open';
 					
 				} else {
-					if(!empty($model[DAO_CrmOpportunity::IS_WON])) {
+					if($model->is_won) {
 						$activity_point = 'opp.status.closed_won';
 						$status_to = 'closed/won';
 						
-					} else { // closed_lost
+					} else {
 						$activity_point = 'opp.status.closed_lost';
 						$status_to = 'closed/lost';
 					}
@@ -126,16 +161,17 @@ class DAO_CrmOpportunity extends Cerb_ORMHelper {
 					//{{actor}} changed opportunity {{target}} to status {{status}}
 					'message' => 'activities.opp.status',
 					'variables' => array(
-						'target' => sprintf("%s", $model[DAO_CrmOpportunity::NAME]),
+						'target' => sprintf("%s", $model->name),
 						'status' => $status_to,
 						),
 					'urls' => array(
-						'target' => sprintf("ctx://%s:%d/%s", CerberusContexts::CONTEXT_OPPORTUNITY, $object_id, $model[DAO_CrmOpportunity::NAME]),
+						'target' => sprintf("ctx://%s:%d/%s", CerberusContexts::CONTEXT_OPPORTUNITY, $model->id, $model->name),
 						)
 				);
-				CerberusContexts::logActivity($activity_point, CerberusContexts::CONTEXT_OPPORTUNITY, $object_id, $entry);
+				CerberusContexts::logActivity($activity_point, CerberusContexts::CONTEXT_OPPORTUNITY, $model->id, $entry);
 			}
 		}
+		
 	}
 	
 	static function updateWhere($fields, $where) {
@@ -181,7 +217,7 @@ class DAO_CrmOpportunity extends Cerb_ORMHelper {
 	static private function _getObjectsFromResult($rs) {
 		$objects = array();
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$object = new Model_CrmOpportunity();
 			$object->id = intval($row['id']);
 			$object->name = $row['name'];
@@ -195,7 +231,7 @@ class DAO_CrmOpportunity extends Cerb_ORMHelper {
 			$objects[$object->id] = $object;
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return $objects;
 	}
@@ -227,7 +263,7 @@ class DAO_CrmOpportunity extends Cerb_ORMHelper {
 		$ids_list = implode(',', $ids);
 		
 		// Opps
-		$db->Execute(sprintf("DELETE QUICK FROM crm_opportunity WHERE id IN (%s)", $ids_list));
+		$db->Execute(sprintf("DELETE FROM crm_opportunity WHERE id IN (%s)", $ids_list));
 
 		// Fire event
 		$eventMgr = DevblocksPlatform::getEventService();
@@ -298,9 +334,7 @@ class DAO_CrmOpportunity extends Cerb_ORMHelper {
 			"LEFT JOIN contact_org org ON (org.id = a.contact_org_id) ".
 			
 			// [JAS]: Dynamic table joins
-			(isset($tables['context_link']) ? "INNER JOIN context_link ON (context_link.to_context = 'cerberusweb.contexts.opportunity' AND context_link.to_context_id = o.id) " : " ").
-			(isset($tables['ftcc']) ? "INNER JOIN comment ON (comment.context = 'cerberusweb.contexts.opportunity' AND comment.context_id = o.id) " : " ").
-			(isset($tables['ftcc']) ? "INNER JOIN fulltext_comment_content ftcc ON (ftcc.id=comment.id) " : " ")
+			(isset($tables['context_link']) ? "INNER JOIN context_link ON (context_link.to_context = 'cerberusweb.contexts.opportunity' AND context_link.to_context_id = o.id) " : " ")
 			;
 			
 		$cfield_index_map = array(
@@ -361,6 +395,19 @@ class DAO_CrmOpportunity extends Cerb_ORMHelper {
 		settype($param_key, 'string');
 		
 		switch($param_key) {
+			case SearchFields_CrmOpportunity::FULLTEXT_COMMENT_CONTENT:
+				$search = Extension_DevblocksSearchSchema::get(Search_CommentContent::ID);
+				$query = $search->getQueryFromParam($param);
+				$ids = $search->query($query, array('context_crc32' => sprintf("%u", crc32($from_context))));
+				
+				$from_ids = DAO_Comment::getContextIdsByContextAndIds($from_context, $ids);
+				
+				$args['where_sql'] .= sprintf('AND %s IN (%s) ',
+					$from_index,
+					implode(', ', (!empty($from_ids) ? $from_ids : array(-1)))
+				);
+				break;
+			
 			case SearchFields_CrmOpportunity::VIRTUAL_CONTEXT_LINK:
 				$args['has_multiple_values'] = true;
 				self::_searchComponentsVirtualContextLinks($param, $from_context, $from_index, $args['join_sql'], $args['where_sql']);
@@ -411,7 +458,7 @@ class DAO_CrmOpportunity extends Cerb_ORMHelper {
 		
 		$results = array();
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$result = array();
 			foreach($row as $f => $v) {
 				$result[$f] = $v;
@@ -420,17 +467,20 @@ class DAO_CrmOpportunity extends Cerb_ORMHelper {
 			$results[$id] = $result;
 		}
 
-		// [JAS]: Count all
-		$total = -1;
+		$total = count($results);
+		
 		if($withCounts) {
-			$count_sql =
-				($has_multiple_values ? "SELECT COUNT(DISTINCT o.id) " : "SELECT COUNT(o.id) ").
-				$join_sql.
-				$where_sql;
-			$total = $db->GetOne($count_sql);
+			// We can skip counting if we have a less-than-full single page
+			if(!(0 == $page && $total < $limit)) {
+				$count_sql =
+					($has_multiple_values ? "SELECT COUNT(DISTINCT o.id) " : "SELECT COUNT(o.id) ").
+					$join_sql.
+					$where_sql;
+				$total = $db->GetOne($count_sql);
+			}
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return array($results,$total);
 	}
@@ -504,12 +554,13 @@ class SearchFields_CrmOpportunity implements IDevblocksSearchFields {
 			self::VIRTUAL_CONTEXT_LINK => new DevblocksSearchField(self::VIRTUAL_CONTEXT_LINK, '*', 'context_link', $translate->_('common.links'), null),
 			self::VIRTUAL_HAS_FIELDSET => new DevblocksSearchField(self::VIRTUAL_HAS_FIELDSET, '*', 'has_fieldset', $translate->_('common.fieldset'), null),
 			self::VIRTUAL_WATCHERS => new DevblocksSearchField(self::VIRTUAL_WATCHERS, '*', 'workers', $translate->_('common.watchers'), 'WS'),
+				
+			self::FULLTEXT_COMMENT_CONTENT => new DevblocksSearchField(self::FULLTEXT_COMMENT_CONTENT, 'ftcc', 'content', $translate->_('comment.filters.content'), 'FT'),
 		);
 		
-		$tables = DevblocksPlatform::getDatabaseTables();
-		if(isset($tables['fulltext_comment_content'])) {
-			$columns[self::FULLTEXT_COMMENT_CONTENT] = new DevblocksSearchField(self::FULLTEXT_COMMENT_CONTENT, 'ftcc', 'content', $translate->_('comment.filters.content'), 'FT');
-		}
+		// Fulltext indexes
+		
+		$columns[self::FULLTEXT_COMMENT_CONTENT]->ft_schema = Search_CommentContent::ID;
 		
 		// Custom fields with fieldsets
 		
@@ -1155,6 +1206,8 @@ class Context_Opportunity extends Extension_DevblocksContext implements IDevbloc
 			$opp = DAO_CrmOpportunity::get($opp);
 		} elseif($opp instanceof Model_CrmOpportunity) {
 			// It's what we want already.
+		} elseif(is_array($opp)) {
+			$opp = Cerb_ORMHelper::recastArrayToModel($opp, 'Model_CrmOpportunity');
 		} else {
 			$opp = null;
 		}
@@ -1162,6 +1215,7 @@ class Context_Opportunity extends Extension_DevblocksContext implements IDevbloc
 		// Token labels
 		$token_labels = array(
 			'_label' => $prefix,
+			'id' => $prefix.$translate->_('common.id'),
 			'amount' => $prefix.$translate->_('crm.opportunity.amount'),
 			'created' => $prefix.$translate->_('common.created'),
 			'is_closed' => $prefix.$translate->_('crm.opportunity.is_closed'),
@@ -1175,6 +1229,7 @@ class Context_Opportunity extends Extension_DevblocksContext implements IDevbloc
 		// Token types
 		$token_types = array(
 			'_label' => 'context_url',
+			'id' => Model_CustomField::TYPE_NUMBER,
 			'amount' => Model_CustomField::TYPE_NUMBER,
 			'created' => Model_CustomField::TYPE_DATE,
 			'is_closed' => Model_CustomField::TYPE_CHECKBOX,
@@ -1217,6 +1272,9 @@ class Context_Opportunity extends Extension_DevblocksContext implements IDevbloc
 			} else {
 				$token_values['status'] = 'open';
 			}
+			
+			// Custom fields
+			$token_values = $this->_importModelCustomFieldsAsValues($opp, $token_values);
 			
 			// URL
 			$url_writer = DevblocksPlatform::getUrlService();

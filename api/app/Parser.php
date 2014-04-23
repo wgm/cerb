@@ -238,16 +238,14 @@ class CerberusParserModel {
 				
 				// Only consider the watcher auth header to be a reply if it validates
 				if($senderWorker instanceof Model_Worker
-						&& @preg_match('#\<(.*)\_(\d*)\_(\d*)\_([a-f0-9]{8})\@cerb\d{0,1}\>#', $ref, $hits)
-						&& $this->isValidAuthHeader($ref, $senderWorker)) {
+						&& @preg_match('#\<([a-f0-9]+)\@cerb\d{0,1}\>#', $ref, $hits)
+						&& false != ($relay_message_id = $this->isValidAuthHeader($ref, $senderWorker))) {
 				
-					$ticket_id = $hits[2];
-					
-					if(null != ($ticket = DAO_Ticket::get($ticket_id))) {
+					if(null != ($ticket = DAO_Ticket::getTicketByMessageId($relay_message_id))) {
 						$this->_is_new = false;
 						$this->_ticket_id = $ticket_id;
 						$this->_ticket_model = $ticket;
-						$this->_message_id = $ticket->last_message_id;
+						$this->_message_id = $relay_message_id;
 						return;
 					}
 				}
@@ -330,7 +328,7 @@ class CerberusParserModel {
 	public function isWorkerRelayReply() {
 		@$in_reply_to = trim($this->_message->headers['in-reply-to']);
 		
-		if(!empty($in_reply_to) && @preg_match('#\<(.*)\_(\d*)\_(\d*)\_([a-f0-9]{8})\@cerb\d{0,1}\>#', $in_reply_to))
+		if(!empty($in_reply_to) && @preg_match('#\<[a-f0-9]+\@cerb\d{0,1}\>#', $in_reply_to))
 			return true;
 		
 		return false;
@@ -340,16 +338,17 @@ class CerberusParserModel {
 		if(empty($worker) || !($worker instanceof Model_Worker))
 			return false;
 		
-		if(@preg_match('#\<(.*)\_(\d*)\_(\d*)\_([a-f0-9]{8})\@cerb\d{0,1}\>#', $in_reply_to, $hits)) {
-			$proxy_context = $hits[1];
-			$proxy_context_id = $hits[2];
-			$signed = $hits[4];
+		// See if we can trust the given message_id
+		if(@preg_match('#\<([a-f0-9]+)\@cerb\d{0,1}\>#', $in_reply_to, $hits)) {
+			@$hash = $hits[1];
+			@$signed = substr($hash, 4, 40);
+			@$message_id = hexdec(substr($hash, 44));
 			
-			$signed_compare = substr(md5($proxy_context.$proxy_context_id.$worker->pass),8,8);
+			$signed_compare = sha1($message_id . $worker->id . APP_DB_PASS);
 			
 			$is_authenticated = ($signed_compare == $signed);
 			
-			return $is_authenticated;
+			return $message_id;
 		}
 		
 		return false;
@@ -865,7 +864,7 @@ class CerberusParser {
 		}
 		
 		// Parse headers into $model
-		$model = new CerberusParserModel($message);
+		$model = new CerberusParserModel($message); /* @var $model CerberusParserModel */
 		
 		if(false == ($validated = $model->validate()))
 			return $validated; // false or null
@@ -1001,7 +1000,7 @@ class CerberusParser {
 					// Properties
 					$properties = array(
 						'ticket_id' => $proxy_ticket->id,
-						'message_id' => $proxy_ticket->last_message_id,
+						'message_id' => is_numeric($is_authenticated) ? $is_authenticated : $proxy_ticket->last_message_id,
 						'forward_files' => $attachment_file_ids,
 						'link_forward_files' => true,
 						'worker_id' => $proxy_worker->id,
@@ -1135,55 +1134,14 @@ class CerberusParser {
 
 		// New Ticket
 		if($model->getIsNew()) {
-			// Routing new tickets
-			if(null != ($routing_rules = Model_MailToGroupRule::getMatches(
-				$model->getSenderAddressModel(),
-				$message
-			))) {
-				if(is_array($routing_rules))
-				foreach($routing_rules as $rule) {
-					// Only end up with the last 'move' action (ignore the previous)
-					if(isset($rule->actions['move'])) {
-						$model->setGroupId($rule->actions['move']['group_id']);
-						
-						// We don't need to move again when running rule actions
-						unset($rule->actions['move']);
-					}
-				}
-			}
-			
-			// Last ditch effort to check for a default group to deliver to
-			$group_id = $model->getGroupId();
-			if(empty($group_id)) {
-				if(null != ($default_group = DAO_Group::getDefaultGroup())) {
-					$model->setGroupId($default_group->id);
-				}
-			}
-
-			// Bounce if we can't set the group id
-			$group_id = $model->getGroupId();
-			if(empty($group_id)) {
-				$logger->error("[Parser] Can't determine a default group to deliver to.");
-				return FALSE;
-			}
-			
-			// [JAS] It's important to not set the group_id on the ticket until the messages exist
-			// or inbox filters will just abort.
+			// Insert a bare minimum record so we can get a ticket ID back
 			$fields = array(
-				DAO_Ticket::MASK => CerberusApplication::generateTicketMask(),
-				DAO_Ticket::SUBJECT => $model->getSubject(),
-				DAO_Ticket::IS_CLOSED => 0,
-				DAO_Ticket::FIRST_WROTE_ID => intval($model->getSenderAddressModel()->id),
-				DAO_Ticket::LAST_WROTE_ID => intval($model->getSenderAddressModel()->id),
 				DAO_Ticket::CREATED_DATE => time(),
 				DAO_Ticket::UPDATED_DATE => time(),
-				DAO_Ticket::ORG_ID => intval($model->getSenderAddressModel()->contact_org_id),
-				DAO_Ticket::LAST_ACTION_CODE => CerberusTicketActionCode::TICKET_OPENED,
 			);
 			$model->setTicketId(DAO_Ticket::create($fields));
-
-			$ticket_id = $model->getTicketId();
-			if(empty($ticket_id)) {
+			
+			if(null == $model->getTicketId()) {
 				$logger->error("Problem saving ticket...");
 				return false;
 			}
@@ -1198,16 +1156,37 @@ class CerberusParser {
 			if(DevblocksPlatform::getPluginSetting('cerberusweb.core', CerberusSettings::PARSER_AUTO_REQ, CerberusSettingsDefaults::PARSER_AUTO_REQ)) {
 				$destinations = $model->getRecipients();
 				
+				// [TODO] Multiple values in one insert
 				if(is_array($destinations))
 				foreach($destinations as $dest) {
 					DAO_Ticket::createRequester($dest, $model->getTicketId());
 				}
 			}
 			
-			// Apply routing actions to our new ticket ID
-			if(isset($routing_rules) && is_array($routing_rules))
-			foreach($routing_rules as $rule) {
-				$rule->run($model->getTicketId());
+			// Routing new tickets
+			if(null != ($routing_rules = Model_MailToGroupRule::getMatches(
+				$model->getSenderAddressModel(),
+				$message
+			))) {
+				
+				// Update our model with the results of the routing rules
+				if(is_array($routing_rules))
+				foreach($routing_rules as $rule) {
+					$rule->run($model);
+				}
+			}
+			
+			// Last ditch effort to check for a default group to deliver to
+			if(null == $model->getGroupId()) {
+				if(null != ($default_group = DAO_Group::getDefaultGroup())) {
+					$model->setGroupId($default_group->id);
+				}
+			}
+
+			// Bounce if we can't set the group id
+			if(null == $model->getGroupId()) {
+				$logger->error("[Parser] Can't determine a default group to deliver to.");
+				return FALSE;
 			}
 
 		} // endif ($model->getIsNew())
@@ -1230,9 +1209,8 @@ class CerberusParser {
 		Storage_MessageContent::put($model->getMessageId(), $message->body);
 		
 		// Save headers
-		foreach($headers as $hk => $hv) {
-			DAO_MessageHeader::create($model->getMessageId(), $hk, $hv);
-		}
+		if(is_array($headers))
+			DAO_MessageHeader::creates($model->getMessageId(), $headers);
 		
 		// [mdf] Loop through files to insert attachment records in the db, and move temporary files
 		foreach ($message->files as $filename => $file) { /* @var $file ParserFile */
@@ -1385,20 +1363,29 @@ class CerberusParser {
 		}
 		
 		// Finalize our new ticket details (post-message creation)
+		/* @var $model CerberusParserModel */
 		if($model->getIsNew()) {
-			// First thread (needed for anti-spam)
-			DAO_Ticket::update($model->getTicketId(), array(
-				 DAO_Ticket::FIRST_MESSAGE_ID => $model->getMessageId(),
-				 DAO_Ticket::LAST_MESSAGE_ID => $model->getMessageId(),
-			));
-			
-			// Prime the change fields (which a few things like anti-spam might change before we commit)
 			$change_fields = array(
+				DAO_Ticket::MASK => CerberusApplication::generateTicketMask(),
+				DAO_Ticket::SUBJECT => $model->getSubject(),
+				DAO_Ticket::IS_CLOSED => 0,
+				DAO_Ticket::FIRST_WROTE_ID => intval($model->getSenderAddressModel()->id),
+				DAO_Ticket::LAST_WROTE_ID => intval($model->getSenderAddressModel()->id),
+				DAO_Ticket::CREATED_DATE => time(),
+				DAO_Ticket::UPDATED_DATE => time(),
+				DAO_Ticket::ORG_ID => intval($model->getSenderAddressModel()->contact_org_id),
+				DAO_Ticket::LAST_ACTION_CODE => CerberusTicketActionCode::TICKET_OPENED,
+				DAO_Ticket::FIRST_MESSAGE_ID => $model->getMessageId(),
+				DAO_Ticket::LAST_MESSAGE_ID => $model->getMessageId(),
 				DAO_Ticket::GROUP_ID => $model->getGroupId(), // this triggers move rules
 			);
 			
-			// [TODO] Benchmark anti-spam
-			$out = CerberusBayes::calculateTicketSpamProbability($model->getTicketId());
+			// Spam probabilities
+			// [TODO] Check headers?
+			if(false !== ($spam_data = CerberusBayes::calculateContentSpamProbability($model->getSubject() . ' ' . $message->body))) {
+				$change_fields[DAO_Ticket::SPAM_SCORE] = $spam_data['probability'];
+				$change_fields[DAO_Ticket::INTERESTING_WORDS] = $spam_data['interesting_words'];
+			}
 		
 			// Save properties
 			if(!empty($change_fields))

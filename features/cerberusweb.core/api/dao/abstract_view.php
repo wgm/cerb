@@ -52,7 +52,7 @@ abstract class C4_AbstractView {
 				return array();
 			
 			$data = call_user_func_array(
-				array($dao_class,'search'),
+				array($dao_class, 'search'),
 				array(
 					$this->view_columns,
 					$this->getParams(),
@@ -76,15 +76,16 @@ abstract class C4_AbstractView {
 			implode(',', $ids)
 		);
 
-		if(!method_exists($dao_class,'getWhere'))
+		if(!method_exists($dao_class, 'getWhere'))
 			return array();
 		
 		$results = array();
 		
 		$models = call_user_func_array(
-			array($dao_class,'getWhere'),
+			array($dao_class, 'getWhere'),
 			array(
 				$sql,
+				null,
 			)
 		);
 		
@@ -135,7 +136,7 @@ abstract class C4_AbstractView {
 		$rs = $db->Execute($sql);
 		
 		$objects = array();
-		while($row = mysql_fetch_row($rs)) {
+		while($row = mysqli_fetch_row($rs)) {
 			$objects[] = $row[0];
 		}
 		
@@ -2815,7 +2816,6 @@ class C4_AbstractViewLoader {
 
 		// [TODO] This needs a bit more logic
 		$active_worker = CerberusApplication::getActiveWorker();
-		//$view->setPlaceholderLabels(array('current_worker_id', 'Current Worker'));
 		$view->setPlaceholderValues(array('current_worker_id' => !empty($active_worker) ? $active_worker->id : 0));
 		
 		return $view;
@@ -2862,8 +2862,8 @@ class DAO_WorkerViewModel {
 			(!empty($where) ? ('WHERE ' . $where) : '')
 		));
 		
-		if(is_resource($rs))
-		while($row = mysql_fetch_array($rs)) {
+		if($rs instanceof mysqli_result)
+		while($row = mysqli_fetch_array($rs)) {
 			$model = new C4_AbstractViewModel();
 			$model->id = $row['view_id'];
 			$model->worker_id = $row['worker_id'];

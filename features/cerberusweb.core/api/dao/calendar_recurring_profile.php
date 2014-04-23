@@ -63,7 +63,7 @@ class DAO_CalendarRecurringProfile extends Cerb_ORMHelper {
 		return $id;
 	}
 	
-	static function update($ids, $fields) {
+	static function update($ids, $fields, $check_deltas=true) {
 		if(!is_array($ids))
 			$ids = array($ids);
 		
@@ -74,24 +74,23 @@ class DAO_CalendarRecurringProfile extends Cerb_ORMHelper {
 			if(empty($batch_ids))
 				continue;
 			
-			// Get state before changes
-			$object_changes = parent::_getUpdateDeltas($batch_ids, $fields, get_class());
-
+			// Send events
+			if($check_deltas) {
+				CerberusContexts::checkpointChanges(CerberusContexts::CONTEXT_CALENDAR_EVENT_RECURRING, $batch_ids);
+			}
+			
 			// Make changes
 			parent::_update($batch_ids, 'calendar_recurring_profile', $fields);
 			
 			// Send events
-			if(!empty($object_changes)) {
-				// Local events
-				//self::_processUpdateEvents($object_changes);
-				
+			if(!empty($check_deltas)) {
 				// Trigger an event about the changes
 				$eventMgr = DevblocksPlatform::getEventService();
 				$eventMgr->trigger(
 					new Model_DevblocksEvent(
 						'dao.calendar_recurring_profile.update',
 						array(
-							'objects' => $object_changes,
+							'fields' => $fields,
 						)
 					)
 				);
@@ -162,7 +161,7 @@ class DAO_CalendarRecurringProfile extends Cerb_ORMHelper {
 	static private function _getObjectsFromResult($rs) {
 		$objects = array();
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$object = new Model_CalendarRecurringProfile();
 			$object->id = $row['id'];
 			$object->event_name = $row['event_name'];
@@ -177,9 +176,13 @@ class DAO_CalendarRecurringProfile extends Cerb_ORMHelper {
 			$objects[$object->id] = $object;
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return $objects;
+	}
+	
+	static function random() {
+		return self::_getRandom('calendar_recurring_profile');
 	}
 	
 	static function delete($ids) {
@@ -359,13 +362,12 @@ class DAO_CalendarRecurringProfile extends Cerb_ORMHelper {
 			$rs = $db->SelectLimit($sql,$limit,$page*$limit) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs ADORecordSet */
 		} else {
 			$rs = $db->Execute($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs ADORecordSet */
-			$total = mysql_num_rows($rs);
+			$total = mysqli_num_rows($rs);
 		}
 		
 		$results = array();
-		$total = -1;
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$result = array();
 			foreach($row as $f => $v) {
 				$result[$f] = $v;
@@ -374,16 +376,20 @@ class DAO_CalendarRecurringProfile extends Cerb_ORMHelper {
 			$results[$object_id] = $result;
 		}
 
-		// [JAS]: Count all
+		$total = count($results);
+		
 		if($withCounts) {
-			$count_sql =
-				($has_multiple_values ? "SELECT COUNT(DISTINCT calendar_recurring_profile.id) " : "SELECT COUNT(calendar_recurring_profile.id) ").
-				$join_sql.
-				$where_sql;
-			$total = $db->GetOne($count_sql);
+			// We can skip counting if we have a less-than-full single page
+			if(!(0 == $page && $total < $limit)) {
+				$count_sql =
+					($has_multiple_values ? "SELECT COUNT(DISTINCT calendar_recurring_profile.id) " : "SELECT COUNT(calendar_recurring_profile.id) ").
+					$join_sql.
+					$where_sql;
+				$total = $db->GetOne($count_sql);
+			}
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return array($results,$total);
 	}
@@ -569,7 +575,7 @@ class Model_CalendarRecurringProfile {
 	}
 };
 
-class View_CalendarRecurringProfile extends C4_AbstractView implements IAbstractView_Subtotals {
+class View_CalendarRecurringProfile extends C4_AbstractView implements IAbstractView_Subtotals, IAbstractView_QuickSearch {
 	const DEFAULT_ID = 'calendarrecurringprofile';
 
 	function __construct() {
@@ -712,6 +718,59 @@ class View_CalendarRecurringProfile extends C4_AbstractView implements IAbstract
 		}
 		
 		return $counts;
+	}
+	
+	function isQuickSearchField($token) {
+		switch($token) {
+			case SearchFields_CalendarRecurringProfile::CALENDAR_ID:
+				return true;
+			break;
+		}
+		
+		return false;
+	}
+	
+	function quickSearch($token, $query, &$oper, &$value) {
+		switch($token) {
+			case SearchFields_CalendarRecurringProfile::CALENDAR_ID:
+				$search_ids = array();
+				$oper = DevblocksSearchCriteria::OPER_IN;
+				
+				if(preg_match('#([\!\=]+)(.*)#', $query, $matches)) {
+					$oper_hint = trim($matches[1]);
+					$query = trim($matches[2]);
+					
+					switch($oper_hint) {
+						case '!':
+						case '!=':
+							$oper = DevblocksSearchCriteria::OPER_NIN;
+							break;
+					}
+				}
+				
+				$calendars = DAO_Calendar::getAll();
+				$inputs = DevblocksPlatform::parseCsvString($query);
+
+				if(is_array($inputs))
+				foreach($inputs as $input) {
+					foreach($calendars as $calendar_id => $calendar) {
+						if(0 == strcasecmp($input, substr($calendar->name,0,strlen($input))))
+							$search_ids[$calendar_id] = true;
+					}
+				}
+				
+				if(!empty($search_ids)) {
+					$value = array_keys($search_ids);
+				} else {
+					$value = null;
+				}
+				
+				return true;
+				break;
+				
+		}
+		
+		return false;
 	}
 	
 	function render() {
@@ -967,7 +1026,7 @@ class View_CalendarRecurringProfile extends C4_AbstractView implements IAbstract
 
 class Context_CalendarRecurringProfile extends Extension_DevblocksContext implements IDevblocksContextProfile, IDevblocksContextPeek { // IDevblocksContextImport
 	function getRandom() {
-		//return DAO_CalendarRecurringProfile::random();
+		return DAO_CalendarRecurringProfile::random();
 	}
 	
 	function profileGetUrl($context_id) {
@@ -1042,6 +1101,8 @@ class Context_CalendarRecurringProfile extends Extension_DevblocksContext implem
 			$calendar_recurring_profile = DAO_CalendarRecurringProfile::get($calendar_recurring_profile);
 		} elseif($calendar_recurring_profile instanceof Model_CalendarRecurringProfile) {
 			// It's what we want already.
+		} elseif(is_array($calendar_recurring_profile)) {
+			$calendar_recurring_profile = Cerb_ORMHelper::recastArrayToModel($calendar_recurring_profile, 'Model_CalendarRecurringProfile');
 		} else {
 			$calendar_recurring_profile = null;
 		}
@@ -1104,6 +1165,9 @@ class Context_CalendarRecurringProfile extends Extension_DevblocksContext implem
 			$token_values['tz'] = $calendar_recurring_profile->tz;
 			$token_values['patterns'] = $calendar_recurring_profile->patterns;
 
+			// Custom fields
+			$token_values = $this->_importModelCustomFieldsAsValues($calendar_recurring_profile, $token_values);
+			
 			// Calendar
 			$merge_token_labels = array();
 			$merge_token_values = array();

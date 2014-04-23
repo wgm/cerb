@@ -48,31 +48,8 @@ class DAO_MailHtmlTemplate extends Cerb_ORMHelper {
 			if(empty($batch_ids))
 				continue;
 			
-			// Get state before changes
-			$object_changes = parent::_getUpdateDeltas($batch_ids, $fields, get_class());
-
 			// Make changes
 			parent::_update($batch_ids, 'mail_html_template', $fields);
-			
-			// Send events
-			if(!empty($object_changes)) {
-				// Local events
-				//self::_processUpdateEvents($object_changes);
-				
-				// Trigger an event about the changes
-				$eventMgr = DevblocksPlatform::getEventService();
-				$eventMgr->trigger(
-					new Model_DevblocksEvent(
-						'dao.mail_html_template.update',
-						array(
-							'objects' => $object_changes,
-						)
-					)
-				);
-				
-				// Log the context update
-				//DevblocksPlatform::markContextChanged(CerberusContexts::CONTEXT_, $batch_ids);
-			}
 		}
 		
 		self::clearCache();
@@ -142,7 +119,7 @@ class DAO_MailHtmlTemplate extends Cerb_ORMHelper {
 	static private function _getObjectsFromResult($rs) {
 		$objects = array();
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$object = new Model_MailHtmlTemplate();
 			$object->id = $row['id'];
 			$object->name = $row['name'];
@@ -153,9 +130,13 @@ class DAO_MailHtmlTemplate extends Cerb_ORMHelper {
 			$objects[$object->id] = $object;
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return $objects;
+	}
+	
+	static function random() {
+		return self::_getRandom('mail_html_template');
 	}
 	
 	static function delete($ids) {
@@ -326,13 +307,12 @@ class DAO_MailHtmlTemplate extends Cerb_ORMHelper {
 			$rs = $db->SelectLimit($sql,$limit,$page*$limit) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs ADORecordSet */
 		} else {
 			$rs = $db->Execute($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs ADORecordSet */
-			$total = mysql_num_rows($rs);
+			$total = mysqli_num_rows($rs);
 		}
 		
 		$results = array();
-		$total = -1;
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$result = array();
 			foreach($row as $f => $v) {
 				$result[$f] = $v;
@@ -341,16 +321,20 @@ class DAO_MailHtmlTemplate extends Cerb_ORMHelper {
 			$results[$object_id] = $result;
 		}
 
-		// [JAS]: Count all
+		$total = count($results);
+		
 		if($withCounts) {
-			$count_sql =
-				($has_multiple_values ? "SELECT COUNT(DISTINCT mail_html_template.id) " : "SELECT COUNT(mail_html_template.id) ").
-				$join_sql.
-				$where_sql;
-			$total = $db->GetOne($count_sql);
+			// We can skip counting if we have a less-than-full single page
+			if(!(0 == $page && $total < $limit)) {
+				$count_sql =
+					($has_multiple_values ? "SELECT COUNT(DISTINCT mail_html_template.id) " : "SELECT COUNT(mail_html_template.id) ").
+					$join_sql.
+					$where_sql;
+				$total = $db->GetOne($count_sql);
+			}
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return array($results,$total);
 	}
@@ -783,7 +767,7 @@ class View_MailHtmlTemplate extends C4_AbstractView implements IAbstractView_Sub
 
 class Context_MailHtmlTemplate extends Extension_DevblocksContext implements IDevblocksContextProfile, IDevblocksContextPeek { // IDevblocksContextImport
 	function getRandom() {
-		//return DAO_MailHtmlTemplate::random();
+		return DAO_MailHtmlTemplate::random();
 	}
 	
 	function profileGetUrl($context_id) {
@@ -831,6 +815,8 @@ class Context_MailHtmlTemplate extends Extension_DevblocksContext implements IDe
 			$mail_html_template = DAO_MailHtmlTemplate::get($mail_html_template);
 		} elseif($mail_html_template instanceof Model_MailHtmlTemplate) {
 			// It's what we want already.
+		} elseif(is_array($mail_html_template)) {
+			$mail_html_template = Cerb_ORMHelper::recastArrayToModel($mail_html_template, 'Model_MailHtmlTemplate');
 		} else {
 			$mail_html_template = null;
 		}
@@ -873,6 +859,9 @@ class Context_MailHtmlTemplate extends Extension_DevblocksContext implements IDe
 			$token_values['id'] = $mail_html_template->id;
 			$token_values['name'] = $mail_html_template->name;
 			$token_values['updated_at'] = $mail_html_template->updated_at;
+			
+			// Custom fields
+			$token_values = $this->_importModelCustomFieldsAsValues($mail_html_template, $token_values);
 			
 			// URL
 			$url_writer = DevblocksPlatform::getUrlService();

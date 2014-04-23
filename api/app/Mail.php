@@ -444,9 +444,7 @@ class CerberusMail {
 		}
 		
 		// Headers
-		foreach($mail_headers as $hdr_key => $hdr_val) {
-			DAO_MessageHeader::create($message_id, $hdr_key, $hdr_val);
-		}
+		DAO_MessageHeader::creates($message_id, $mail_headers);
 		
 		// add files to ticket
 		if (is_array($files) && !empty($files)) {
@@ -914,11 +912,7 @@ class CerberusMail {
 			Storage_MessageContent::put($message_id, $content);
 
 			// Save cached headers
-			foreach($send_headers as $hdr_key => $hdr_val) {
-				if(empty($hdr_key) || empty($hdr_val))
-					continue;
-				DAO_MessageHeader::create($message_id, $hdr_key, $hdr_val);
-			}
+			DAO_MessageHeader::creates($message_id, $send_headers);
 			
 			// Attachments
 			if (is_array($files) && !empty($files)) {
@@ -1154,11 +1148,12 @@ class CerberusMail {
 				$subject = sprintf("[relay #%s] %s", $ticket->mask, $ticket->subject);
 				$mail->setSubject($subject);
 	
-				// Find the owner of this ticket and sign it.
-				$sign = substr(md5(CerberusContexts::CONTEXT_TICKET.$ticket->id.$worker->pass),8,8);
-				
 				$headers->removeAll('message-id');
-				$headers->addTextHeader('Message-Id', sprintf("<%s_%d_%d_%s@cerb>", CerberusContexts::CONTEXT_TICKET, $ticket->id, time(), $sign));
+
+				// Sign the message so we can verify that a future relay reply is genuine
+				$sign = sha1($message->id . $worker->id . APP_DB_PASS);
+				$headers->addTextHeader('Message-Id', sprintf("<%s%s%s@cerb>", dechex(mt_rand(255,65535)), $sign, dechex($message->id)));
+				
 				$headers->addTextHeader('X-CerberusRedirect','1');
 	
 				// [TODO] HTML body?

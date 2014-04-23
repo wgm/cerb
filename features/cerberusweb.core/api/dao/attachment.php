@@ -81,7 +81,7 @@ class DAO_Attachment extends DevblocksORMHelper {
 	private static function _getObjectsFromResult($rs) {
 		$objects = array();
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$object = new Model_Attachment();
 			$object->id = intval($row['id']);
 			$object->display_name = $row['display_name'];
@@ -95,7 +95,7 @@ class DAO_Attachment extends DevblocksORMHelper {
 			$objects[$object->id] = $object;
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return $objects;
 	}
@@ -146,22 +146,20 @@ class DAO_Attachment extends DevblocksORMHelper {
 		
 		// Delete attachments where links=0 and created > 1h
 		// This also cleans up temporary attachment uploads from the file chooser.
-		$rs = $db->Execute(sprintf("SELECT SQL_CALC_FOUND_ROWS attachment.id ".
-			"FROM attachment ".
-			"LEFT JOIN attachment_link ON (attachment.id = attachment_link.attachment_id) ".
-			"WHERE attachment_link.attachment_id IS NULL ".
-			"AND attachment.updated <= %d",
-			(time()-86400)
-		));
-		
+		$db->Execute("CREATE TEMPORARY TABLE _tmp_maint_attachment SELECT id, updated FROM attachment");
+		$db->Execute("DELETE FROM _tmp_maint_attachment WHERE id IN (SELECT attachment_id FROM attachment_link)");
+		$db->Execute("DELETE FROM _tmp_maint_attachment WHERE updated >= UNIX_TIMESTAMP() - 86400 AND updated != 2147483647");
+		$rs = $db->Execute("SELECT SQL_CALC_FOUND_ROWS id FROM _tmp_maint_attachment");
 		$count = $db->GetOne("SELECT FOUND_ROWS();");
-		
+
 		if(!empty($count)) {
-			while($row = mysql_fetch_row($rs)) {
+			while($row = mysqli_fetch_row($rs)) {
 				DAO_Attachment::delete($row[0]);
 			}
-			mysql_free_result($rs);
+			mysqli_free_result($rs);
 		}
+
+		$db->Execute("DROP TABLE _tmp_maint_attachment");
 		
 		$logger->info('[Maint] Purged ' . $count . ' attachment records.');
 	}
@@ -269,9 +267,8 @@ class DAO_Attachment extends DevblocksORMHelper {
 		$rs = $db->SelectLimit($sql,$limit,$page*$limit) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
 		
 		$results = array();
-		$total = -1;
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$result = array();
 			foreach($row as $f => $v) {
 				$result[$f] = $v;
@@ -280,15 +277,20 @@ class DAO_Attachment extends DevblocksORMHelper {
 			$results[$id] = $result;
 		}
 
+		$total = count($results);
+		
 		if($withCounts) {
-			$count_sql =
-				"SELECT COUNT(a.id) ".
-				$join_sql.
-				$where_sql;
-			$total = $db->GetOne($count_sql);
+			// We can skip counting if we have a less-than-full single page
+			if(!(0 == $page && $total < $limit)) {
+				$count_sql =
+					"SELECT COUNT(a.id) ".
+					$join_sql.
+					$where_sql;
+				$total = $db->GetOne($count_sql);
+			}
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return array($results,$total);
 	}
@@ -468,7 +470,7 @@ class Storage_Attachments extends Extension_DevblocksStorageSchema {
 		
 		// Delete the physical files
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$profile = !empty($row['storage_profile_id']) ? $row['storage_profile_id'] : $row['storage_extension'];
 			
 			if(null != ($storage = DevblocksPlatform::getStorageService($profile)))
@@ -476,7 +478,7 @@ class Storage_Attachments extends Extension_DevblocksStorageSchema {
 					return FALSE;
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return true;
 	}
@@ -511,7 +513,7 @@ class Storage_Attachments extends Extension_DevblocksStorageSchema {
 		);
 		$rs = $db->Execute($sql);
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			self::_migrate($dst_profile, $row);
 
 			if(time() > $stop_time)
@@ -543,7 +545,7 @@ class Storage_Attachments extends Extension_DevblocksStorageSchema {
 		);
 		$rs = $db->Execute($sql);
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			self::_migrate($dst_profile, $row, true);
 
 			if(time() > $stop_time)
@@ -1211,7 +1213,7 @@ class DAO_AttachmentLink extends Cerb_ORMHelper {
 	private static function _getObjectsFromResult($rs) {
 		$objects = array();
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$object = new Model_AttachmentLink();
 			$object->guid = $row['guid'];
 			$object->attachment_id = intval($row['attachment_id']);
@@ -1220,7 +1222,7 @@ class DAO_AttachmentLink extends Cerb_ORMHelper {
 			$objects[$object->guid] = $object;
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return $objects;
 	}
@@ -1316,9 +1318,8 @@ class DAO_AttachmentLink extends Cerb_ORMHelper {
 		$rs = $db->SelectLimit($sql,$limit,$page*$limit) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
 
 		$results = array();
-		$total = -1;
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$result = array();
 			foreach($row as $f => $v) {
 				$result[$f] = $v;
@@ -1326,16 +1327,21 @@ class DAO_AttachmentLink extends Cerb_ORMHelper {
 			$id = $row[SearchFields_AttachmentLink::GUID];
 			$results[$id] = $result;
 		}
+		
+		$total = count($results);
 
 		if($withCounts) {
-			$count_sql =
-				"SELECT COUNT(al.attachment_id) ".
-				$join_sql.
-				$where_sql;
-			$total = $db->GetOne($count_sql);
+			// We can skip counting if we have a less-than-full single page
+			if(!(0 == $page && $total < $limit)) {
+				$count_sql =
+					"SELECT COUNT(al.attachment_id) ".
+					$join_sql.
+					$where_sql;
+				$total = $db->GetOne($count_sql);
+			}
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return array($results,$total);
 	}

@@ -16,6 +16,8 @@
  ***********************************************************************/
 
 class DAO_MailToGroupRule extends DevblocksORMHelper {
+	const _CACHE_ALL = 'cerb:dao:mail_to_group_rule:all';
+	
 	const ID = 'id';
 	const POS = 'pos';
 	const CREATED = 'created';
@@ -42,6 +44,19 @@ class DAO_MailToGroupRule extends DevblocksORMHelper {
 	
 	static function update($ids, $fields) {
 		parent::_update($ids, 'mail_to_group_rule', $fields);
+		
+		self::clearCache();
+	}
+	
+	static function getAll($nocache=false) {
+		$cache = DevblocksPlatform::getCacheService();
+		
+		if($nocache || null === ($results = $cache->load(self::_CACHE_ALL))) {
+			$results = self::getWhere();
+			$cache->save($results, self::_CACHE_ALL, array(), 1200); // 20 mins
+		}
+		
+		return $results;
 	}
 	
 	/**
@@ -62,12 +77,10 @@ class DAO_MailToGroupRule extends DevblocksORMHelper {
 
 	/**
 	 * @param integer $id
-	 * @return Model_MailToGroupRule	 */
+	 * @return Model_MailToGroupRule
+	 */
 	static function get($id) {
-		$objects = self::getWhere(sprintf("%s = %d",
-			self::ID,
-			$id
-		));
+		$objects = self::getAll();
 		
 		if(isset($objects[$id]))
 			return $objects[$id];
@@ -82,7 +95,7 @@ class DAO_MailToGroupRule extends DevblocksORMHelper {
 	static private function _getObjectsFromResult($rs) {
 		$objects = array();
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$object = new Model_MailToGroupRule();
 			$object->id = $row['id'];
 			$object->pos = $row['pos'];
@@ -99,7 +112,7 @@ class DAO_MailToGroupRule extends DevblocksORMHelper {
 			$objects[$object->id] = $object;
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return $objects;
 	}
@@ -116,6 +129,8 @@ class DAO_MailToGroupRule extends DevblocksORMHelper {
 		
 		$db->Execute(sprintf("DELETE FROM mail_to_group_rule WHERE id IN (%s)", $ids_list));
 		
+		self::clearCache();
+		
 		return true;
 	}
 
@@ -124,13 +139,18 @@ class DAO_MailToGroupRule extends DevblocksORMHelper {
 	 *
 	 * @param integer $id
 	 */
-	static function increment($id) {
+	static function increment($id, $by=1) {
 		$db = DevblocksPlatform::getDatabaseService();
-		$db->Execute(sprintf("UPDATE mail_to_group_rule SET pos = pos + 1 WHERE id = %d",
+		$db->Execute(sprintf("UPDATE mail_to_group_rule SET pos = pos + %d WHERE id = %d",
+			$by,
 			$id
 		));
 	}
-
+	
+	static function clearCache() {
+		$cache = DevblocksPlatform::getCacheService();
+		$cache->remove(self::_CACHE_ALL);
+	}
 };
 
 class Model_MailToGroupRule {
@@ -145,7 +165,7 @@ class Model_MailToGroupRule {
 	
 	static function getMatches(Model_Address $fromAddress, CerberusParserMessage $message) {
 		$matches = array();
-		$rules = DAO_MailToGroupRule::getWhere();
+		$rules = DAO_MailToGroupRule::getAll();
 		$message_headers = $message->headers;
 		$custom_fields = DAO_CustomField::getAll();
 		
@@ -426,55 +446,30 @@ class Model_MailToGroupRule {
 	}
 	
 	/**
-	 * @param integer[] $ticket_ids
+	 * @param CerberusParserModel $model
 	 */
-	function run($ticket_ids) {
-		if(!is_array($ticket_ids)) $ticket_ids = array($ticket_ids);
+	function run(CerberusParserModel &$model) {
+		if(null == $model->getTicketId())
+			return;
 		
-		$fields = array();
-		$field_values = array();
-
 		$groups = DAO_Group::getAll();
 		$buckets = DAO_Bucket::getAll();
-//		$workers = DAO_Worker::getAll();
 		$custom_fields = DAO_CustomField::getAll();
 		
-		// actions
+		// Update the model using actions
 		if(is_array($this->actions))
 		foreach($this->actions as $action => $params) {
 			switch($action) {
-//				case 'status':
-//					if(isset($params['is_waiting']))
-//						$fields[DAO_Ticket::IS_WAITING] = intval($params['is_waiting']);
-//					if(isset($params['is_closed']))
-//						$fields[DAO_Ticket::IS_CLOSED] = intval($params['is_closed']);
-//					if(isset($params['is_deleted']))
-//						$fields[DAO_Ticket::IS_DELETED] = intval($params['is_deleted']);
-//					break;
-
 				case 'move':
 					if(isset($params['group_id']) && isset($params['bucket_id'])) {
 						$g_id = intval($params['group_id']);
 						$b_id = intval($params['bucket_id']);
+						
 						if(isset($groups[$g_id]) && (0==$b_id || isset($buckets[$b_id]))) {
-							$fields[DAO_Ticket::GROUP_ID] = $g_id;
-							$fields[DAO_Ticket::BUCKET_ID] = $b_id;
+							$model->setGroupId($g_id);
 						}
 					}
-					break;
 					
-//				case 'spam':
-//					if(isset($params['is_spam'])) {
-//						if(intval($params['is_spam'])) {
-//							foreach($ticket_ids as $ticket_id)
-//								CerberusBayes::markTicketAsSpam($ticket_id);
-//						} else {
-//							foreach($ticket_ids as $ticket_id)
-//								CerberusBayes::markTicketAsNotSpam($ticket_id);
-//						}
-//					}
-//					break;
-
 				default:
 					// Custom fields
 					if(substr($action,0,3)=="cf_") {
@@ -483,19 +478,16 @@ class Model_MailToGroupRule {
 						if(!isset($custom_fields[$field_id]) || !isset($params['value']))
 							break;
 
-						$field_values[$field_id] = $params;
+						// Persist in the model
+						$model->getMessage()->custom_fields[] = array(
+							'field_id' => $field_id,
+							'context' => CerberusContexts::CONTEXT_TICKET,
+							'context_id' => $model->getTicketId(),
+							'value' => $params['value'],
+						);
 					}
 					break;
 			}
 		}
-
-		if(!empty($ticket_ids)) {
-			if(!empty($fields))
-				DAO_Ticket::update($ticket_ids, $fields);
-			
-			// Custom Fields
-			C4_AbstractView::_doBulkSetCustomFields(CerberusContexts::CONTEXT_TICKET, $field_values, $ticket_ids);
-		}
 	}
-	
 };

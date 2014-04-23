@@ -50,7 +50,7 @@ class DAO_Notification extends DevblocksORMHelper {
 		return $id;
 	}
 	
-	static function update($ids, $fields) {
+	static function update($ids, $fields, $check_deltas=true) {
 		if(!is_array($ids))
 			$ids = array($ids);
 		
@@ -60,17 +60,17 @@ class DAO_Notification extends DevblocksORMHelper {
 		while($batch_ids = array_shift($chunks)) {
 			if(empty($batch_ids))
 				continue;
-			
-			// Get state before changes
-			$object_changes = parent::_getUpdateDeltas($batch_ids, $fields, get_class());
+
+			// Send events
+			if($check_deltas) {
+				CerberusContexts::checkpointChanges(CerberusContexts::CONTEXT_NOTIFICATION, $batch_ids);
+			}
 
 			// Make changes
 			parent::_update($batch_ids, 'notification', $fields);
 			
 			// Send events
-			if(!empty($object_changes)) {
-				// Local events
-				//self::_processUpdateEvents($object_changes);
+			if($check_deltas) {
 				
 				// Trigger an event about the changes
 				$eventMgr = DevblocksPlatform::getEventService();
@@ -78,7 +78,7 @@ class DAO_Notification extends DevblocksORMHelper {
 					new Model_DevblocksEvent(
 						'dao.notification.update',
 						array(
-							'objects' => $object_changes,
+							'fields' => $fields,
 						)
 					)
 				);
@@ -182,7 +182,7 @@ class DAO_Notification extends DevblocksORMHelper {
 	static private function _getObjectsFromResult($rs) {
 		$objects = array();
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$object = new Model_Notification();
 			$object->id = $row['id'];
 			$object->context = $row['context'];
@@ -195,7 +195,7 @@ class DAO_Notification extends DevblocksORMHelper {
 			$objects[$object->id] = $object;
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return $objects;
 	}
@@ -247,7 +247,7 @@ class DAO_Notification extends DevblocksORMHelper {
 		$db = DevblocksPlatform::getDatabaseService();
 		$logger = DevblocksPlatform::getConsoleLog();
 		
-		$db->Execute("DELETE QUICK FROM notification WHERE is_read = 1");
+		$db->Execute("DELETE FROM notification WHERE is_read = 1");
 		$logger->info('[Maint] Purged ' . $db->Affected_Rows() . ' notification records.');
 		
 		// Fire event
@@ -355,12 +355,12 @@ class DAO_Notification extends DevblocksORMHelper {
 			$rs = $db->SelectLimit($sql,$limit,$page*$limit) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
 		} else {
 			$rs = $db->Execute($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
-			$total = mysql_num_rows($rs);
+			$total = mysqli_num_rows($rs);
 		}
 		
 		$results = array();
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$result = array();
 			foreach($row as $f => $v) {
 				$result[$f] = $v;
@@ -369,17 +369,20 @@ class DAO_Notification extends DevblocksORMHelper {
 			$results[$ticket_id] = $result;
 		}
 
-		// [JAS]: Count all
-		$total = -1;
+		$total = count($results);
+		
 		if($withCounts) {
-			$count_sql =
-				($has_multiple_values ? "SELECT COUNT(DISTINCT we.id) " : "SELECT COUNT(we.id) ").
-				$join_sql.
-				$where_sql;
-			$total = $db->GetOne($count_sql);
+			// We can skip counting if we have a less-than-full single page
+			if(!(0 == $page && $total < $limit)) {
+				$count_sql =
+					($has_multiple_values ? "SELECT COUNT(DISTINCT we.id) " : "SELECT COUNT(we.id) ").
+					$join_sql.
+					$where_sql;
+				$total = $db->GetOne($count_sql);
+			}
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return array($results,$total);
 	}
@@ -846,6 +849,8 @@ class Context_Notification extends Extension_DevblocksContext {
 			$notification = DAO_Notification::get($notification);
 		} elseif($notification instanceof Model_Notification) {
 			// It's what we want already.
+		} elseif(is_array($notification)) {
+			$notification = Cerb_ORMHelper::recastArrayToModel($notification, 'Model_Notification');
 		} else {
 			$notification = null;
 		}
@@ -900,6 +905,10 @@ class Context_Notification extends Extension_DevblocksContext {
 			$token_values['target__context'] = $notification->context;
 			$token_values['target_id'] = $notification->context_id;
 			
+			// Custom fields
+			$token_values = $this->_importModelCustomFieldsAsValues($notification, $token_values);
+			
+			// Url
 			$redirect_url = $url_writer->writeNoProxy(sprintf("c=preferences&a=redirectRead&id=%d", $notification->id), true);
 			$token_values['url_markread'] = $redirect_url;
 			

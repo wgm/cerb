@@ -54,15 +54,14 @@ require(getcwd() . '/framework.config.php');
 require(DEVBLOCKS_PATH . 'Devblocks.class.php');
 
 // If this is our first run, redirect to the installer
-if('' == APP_DB_DRIVER
-	|| '' == APP_DB_HOST
+if('' == APP_DB_HOST
 	|| '' == APP_DB_DATABASE
 	|| DevblocksPlatform::isDatabaseEmpty()) {
 		DevblocksPlatform::init();
 		$url_writer = DevblocksPlatform::getUrlService();
 		$base_url = rtrim(preg_replace("/index\.php\/$/i",'',$url_writer->write('',true)),"/");
-   		header('Location: '.$base_url.'/install/index.php');
-   		exit;
+		header('Location: '.$base_url.'/install/index.php');
+		exit;
 	}
 
 require(APP_PATH . '/api/Application.class.php');

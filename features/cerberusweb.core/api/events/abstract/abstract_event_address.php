@@ -20,12 +20,12 @@ abstract class AbstractEvent_Address extends Extension_DevblocksEvent {
 
 	/**
 	 *
-	 * @param integer $address_id
+	 * @param integer $context_id
 	 * @return Model_DevblocksEvent
 	 */
-	function generateSampleEventModel(Model_TriggerEvent $trigger, $address_id=null) {
+	function generateSampleEventModel(Model_TriggerEvent $trigger, $context_id=null) {
 		
-		if(empty($address_id)) {
+		if(empty($context_id)) {
 			// Pull the latest record
 			list($results) = DAO_Address::search(
 				array(),
@@ -43,29 +43,31 @@ abstract class AbstractEvent_Address extends Extension_DevblocksEvent {
 			
 			$result = array_shift($results);
 			
-			$address_id = $result[SearchFields_Address::ID];
+			$context_id = $result[SearchFields_Address::ID];
 		}
 		
 		return new Model_DevblocksEvent(
 			$this->_event_id,
 			array(
-				'address_id' => $address_id,
+				'context_id' => $context_id,
 			)
 		);
 	}
 	
-	function setEvent(Model_DevblocksEvent $event_model=null) {
+	function setEvent(Model_DevblocksEvent $event_model=null, Model_TriggerEvent $trigger=null) {
 		$labels = array();
 		$values = array();
 
+		// We can accept a model object or a context_id
+		@$model = $event_model->params['context_model'] ?: $event_model->params['context_id'];
+		
 		/**
-		 * Task
+		 * Address
 		 */
 		
-		@$address_id = $event_model->params['address_id'];
 		$merge_labels = array();
 		$merge_values = array();
-		CerberusContexts::getContext(CerberusContexts::CONTEXT_ADDRESS, $address_id, $merge_labels, $merge_values, null, true);
+		CerberusContexts::getContext(CerberusContexts::CONTEXT_ADDRESS, $model, $merge_labels, $merge_values, null, true);
 
 			// Merge
 			CerberusContexts::merge(
@@ -87,7 +89,7 @@ abstract class AbstractEvent_Address extends Extension_DevblocksEvent {
 	
 	function renderSimulatorTarget($trigger, $event_model) {
 		$context = CerberusContexts::CONTEXT_ADDRESS;
-		$context_id = $event_model->params['address_id'];
+		$context_id = $event_model->params['context_id'];
 		DevblocksEventHelper::renderSimulatorTarget($context, $context_id, $trigger, $event_model);
 	}
 	
@@ -119,8 +121,8 @@ abstract class AbstractEvent_Address extends Extension_DevblocksEvent {
 		return $vals_to_ctx;
 	}
 	
-	function getConditionExtensions() {
-		$labels = $this->getLabels();
+	function getConditionExtensions(Model_TriggerEvent $trigger) {
+		$labels = $this->getLabels($trigger);
 		$types = $this->getTypes();
 		
 		$labels['email_link'] = 'Email is linked';
@@ -252,7 +254,7 @@ abstract class AbstractEvent_Address extends Extension_DevblocksEvent {
 		return $pass;
 	}
 	
-	function getActionExtensions() {
+	function getActionExtensions(Model_TriggerEvent $trigger) {
 		$actions =
 			array(
 				'add_watchers' => array('label' =>'Add watchers'),
@@ -265,7 +267,7 @@ abstract class AbstractEvent_Address extends Extension_DevblocksEvent {
 				'set_is_defunct' => array('label' => 'Set is defunct'),
 				'set_links' => array('label' => 'Set links'),
 			)
-			+ DevblocksEventHelper::getActionCustomFieldsFromLabels($this->getLabels())
+			+ DevblocksEventHelper::getActionCustomFieldsFromLabels($this->getLabels($trigger))
 			;
 			
 		return $actions;

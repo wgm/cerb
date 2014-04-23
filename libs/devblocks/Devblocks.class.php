@@ -5,7 +5,7 @@ include_once(DEVBLOCKS_PATH . "api/services/bootstrap/cache.php");
 include_once(DEVBLOCKS_PATH . "api/services/bootstrap/database.php");
 include_once(DEVBLOCKS_PATH . "api/services/bootstrap/classloader.php");
 
-define('PLATFORM_BUILD',2012051201);
+define('PLATFORM_BUILD', 2014032901);
 
 /**
  * A platform container for plugin/extension registries.
@@ -105,30 +105,48 @@ class DevblocksPlatform extends DevblocksEngine {
 	 * @param mixed $default
 	 * @return mixed
 	 */
-	static function importVar($value,$type=null,$default=null) {
+	static function importVar($value, $type=null, $default=null) {
 		if(is_null($value) && !is_null($default))
 			$value = $default;
+		
+		if(substr($type,0,6) == 'array:') {
+			list($type, $array_cast) = explode(':', $type, 2);
+		}
 		
 		// Sanitize input
 		switch($type) {
 			case 'array':
-				@settype($value,$type);
+				if(!is_array($value)) {
+					if(is_null($value))
+						$value = array();
+					else
+						$value = array($value);
+				}
+				
+				if(isset($array_cast))
+					$value = DevblocksPlatform::sanitizeArray($value, $array_cast);
 				break;
+				
 			case 'bit':
 				$value = !empty($value) ? 1 : 0;
 				break;
+				
 			case 'boolean':
 				$value = !empty($value) ? true : false;
 				break;
+				
 			case 'float':
 				$value = floatval($value);
 				break;
+				
 			case 'integer':
 				$value = intval($value);
 				break;
+				
 			case 'string':
 				$value = (string) $value;
 				break;
+				
 			case 'timestamp':
 				if(!is_numeric($value)) {
 					try {
@@ -138,6 +156,7 @@ class DevblocksPlatform extends DevblocksEngine {
 					$value = abs(intval($value));
 				}
 				break;
+				
 			default:
 				@settype($value,$type);
 				break;
@@ -152,7 +171,7 @@ class DevblocksPlatform extends DevblocksEngine {
 	 * @param mixed $default
 	 * @return mixed
 	 */
-	static function importGPC($var,$cast=null,$default=null) {
+	static function importGPC($var, $cast=null, $default=null) {
 		@$magic_quotes = (function_exists('get_magic_quotes_gpc') && get_magic_quotes_gpc()) ? true : false;
 
 		if(!is_null($var)) {
@@ -948,7 +967,8 @@ class DevblocksPlatform extends DevblocksEngine {
 		if(!is_numeric($string))
 			return '';
 			
-		$bytes = floatval($string);
+		$is_negative = (intval($string) < 0) ? true : false;
+		$bytes = abs(intval($string));
 		$precision = floatval($precision);
 		$out = '';
 		
@@ -964,7 +984,7 @@ class DevblocksPlatform extends DevblocksEngine {
 			$out = $bytes . ' bytes';
 		}
 		
-		return $out;
+		return (($is_negative) ? '-' : '') . $out;
 	}
 	
 	/**
@@ -1119,8 +1139,8 @@ class DevblocksPlatform extends DevblocksEngine {
 			$cache->remove(self::CACHE_EVENTS);
 			$cache->remove(self::CACHE_EXTENSIONS);
 			$cache->remove(self::CACHE_POINTS);
-			$cache->remove(self::CACHE_SETTINGS);
 			$cache->remove(self::CACHE_TABLES);
+			$cache->remove('devblocks:plugin:devblocks.core:settings');
 			$cache->remove(_DevblocksClassLoadManager::CACHE_CLASS_MAP);
 			
 			// Flush template cache
@@ -1694,14 +1714,14 @@ class DevblocksPlatform extends DevblocksEngine {
 		return _DevblocksPluginSettingsManager::getInstance();
 	}
 	
-	static function getPluginSetting($plugin_id, $key, $default=null) {
+	static function getPluginSetting($plugin_id, $key, $default=null, $json_decode=false) {
 		$settings = self::getPluginSettingsService();
-		return $settings->get($plugin_id, $key, $default);
+		return $settings->get($plugin_id, $key, $default, $json_decode);
 	}
 	
-	static function setPluginSetting($plugin_id, $key, $value) {
+	static function setPluginSetting($plugin_id, $key, $value, $json_encode=false) {
 		$settings = self::getPluginSettingsService();
-		return $settings->set($plugin_id,  $key, $value);
+		return $settings->set($plugin_id, $key, $value, $json_encode);
 	}
 
 	/**
@@ -1788,6 +1808,17 @@ class DevblocksPlatform extends DevblocksEngine {
 			return array();
 		
 		switch($type) {
+			case 'bit':
+				$array = _DevblocksSanitizationManager::arrayAs($array, 'bit');
+				return $array;
+				break;
+				
+			case 'bool':
+			case 'boolean':
+				$array = _DevblocksSanitizationManager::arrayAs($array, 'boolean');
+				return $array;
+				break;
+				
 			case 'integer':
 				$array = _DevblocksSanitizationManager::arrayAs($array, 'integer');
 				
@@ -1814,13 +1845,6 @@ class DevblocksPlatform extends DevblocksEngine {
 	
 	static function sortObjects(&$array, $on, $ascending=true) {
 		_DevblocksSortHelper::sortObjects($array, $on, $ascending);
-	}
-	
-	/**
-	 * @return _DevblocksSearchEngineMysqlFulltext
-	 */
-	static function getSearchService() {
-		return _DevblocksSearchManager::getInstance();
 	}
 	
 	/**
@@ -2068,6 +2092,15 @@ class DevblocksPlatform extends DevblocksEngine {
 		@define('DEVBLOCKS_WEBPATH',$context_self);
 		@define('DEVBLOCKS_APP_WEBPATH',$app_self);
 		
+		// Enable the second-level cache
+		
+		$cache = DevblocksPlatform::getCacheService();
+		
+		if(null !== ($cacher_extension_id = DevblocksPlatform::getPluginSetting('devblocks.core', 'cacher.extension_id', null))) {
+			$cacher_params = DevblocksPlatform::getPluginSetting('devblocks.core', 'cacher.params_json', array(), true);
+			$cache->setEngine($cacher_extension_id, $cacher_params);
+		}
+		
 		// Register shutdown function
 		register_shutdown_function(array('DevblocksPlatform','shutdown'));
 	}
@@ -2075,6 +2108,7 @@ class DevblocksPlatform extends DevblocksEngine {
 	static function shutdown() {
 		// Trigger changed context events
 		Extension_DevblocksContext::shutdownTriggerChangedContextsEvents();
+		CerberusContexts::shutdown();
 		
 		// Clean up any temporary files
 		while(null != ($tmpfile = array_pop(self::$_tmp_files))) {

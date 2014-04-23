@@ -177,14 +177,13 @@ class ChTicketsPage extends CerberusPageExtension {
 	// Ajax
 	function reportSpamAction() {
 		@$id = DevblocksPlatform::importGPC($_REQUEST['id'],'integer');
-		@$view_id = DevblocksPlatform::importGPC($_REQUEST['viewId'],'string');
+		@$view_id = DevblocksPlatform::importGPC($_REQUEST['view_id'],'string');
 		if(empty($id)) return;
 
 		$fields = array(
-				DAO_Ticket::IS_CLOSED => 1,
-				DAO_Ticket::IS_DELETED => 1,
+			DAO_Ticket::IS_CLOSED => 1,
+			DAO_Ticket::IS_DELETED => 1,
 		);
-		
 		
 		//====================================
 		// Undo functionality
@@ -192,10 +191,10 @@ class ChTicketsPage extends CerberusPageExtension {
 		$last_action->action = Model_TicketViewLastAction::ACTION_SPAM;
 
 		$last_action->ticket_ids[$id] = array(
-				DAO_Ticket::SPAM_TRAINING => CerberusTicketSpamTraining::BLANK,
-				DAO_Ticket::SPAM_SCORE => 0.5000, // [TODO] Fix
-				DAO_Ticket::IS_CLOSED => 0,
-				DAO_Ticket::IS_DELETED => 0
+			DAO_Ticket::SPAM_TRAINING => CerberusTicketSpamTraining::BLANK,
+			DAO_Ticket::SPAM_SCORE => 0.5000, // [TODO] Fix
+			DAO_Ticket::IS_CLOSED => 0,
+			DAO_Ticket::IS_DELETED => 0
 		);
 
 		$last_action->action_params = $fields;
@@ -205,12 +204,19 @@ class ChTicketsPage extends CerberusPageExtension {
 		
 		CerberusBayes::markTicketAsSpam($id);
 		
-		// [TODO] Move buckets (according to config)
+		if(false == ($ticket = DAO_Ticket::get($id)))
+			return;
+		
 		$fields = array(
 			DAO_Ticket::IS_DELETED => 1,
 			DAO_Ticket::IS_CLOSED => CerberusTicketStatus::CLOSED
 		);
-		DAO_Ticket::update($id, $fields);
+		
+		// Only update fields that changed
+		$fields = Cerb_ORMHelper::uniqueFields($fields, $ticket);
+		
+		if(!empty($fields))
+			DAO_Ticket::update($id, $fields);
 		
 		$tpl = DevblocksPlatform::getTemplateService();
 
@@ -262,6 +268,10 @@ class ChTicketsPage extends CerberusPageExtension {
 		@$comment = DevblocksPlatform::importGPC(@$_REQUEST['comment'],'string','');
 
 		$active_worker = CerberusApplication::getActiveWorker();
+		
+		// Load the existing model so we can detect changes
+		if(false == ($ticket = DAO_Ticket::get($id)))
+			return;
 		
 		$fields = array(
 			DAO_Ticket::SUBJECT => $subject,
@@ -327,9 +337,15 @@ class ChTicketsPage extends CerberusPageExtension {
 				CerberusBayes::markTicketAsNotSpam($id);
 		}
 		
+		// Only update fields that changed
+		$fields = Cerb_ORMHelper::uniqueFields($fields, $ticket);
+		
+		// Do it
 		DAO_Ticket::update($id, $fields);
 		
 		// Custom field saves
+		// [TODO] Log these to the context_changeset table
+		// [TODO] Bundle with the DAO::update() call?
 		@$field_ids = DevblocksPlatform::importGPC($_POST['field_ids'], 'array', array());
 		DAO_CustomFieldValue::handleFormPost(CerberusContexts::CONTEXT_TICKET, $id, $field_ids);
 
@@ -736,7 +752,7 @@ class ChTicketsPage extends CerberusPageExtension {
 		
 		//====================================
 		// Undo functionality
-		$orig_tickets = DAO_Ticket::getTickets($ticket_ids);
+		$orig_tickets = DAO_Ticket::getIds($ticket_ids);
 		
 		$last_action = new Model_TicketViewLastAction();
 		$last_action->action = Model_TicketViewLastAction::ACTION_MOVE;
@@ -755,9 +771,15 @@ class ChTicketsPage extends CerberusPageExtension {
 		
 		View_Ticket::setLastAction($view_id,$last_action);
 		
-		// Make our changes to the entire list of tickets
-		if(!empty($ticket_ids) && !empty($group_id)) {
-			DAO_Ticket::update($ticket_ids, $fields);
+		// Only update tickets that are changing
+		
+		$models = DAO_Ticket::getIds($ticket_ids);
+		
+		foreach($models as $ticket_id => $model) {
+			$update_fields = Cerb_ORMHelper::uniqueFields($fields, $model);
+			
+			if(!empty($update_fields))
+				DAO_Ticket::update($ticket_id, $fields);
 		}
 		
 		$view = C4_AbstractViewLoader::getView($view_id);
@@ -791,7 +813,7 @@ class ChTicketsPage extends CerberusPageExtension {
 	
 	function viewCloseTicketsAction() {
 		@$view_id = DevblocksPlatform::importGPC($_REQUEST['view_id'],'string');
-		@$ticket_ids = DevblocksPlatform::importGPC($_REQUEST['ticket_id'],'array');
+		@$ticket_ids = DevblocksPlatform::importGPC($_REQUEST['ticket_id'],'array:integer');
 		
 		$fields = array(
 			DAO_Ticket::IS_CLOSED => CerberusTicketStatus::CLOSED,
@@ -814,7 +836,15 @@ class ChTicketsPage extends CerberusPageExtension {
 		View_Ticket::setLastAction($view_id,$last_action);
 		//====================================
 		
-		DAO_Ticket::update($ticket_ids, $fields);
+		// Only update fields that changed
+		$models = DAO_Ticket::getIds($ticket_ids);
+
+		foreach($models as $model_id => $model) {
+			$update_fields = Cerb_ORMHelper::uniqueFields($fields, $model);
+			
+			if(!empty($update_fields))
+				DAO_Ticket::update($model_id, $update_fields);
+		}
 		
 		$view = C4_AbstractViewLoader::getView($view_id);
 		$view->render();
@@ -823,7 +853,7 @@ class ChTicketsPage extends CerberusPageExtension {
 	
 	function viewWaitingTicketsAction() {
 		@$view_id = DevblocksPlatform::importGPC($_REQUEST['view_id'],'string');
-		@$ticket_ids = DevblocksPlatform::importGPC($_REQUEST['ticket_id'],'array');
+		@$ticket_ids = DevblocksPlatform::importGPC($_REQUEST['ticket_id'],'array:integer');
 
 		$fields = array(
 			DAO_Ticket::IS_WAITING => 1,
@@ -846,7 +876,15 @@ class ChTicketsPage extends CerberusPageExtension {
 		View_Ticket::setLastAction($view_id,$last_action);
 		//====================================
 
-		DAO_Ticket::update($ticket_ids, $fields);
+		// Only update fields that changed
+		$models = DAO_Ticket::getIds($ticket_ids);
+
+		foreach($models as $model_id => $model) {
+			$update_fields = Cerb_ORMHelper::uniqueFields($fields, $model);
+			
+			if(!empty($update_fields))
+				DAO_Ticket::update($model_id, $update_fields);
+		}
 		
 		$view = C4_AbstractViewLoader::getView($view_id);
 		$view->render();
@@ -855,7 +893,7 @@ class ChTicketsPage extends CerberusPageExtension {
 	
 	function viewNotWaitingTicketsAction() {
 		@$view_id = DevblocksPlatform::importGPC($_REQUEST['view_id'],'string');
-		@$ticket_ids = DevblocksPlatform::importGPC($_REQUEST['ticket_id'],'array');
+		@$ticket_ids = DevblocksPlatform::importGPC($_REQUEST['ticket_id'],'array:integer');
 
 		$fields = array(
 			DAO_Ticket::IS_WAITING => 0,
@@ -878,7 +916,15 @@ class ChTicketsPage extends CerberusPageExtension {
 		View_Ticket::setLastAction($view_id,$last_action);
 		//====================================
 
-		DAO_Ticket::update($ticket_ids, $fields);
+		// Only update fields that changed
+		$models = DAO_Ticket::getIds($ticket_ids);
+
+		foreach($models as $model_id => $model) {
+			$update_fields = Cerb_ORMHelper::uniqueFields($fields, $model);
+			
+			if(!empty($update_fields))
+				DAO_Ticket::update($model_id, $update_fields);
+		}
 		
 		$view = C4_AbstractViewLoader::getView($view_id);
 		$view->render();
@@ -887,7 +933,7 @@ class ChTicketsPage extends CerberusPageExtension {
 	
 	function viewNotSpamTicketsAction() {
 		@$view_id = DevblocksPlatform::importGPC($_REQUEST['view_id'],'string');
-		@$ticket_ids = DevblocksPlatform::importGPC($_REQUEST['ticket_id'],'array');
+		@$ticket_ids = DevblocksPlatform::importGPC($_REQUEST['ticket_id'],'array:integer');
 
 		$fields = array(
 			DAO_Ticket::IS_CLOSED => 0,
@@ -901,8 +947,6 @@ class ChTicketsPage extends CerberusPageExtension {
 
 		if(is_array($ticket_ids))
 		foreach($ticket_ids as $ticket_id) {
-//			CerberusBayes::calculateTicketSpamProbability($ticket_id); // [TODO] Ugly (optimize -- use the 'interesting_words' to do a word bayes spam score?
-			
 			$last_action->ticket_ids[$ticket_id] = array(
 				DAO_Ticket::SPAM_TRAINING => CerberusTicketSpamTraining::BLANK,
 				DAO_Ticket::SPAM_SCORE => 0.0001, // [TODO] Fix
@@ -922,7 +966,15 @@ class ChTicketsPage extends CerberusPageExtension {
 			CerberusBayes::markTicketAsNotSpam($id);
 		}
 		
-		DAO_Ticket::update($ticket_ids, $fields);
+		// Only update fields that changed
+		$models = DAO_Ticket::getIds($ticket_ids);
+
+		foreach($models as $model_id => $model) {
+			$update_fields = Cerb_ORMHelper::uniqueFields($fields, $model);
+			
+			if(!empty($update_fields))
+				DAO_Ticket::update($model_id, $update_fields);
+		}
 		
 		$view = C4_AbstractViewLoader::getView($view_id);
 		$view->render();
@@ -931,7 +983,7 @@ class ChTicketsPage extends CerberusPageExtension {
 	
 	function viewSpamTicketsAction() {
 		@$view_id = DevblocksPlatform::importGPC($_REQUEST['view_id'],'string');
-		@$ticket_ids = DevblocksPlatform::importGPC($_REQUEST['ticket_id'],'array');
+		@$ticket_ids = DevblocksPlatform::importGPC($_REQUEST['ticket_id'],'array:integer');
 
 		$fields = array(
 			DAO_Ticket::IS_CLOSED => 1,
@@ -945,8 +997,6 @@ class ChTicketsPage extends CerberusPageExtension {
 
 		if(is_array($ticket_ids))
 		foreach($ticket_ids as $ticket_id) {
-//			CerberusBayes::calculateTicketSpamProbability($ticket_id); // [TODO] Ugly (optimize -- use the 'interesting_words' to do a word bayes spam score?
-			
 			$last_action->ticket_ids[$ticket_id] = array(
 				DAO_Ticket::SPAM_TRAINING => CerberusTicketSpamTraining::BLANK,
 				DAO_Ticket::SPAM_SCORE => 0.5000, // [TODO] Fix
@@ -966,7 +1016,15 @@ class ChTicketsPage extends CerberusPageExtension {
 			CerberusBayes::markTicketAsSpam($id);
 		}
 		
-		DAO_Ticket::update($ticket_ids, $fields);
+		// Only update fields that changed
+		$models = DAO_Ticket::getIds($ticket_ids);
+
+		foreach($models as $model_id => $model) {
+			$update_fields = Cerb_ORMHelper::uniqueFields($fields, $model);
+			
+			if(!empty($update_fields))
+				DAO_Ticket::update($model_id, $update_fields);
+		}
 		
 		$view = C4_AbstractViewLoader::getView($view_id);
 		$view->render();
@@ -975,7 +1033,7 @@ class ChTicketsPage extends CerberusPageExtension {
 	
 	function viewDeleteTicketsAction() {
 		@$view_id = DevblocksPlatform::importGPC($_REQUEST['view_id'],'string');
-		@$ticket_ids = DevblocksPlatform::importGPC($_REQUEST['ticket_id'],'array');
+		@$ticket_ids = DevblocksPlatform::importGPC($_REQUEST['ticket_id'],'array:integer');
 
 		$fields = array(
 			DAO_Ticket::IS_CLOSED => 1,
@@ -1000,7 +1058,15 @@ class ChTicketsPage extends CerberusPageExtension {
 		View_Ticket::setLastAction($view_id,$last_action);
 		//====================================
 		
-		DAO_Ticket::update($ticket_ids, $fields);
+		// Only update fields that changed
+		$models = DAO_Ticket::getIds($ticket_ids);
+
+		foreach($models as $model_id => $model) {
+			$update_fields = Cerb_ORMHelper::uniqueFields($fields, $model);
+			
+			if(!empty($update_fields))
+				DAO_Ticket::update($model_id, $update_fields);
+		}
 		
 		$view = C4_AbstractViewLoader::getView($view_id);
 		$view->render();
@@ -1018,11 +1084,8 @@ class ChTicketsPage extends CerberusPageExtension {
 			$view->render();
 			return;
 		}
-		
-		/*
-		 * [TODO] This could be optimized by only doing the row-level updates for the
-		 * MOVE action, all the rest can just be a single DAO_Ticket::update($ids, ...)
-		 */
+
+		// [TODO] Check for changes
 		if(is_array($last_action->ticket_ids) && !empty($last_action->ticket_ids))
 		foreach($last_action->ticket_ids as $ticket_id => $fields) {
 			DAO_Ticket::update($ticket_id, $fields);
@@ -1054,7 +1117,7 @@ class ChTicketsPage extends CerberusPageExtension {
 			if(empty($ticket_ids))
 				break;
 			
-			$tickets = DAO_Ticket::getTickets($ticket_ids);
+			$tickets = DAO_Ticket::getIds($ticket_ids);
 			if(is_array($tickets))
 			foreach($tickets as $ticket) { /* @var $ticket Model_Ticket */
 				$ptr =& $unique_sender_ids[$ticket->first_wrote_address_id];

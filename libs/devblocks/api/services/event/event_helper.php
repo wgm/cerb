@@ -1,14 +1,16 @@
 <?php
 class DevblocksEventHelper {
-	public static function getVarValueToContextMap($trigger) {
+	public static function getVarValueToContextMap($trigger) { /* @var $trigger Model_TriggerEvent */
 		$values_to_contexts = array();
 		
 		// Virtual Attendant
 		
-		$values_to_contexts['va_id'] = array(
-			'label' => 'Virtual Attendant',
+		$va = $trigger->getVirtualAttendant();
+		
+		$values_to_contexts['_trigger_va_id'] = array(
+			'label' => '(Self) ' . $va->name,
 			'context' => CerberusContexts::CONTEXT_VIRTUAL_ATTENDANT,
-			'context_id' => $trigger->virtual_attendant_id,
+			'context_id' => $va->id,
 		);
 		
 		// Behavior variables
@@ -1956,6 +1958,8 @@ class DevblocksEventHelper {
 			DAO_Comment::COMMENT => $content,
 		);
 		
+		$comment_id = null;
+		
 		// On: Are we linking these comments to something else?
 		
 		@$on = DevblocksPlatform::importVar($params['on'],'string',$default_on);
@@ -3328,7 +3332,6 @@ class DevblocksEventHelper {
 					$to_address = $worker->email;
 					
 				} else {
-					// [TODO] Cache
 					if(null == ($worker_address = DAO_AddressToWorker::getByAddress($to)))
 						continue;
 						
@@ -3364,11 +3367,12 @@ class DevblocksEventHelper {
 					$mail->setSubject($subject);
 				}
 	
-				// Find the owner of this address and sign it.
-				$sign = substr(md5($context.$context_id.$worker->pass),8,8);
-				
 				$headers->removeAll('message-id');
-				$headers->addTextHeader('Message-Id', sprintf("<%s_%d_%d_%s@cerb>", $context, $context_id, time(), $sign));
+
+				// Sign the message so we can verify a future relay response
+				$sign = sha1($message_id . $worker->id . APP_DB_PASS);
+				$headers->addTextHeader('Message-Id', sprintf("<%s%s%s@cerb>", dechex(mt_rand(255,65535)), $sign, dechex($message_id)));
+				
 				$headers->addTextHeader('X-CerberusRedirect','1');
 	
 				$content = $tpl_builder->build($params['content'], $dict);
@@ -3574,7 +3578,8 @@ class DevblocksEventHelper {
 		if(null == ($view = DevblocksEventHelper::getViewFromAbstractJson($token, $params, $trigger, $context)))
 			return;
 		
-		$view->setPlaceholderValues($dict->getDictionary());
+		// Load values and ignore _labels and _types
+		$view->setPlaceholderValues($dict->getDictionary(null, false));
 		C4_AbstractViewLoader::setView($view->id, $view);
 		
 		// Save the generated view_id in the dictionary for reuse (paging, etc)
@@ -3582,6 +3587,7 @@ class DevblocksEventHelper {
 		$dict->$var_view_id_key = $view->id;
 		
 		// [TODO] Iterate through pages if over a certain list length?
+		// [TODO] I believe we solved this by just setting ctx:id rows first
 		//$view->renderLimit = (isset($params['limit']) && is_numeric($params['limit'])) ? intval($params['limit']) : 100;
 		$view->renderLimit = 100;
 		$view->renderPage = 0;

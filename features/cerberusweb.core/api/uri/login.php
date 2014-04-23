@@ -28,10 +28,7 @@ class ChSignInPage extends CerberusPageExtension {
 			$email = $remember_email;
 		
 		if(!empty($email))
-			$worker_id = DAO_Worker::getByEmail($email);
-		
-		if(!empty($worker_id))
-			$worker = DAO_Worker::get($worker_id);
+			$worker = DAO_Worker::getByEmail($email);
 		
 		$response = DevblocksPlatform::getHttpResponse();
 		$stack = $response->path;
@@ -46,7 +43,6 @@ class ChSignInPage extends CerberusPageExtension {
 				$tpl->assign('email', $email);
 
 				if(!empty($email)
-						&& null != $worker_id
 						&& null != $worker
 						&& !$worker->is_disabled) {
 					
@@ -115,8 +111,10 @@ class ChSignInPage extends CerberusPageExtension {
 				break;
 
 			case 'authenticate':
+				// Always wait a little while
+				sleep(2);
+				
 				if(empty($worker)) {
-					sleep(2); // delay brute force
 					$query = array(
 						'email' => $email,
 						'error' => 'Invalid password.',
@@ -233,7 +231,7 @@ class ChSignInPage extends CerberusPageExtension {
 		@$email = DevblocksPlatform::importGPC($_POST['email'],'string','');
 		@$remember_me = DevblocksPlatform::importGPC($_POST['remember_me'],'integer', 0);
 		
-		if(null == ($worker_id = DAO_Worker::getByEmail($email))) {
+		if(null == ($worker = DAO_Worker::getByEmail($email))) {
 			sleep(2); // nag brute force attempts
 			// Deceptively send invalid logins to the password page anyway, if shaped like an email
 			$query = array('email' => $email);
@@ -242,12 +240,6 @@ class ChSignInPage extends CerberusPageExtension {
 		} else {
 			// [TODO] Check the worker's allowed IPs
 			
-			// Make sure it's a valid worker
-			if(null == ($worker = DAO_Worker::get($worker_id))) {
-				$query = array('error' => 'Invalid account.');
-				DevblocksPlatform::redirect(new DevblocksHttpRequest(array('login'), $query));
-			}
-
 			// Check if worker is disabled, fail early
 			if($worker->is_disabled) {
 				$query = array('error' => 'Your account is disabled.');

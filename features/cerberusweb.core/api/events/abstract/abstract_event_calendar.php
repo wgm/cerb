@@ -20,12 +20,12 @@ abstract class AbstractEvent_Calendar extends Extension_DevblocksEvent {
 
 	/**
 	 *
-	 * @param integer $calendar_event_id
+	 * @param integer $context_id
 	 * @return Model_DevblocksEvent
 	 */
-	function generateSampleEventModel(Model_TriggerEvent $trigger, $calendar_id=null) {
+	function generateSampleEventModel(Model_TriggerEvent $trigger, $context_id=null) {
 		
-		if(empty($calendar_id)) {
+		if(empty($context_id)) {
 			// Pull the latest record
 			list($results) = DAO_Calendar::search(
 				array(),
@@ -42,29 +42,31 @@ abstract class AbstractEvent_Calendar extends Extension_DevblocksEvent {
 			
 			$result = array_shift($results);
 			
-			$calendar_id = $result[SearchFields_Calendar::ID];
+			$context_id = $result[SearchFields_Calendar::ID];
 		}
 		
 		return new Model_DevblocksEvent(
 			$this->_event_id,
 			array(
-				'calendar_id' => $calendar_id,
+				'context_id' => $context_id,
 			)
 		);
 	}
 	
-	function setEvent(Model_DevblocksEvent $event_model=null) {
+	function setEvent(Model_DevblocksEvent $event_model=null, Model_TriggerEvent $trigger=null) {
 		$labels = array();
 		$values = array();
 
+		// We can accept a model object or a context_id
+		@$model = $event_model->params['context_model'] ?: $event_model->params['context_id'];
+		
 		/**
 		 * Calendar
 		 */
 		
-		@$calendar_id = $event_model->params['calendar_id'];
 		$merge_labels = array();
 		$merge_values = array();
-		CerberusContexts::getContext(CerberusContexts::CONTEXT_CALENDAR, $calendar_id, $merge_labels, $merge_values, null, true);
+		CerberusContexts::getContext(CerberusContexts::CONTEXT_CALENDAR, $model, $merge_labels, $merge_values, null, true);
 
 			// Merge
 			CerberusContexts::merge(
@@ -86,13 +88,13 @@ abstract class AbstractEvent_Calendar extends Extension_DevblocksEvent {
 	
 	function renderSimulatorTarget($trigger, $event_model) {
 		$context = CerberusContexts::CONTEXT_CALENDAR;
-		$context_id = $event_model->params['calendar_id'];
+		$context_id = $event_model->params['context_id'];
 		DevblocksEventHelper::renderSimulatorTarget($context, $context_id, $trigger, $event_model);
 	}
 	
 	function getValuesContexts($trigger) {
 		$vals = array(
-			'event_id' => array(
+			'calendar_id' => array(
 				'label' => 'Calendar',
 				'context' => CerberusContexts::CONTEXT_CALENDAR,
 			),
@@ -106,8 +108,8 @@ abstract class AbstractEvent_Calendar extends Extension_DevblocksEvent {
 		return $vals_to_ctx;
 	}
 	
-	function getConditionExtensions() {
-		$labels = $this->getLabels();
+	function getConditionExtensions(Model_TriggerEvent $trigger) {
+		$labels = $this->getLabels($trigger);
 		$types = $this->getTypes();
 		
 		$conditions = $this->_importLabelsTypesAsConditions($labels, $types);
@@ -141,7 +143,7 @@ abstract class AbstractEvent_Calendar extends Extension_DevblocksEvent {
 		return $pass;
 	}
 	
-	function getActionExtensions() {
+	function getActionExtensions(Model_TriggerEvent $trigger) {
 		$actions =
 			array(
 // 				'add_watchers' => array('label' =>'Add watchers'),
@@ -151,7 +153,7 @@ abstract class AbstractEvent_Calendar extends Extension_DevblocksEvent {
 				'create_ticket' => array('label' =>'Create a ticket'),
 				'send_email' => array('label' => 'Send email'),
 			)
-			+ DevblocksEventHelper::getActionCustomFieldsFromLabels($this->getLabels())
+			+ DevblocksEventHelper::getActionCustomFieldsFromLabels($this->getLabels($trigger))
 			;
 			
 		return $actions;
@@ -207,23 +209,23 @@ abstract class AbstractEvent_Calendar extends Extension_DevblocksEvent {
 	}
 	
 	function simulateActionExtension($token, $trigger, $params, DevblocksDictionaryDelegate $dict) {
-		@$event_id = $dict->event_id;
+		@$calendar_id = $dict->calendar_id;
 
-		if(empty($event_id))
+		if(empty($calendar_id))
 			return;
 		
 		switch($token) {
 // 			case 'add_watchers':
-// 				return DevblocksEventHelper::simulateActionAddWatchers($params, $dict, 'event_id');
+// 				return DevblocksEventHelper::simulateActionAddWatchers($params, $dict, 'calendar_id');
 // 				break;
 			case 'create_comment':
-				return DevblocksEventHelper::simulateActionCreateComment($params, $dict, 'event_id');
+				return DevblocksEventHelper::simulateActionCreateComment($params, $dict, 'calendar_id');
 				break;
 			case 'create_notification':
-				return DevblocksEventHelper::simulateActionCreateNotification($params, $dict, 'event_id');
+				return DevblocksEventHelper::simulateActionCreateNotification($params, $dict, 'calendar_id');
 				break;
 			case 'create_task':
-				return DevblocksEventHelper::simulateActionCreateTask($params, $dict, 'event_id');
+				return DevblocksEventHelper::simulateActionCreateTask($params, $dict, 'calendar_id');
 				break;
 			case 'create_ticket':
 				return DevblocksEventHelper::simulateActionCreateTicket($params, $dict);
@@ -239,26 +241,26 @@ abstract class AbstractEvent_Calendar extends Extension_DevblocksEvent {
 	}
 	
 	function runActionExtension($token, $trigger, $params, DevblocksDictionaryDelegate $dict) {
-		@$event_id = $dict->event_id;
+		@$calendar_id = $dict->calendar_id;
 
-		if(empty($event_id))
+		if(empty($calendar_id))
 			return;
 		
 		switch($token) {
 // 			case 'add_watchers':
-// 				DevblocksEventHelper::runActionAddWatchers($params, $dict, 'event_id');
+// 				DevblocksEventHelper::runActionAddWatchers($params, $dict, 'calendar_id');
 // 				break;
 			
 			case 'create_comment':
-				DevblocksEventHelper::runActionCreateComment($params, $dict, 'event_id');
+				DevblocksEventHelper::runActionCreateComment($params, $dict, 'calendar_id');
 				break;
 				
 			case 'create_notification':
-				DevblocksEventHelper::runActionCreateNotification($params, $dict, 'event_id');
+				DevblocksEventHelper::runActionCreateNotification($params, $dict, 'calendar_id');
 				break;
 				
 			case 'create_task':
-				DevblocksEventHelper::runActionCreateTask($params, $dict, 'event_id');
+				DevblocksEventHelper::runActionCreateTask($params, $dict, 'calendar_id');
 				break;
 
 			case 'create_ticket':

@@ -59,7 +59,7 @@ class DAO_CalendarEvent extends Cerb_ORMHelper {
 		return $id;
 	}
 	
-	static function update($ids, $fields) {
+	static function update($ids, $fields, $check_deltas=true) {
 		if(!is_array($ids))
 			$ids = array($ids);
 		
@@ -70,24 +70,23 @@ class DAO_CalendarEvent extends Cerb_ORMHelper {
 			if(empty($batch_ids))
 				continue;
 			
-			// Get state before changes
-			$object_changes = parent::_getUpdateDeltas($batch_ids, $fields, get_class());
-
+			// Send events
+			if($check_deltas) {
+				CerberusContexts::checkpointChanges(CerberusContexts::CONTEXT_CALENDAR_EVENT, $batch_ids);
+			}
+			
 			// Make changes
 			parent::_update($batch_ids, 'calendar_event', $fields);
 			
 			// Send events
-			if(!empty($object_changes)) {
-				// Local events
-				//self::_processUpdateEvents($object_changes);
-				
+			if($check_deltas) {
 				// Trigger an event about the changes
 				$eventMgr = DevblocksPlatform::getEventService();
 				$eventMgr->trigger(
 					new Model_DevblocksEvent(
 						'dao.calendar_event.update',
 						array(
-							'objects' => $object_changes,
+							'fields' => $fields,
 						)
 					)
 				);
@@ -148,7 +147,7 @@ class DAO_CalendarEvent extends Cerb_ORMHelper {
 	static private function _getObjectsFromResult($rs) {
 		$objects = array();
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$object = new Model_CalendarEvent();
 			$object->id = $row['id'];
 			$object->name = $row['name'];
@@ -159,9 +158,13 @@ class DAO_CalendarEvent extends Cerb_ORMHelper {
 			$objects[$object->id] = $object;
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return $objects;
+	}
+	
+	static function random() {
+		return self::_getRandom('calendar_event');
 	}
 	
 	static function delete($ids) {
@@ -322,13 +325,12 @@ class DAO_CalendarEvent extends Cerb_ORMHelper {
 			$rs = $db->SelectLimit($sql,$limit,$page*$limit) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs ADORecordSet */
 		} else {
 			$rs = $db->Execute($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs ADORecordSet */
-			$total = mysql_num_rows($rs);
+			$total = mysqli_num_rows($rs);
 		}
 		
 		$results = array();
-		$total = -1;
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$result = array();
 			foreach($row as $f => $v) {
 				$result[$f] = $v;
@@ -337,20 +339,23 @@ class DAO_CalendarEvent extends Cerb_ORMHelper {
 			$results[$object_id] = $result;
 		}
 
-		// [JAS]: Count all
+		$total = count($results);
+		
 		if($withCounts) {
-			$count_sql =
-				($has_multiple_values ? "SELECT COUNT(DISTINCT calendar_event.id) " : "SELECT COUNT(calendar_event.id) ").
-				$join_sql.
-				$where_sql;
-			$total = $db->GetOne($count_sql);
+			// We can skip counting if we have a less-than-full single page
+			if(!(0 == $page && $total < $limit)) {
+				$count_sql =
+					($has_multiple_values ? "SELECT COUNT(DISTINCT calendar_event.id) " : "SELECT COUNT(calendar_event.id) ").
+					$join_sql.
+					$where_sql;
+				$total = $db->GetOne($count_sql);
+			}
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return array($results,$total);
 	}
-
 };
 
 class SearchFields_CalendarEvent implements IDevblocksSearchFields {
@@ -413,7 +418,7 @@ class Model_CalendarEvent {
 	public $date_end;
 };
 
-class View_CalendarEvent extends C4_AbstractView implements IAbstractView_Subtotals {
+class View_CalendarEvent extends C4_AbstractView implements IAbstractView_Subtotals, IAbstractView_QuickSearch {
 	const DEFAULT_ID = 'calendar_events';
 
 	function __construct() {
@@ -542,6 +547,59 @@ class View_CalendarEvent extends C4_AbstractView implements IAbstractView_Subtot
 		}
 		
 		return $counts;
+	}
+	
+	function isQuickSearchField($token) {
+		switch($token) {
+			case SearchFields_CalendarEvent::CALENDAR_ID:
+				return true;
+			break;
+		}
+		
+		return false;
+	}
+	
+	function quickSearch($token, $query, &$oper, &$value) {
+		switch($token) {
+			case SearchFields_CalendarEvent::CALENDAR_ID:
+				$search_ids = array();
+				$oper = DevblocksSearchCriteria::OPER_IN;
+				
+				if(preg_match('#([\!\=]+)(.*)#', $query, $matches)) {
+					$oper_hint = trim($matches[1]);
+					$query = trim($matches[2]);
+					
+					switch($oper_hint) {
+						case '!':
+						case '!=':
+							$oper = DevblocksSearchCriteria::OPER_NIN;
+							break;
+					}
+				}
+				
+				$calendars = DAO_Calendar::getAll();
+				$inputs = DevblocksPlatform::parseCsvString($query);
+
+				if(is_array($inputs))
+				foreach($inputs as $input) {
+					foreach($calendars as $calendar_id => $calendar) {
+						if(0 == strcasecmp($input, substr($calendar->name,0,strlen($input))))
+							$search_ids[$calendar_id] = true;
+					}
+				}
+				
+				if(!empty($search_ids)) {
+					$value = array_keys($search_ids);
+				} else {
+					$value = null;
+				}
+				
+				return true;
+				break;
+				
+		}
+		
+		return false;
 	}
 	
 	function render() {
@@ -794,9 +852,7 @@ class Context_CalendarEvent extends Extension_DevblocksContext implements IDevbl
 	}
 	
 	function getRandom() {
-		// [TODO]
-		//return DAO_CalendarEvent::random();
-		return null;
+		return DAO_CalendarEvent::random();
 	}
 	
 	function getPropertyLabels(DevblocksDictionaryDelegate $dict) {
@@ -844,6 +900,8 @@ class Context_CalendarEvent extends Extension_DevblocksContext implements IDevbl
 			$calendar_event = DAO_CalendarEvent::get($calendar_event);
 		} elseif($calendar_event instanceof Model_CalendarEvent) {
 			// It's what we want already.
+		} elseif(is_array($calendar_event)) {
+			$calendar_event = Cerb_ORMHelper::recastArrayToModel($calendar_event, 'Model_CalendarEvent');
 		} else {
 			$calendar_event = null;
 		}
@@ -894,6 +952,9 @@ class Context_CalendarEvent extends Extension_DevblocksContext implements IDevbl
 			$token_values['is_available'] = $calendar_event->is_available;
 			$token_values['name'] = $calendar_event->name;
 
+			// Custom fields
+			$token_values = $this->_importModelCustomFieldsAsValues($calendar_event, $token_values);
+			
 			// Calendar
 			$merge_token_labels = array();
 			$merge_token_values = array();

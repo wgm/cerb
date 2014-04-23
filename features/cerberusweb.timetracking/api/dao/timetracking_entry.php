@@ -107,14 +107,14 @@ class DAO_TimeTrackingActivity extends DevblocksORMHelper {
 	static private function _getObjectsFromResult($rs) {
 		$objects = array();
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$object = new Model_TimeTrackingActivity();
 			$object->id = intval($row['id']);
 			$object->name = $row['name'];
 			$objects[$object->id] = $object;
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return $objects;
 	}
@@ -161,7 +161,7 @@ class DAO_TimeTrackingEntry extends Cerb_ORMHelper {
 		return $id;
 	}
 	
-	static function update($ids, $fields) {
+	static function update($ids, $fields, $check_deltas=true) {
 		if(!is_array($ids))
 			$ids = array($ids);
 		
@@ -172,16 +172,18 @@ class DAO_TimeTrackingEntry extends Cerb_ORMHelper {
 			if(empty($batch_ids))
 				continue;
 			
-			// Get state before changes
-			$object_changes = parent::_getUpdateDeltas($batch_ids, $fields, get_class());
-
+			// Send events
+			if($check_deltas) {
+				CerberusContexts::checkpointChanges(CerberusContexts::CONTEXT_TIMETRACKING, $batch_ids);
+			}
+			
 			// Make changes
 			parent::_update($batch_ids, 'timetracking_entry', $fields);
 			
 			// Send events
-			if(!empty($object_changes)) {
+			if($check_deltas) {
 				// Local events
-				self::_processUpdateEvents($object_changes);
+				self::_processUpdateEvents($batch_ids, $fields);
 				
 				// Trigger an event about the changes
 				$eventMgr = DevblocksPlatform::getEventService();
@@ -189,7 +191,7 @@ class DAO_TimeTrackingEntry extends Cerb_ORMHelper {
 					new Model_DevblocksEvent(
 						'dao.timetracking.update',
 						array(
-							'objects' => $object_changes,
+							'fields' => $fields,
 						)
 					)
 				);
@@ -200,35 +202,49 @@ class DAO_TimeTrackingEntry extends Cerb_ORMHelper {
 		}
 	}
 	
-	static function _processUpdateEvents($objects) {
-		if(is_array($objects))
-		foreach($objects as $object_id => $object) {
-			@$model = $object['model'];
-			@$changes = $object['changes'];
-			
-			if(empty($model) || empty($changes))
+	static function _processUpdateEvents($ids, $change_fields) {
+		// We only care about these fields, so abort if they aren't referenced
+
+		$observed_fields = array(
+			DAO_TimeTrackingEntry::IS_CLOSED,
+		);
+		
+		$used_fields = array_intersect($observed_fields, array_keys($change_fields));
+		
+		if(empty($used_fields))
+			return;
+		
+		// Load records only if they're needed
+		
+		if(false == ($before_models = CerberusContexts::getCheckpoints(CerberusContexts::CONTEXT_TIMETRACKING, $ids)))
+			return;
+		
+		if(false == ($models = DAO_TimeTrackingEntry::getIds($ids)))
+			return;
+		
+		foreach($models as $id => $model) {
+			if(!isset($before_models[$id]))
 				continue;
 			
+			$before_model = (object) $before_models[$id];
+			
 			/*
-			 * Time tracking status change
+			 * Activity Log: Time tracking status change
 			 */
-			if(
-				isset($changes[DAO_TimeTrackingEntry::IS_CLOSED])
-			) {
-				@$closed = $changes[DAO_TimeTrackingEntry::IS_CLOSED];
-
-				/*
-				 * Log activity
-				 */
+			
+			@$is_closed = $change_fields[DAO_TimeTrackingEntry::IS_CLOSED];
+			
+			if($is_closed == $before_model->is_closed)
+				unset($change_fields[DAO_TimeTrackingEntry::IS_CLOSED]);
+			
+			if(isset($change_fields[DAO_TimeTrackingEntry::IS_CLOSED])) {
 				
 				$status_to = null;
 				$activity_point = null;
 				
-				if(!empty($model[DAO_TimeTrackingEntry::IS_CLOSED])) {
+				if($model->is_closed) {
 					$status_to = 'closed';
 					$activity_point = 'timetracking.status.closed';
-					
-					// [TODO] VA Behavior when a time tracking entry is closed
 					
 				} else {
 					$status_to = 'open';
@@ -237,11 +253,6 @@ class DAO_TimeTrackingEntry extends Cerb_ORMHelper {
 				}
 				
 				if(!empty($status_to) && !empty($activity_point)) {
-					$model_object = new Model_TimeTrackingEntry();
-					$model_object->activity_id = $model[DAO_TimeTrackingEntry::ACTIVITY_ID];
-					$model_object->time_actual_mins = $model[DAO_TimeTrackingEntry::TIME_ACTUAL_MINS];
-					$model_object->worker_id = $model[DAO_TimeTrackingEntry::WORKER_ID];
-					
 					/*
 					 * Log activity (timetracking.status.*)
 					 */
@@ -249,18 +260,19 @@ class DAO_TimeTrackingEntry extends Cerb_ORMHelper {
 						//{{actor}} changed time tracking {{target}} to status {{status}}
 						'message' => 'activities.timetracking.status',
 						'variables' => array(
-							'target' => sprintf("%s", $model_object->getSummary()),
+							'target' => sprintf("%s", $model->getSummary()),
 							'status' => $status_to,
 							),
 						'urls' => array(
-							'target' => sprintf("ctx://%s:%d/%s", CerberusContexts::CONTEXT_TIMETRACKING, $object_id, $model_object->getSummary()),
+							'target' => sprintf("ctx://%s:%d/%s", CerberusContexts::CONTEXT_TIMETRACKING, $model->id, $model->getSummary()),
 							)
 					);
-					CerberusContexts::logActivity($activity_point, CerberusContexts::CONTEXT_TIMETRACKING, $object_id, $entry);
+					CerberusContexts::logActivity($activity_point, CerberusContexts::CONTEXT_TIMETRACKING, $model->id, $entry);
 				}
 				
 			} //foreach
 		}
+		
 	}
 	
 	static function updateWhere($fields, $where) {
@@ -305,7 +317,7 @@ class DAO_TimeTrackingEntry extends Cerb_ORMHelper {
 	static private function _getObjectsFromResult($rs) {
 		$objects = array();
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$object = new Model_TimeTrackingEntry();
 			$object->id = $row['id'];
 			$object->time_actual_mins = $row['time_actual_mins'];
@@ -316,7 +328,7 @@ class DAO_TimeTrackingEntry extends Cerb_ORMHelper {
 			$objects[$object->id] = $object;
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return $objects;
 	}
@@ -400,9 +412,7 @@ class DAO_TimeTrackingEntry extends Cerb_ORMHelper {
 			"FROM timetracking_entry tt ".
 		
 			// [JAS]: Dynamic table joins
-			(isset($tables['context_link']) ? "INNER JOIN context_link ON (context_link.to_context = 'cerberusweb.contexts.timetracking' AND context_link.to_context_id = tt.id) " : " ").
-			(isset($tables['ftcc']) ? "INNER JOIN comment ON (comment.context = 'cerberusweb.contexts.timetracking' AND comment.context_id = tt.id) " : " ").
-			(isset($tables['ftcc']) ? "INNER JOIN fulltext_comment_content ftcc ON (ftcc.id=comment.id) " : " ")
+			(isset($tables['context_link']) ? "INNER JOIN context_link ON (context_link.to_context = 'cerberusweb.contexts.timetracking' AND context_link.to_context_id = tt.id) " : " ")
 			;
 		
 		// Custom field joins
@@ -456,6 +466,19 @@ class DAO_TimeTrackingEntry extends Cerb_ORMHelper {
 		$param_key = $param->field;
 		settype($param_key, 'string');
 		switch($param_key) {
+			case SearchFields_TimeTrackingEntry::FULLTEXT_COMMENT_CONTENT:
+				$search = Extension_DevblocksSearchSchema::get(Search_CommentContent::ID);
+				$query = $search->getQueryFromParam($param);
+				$ids = $search->query($query, array('context_crc32' => sprintf("%u", crc32($from_context))));
+
+				$from_ids = DAO_Comment::getContextIdsByContextAndIds($from_context, $ids);
+				
+				$args['where_sql'] .= sprintf('AND %s IN (%s) ',
+					$from_index,
+					implode(', ', (!empty($from_ids) ? $from_ids : array(-1)))
+				);
+				break;
+			
 			case SearchFields_TimeTrackingEntry::VIRTUAL_CONTEXT_LINK:
 				$args['has_multiple_values'] = true;
 				self::_searchComponentsVirtualContextLinks($param, $from_context, $from_index, $args['join_sql'], $args['where_sql']);
@@ -506,7 +529,7 @@ class DAO_TimeTrackingEntry extends Cerb_ORMHelper {
 		
 		$results = array();
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$result = array();
 			foreach($row as $f => $v) {
 				$result[$f] = $v;
@@ -515,17 +538,20 @@ class DAO_TimeTrackingEntry extends Cerb_ORMHelper {
 			$results[$id] = $result;
 		}
 
-		// [JAS]: Count all
-		$total = -1;
+		$total = count($results);
+		
 		if($withCounts) {
-			$count_sql =
-				($has_multiple_values ? "SELECT COUNT(DISTINCT tt.id) " : "SELECT COUNT(tt.id) ").
-				$join_sql.
-				$where_sql;
-			$total = $db->GetOne($count_sql);
+			// We can skip counting if we have a less-than-full single page
+			if(!(0 == $page && $total < $limit)) {
+				$count_sql =
+					($has_multiple_values ? "SELECT COUNT(DISTINCT tt.id) " : "SELECT COUNT(tt.id) ").
+					$join_sql.
+					$where_sql;
+				$total = $db->GetOne($count_sql);
+			}
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return array($results,$total);
 	}
@@ -613,12 +639,13 @@ class SearchFields_TimeTrackingEntry {
 			self::VIRTUAL_CONTEXT_LINK => new DevblocksSearchField(self::VIRTUAL_CONTEXT_LINK, '*', 'context_link', $translate->_('common.links'), null),
 			self::VIRTUAL_HAS_FIELDSET => new DevblocksSearchField(self::VIRTUAL_HAS_FIELDSET, '*', 'has_fieldset', $translate->_('common.fieldset'), null),
 			self::VIRTUAL_WATCHERS => new DevblocksSearchField(self::VIRTUAL_WATCHERS, '*', 'owners', $translate->_('common.watchers'), 'WS'),
+				
+			self::FULLTEXT_COMMENT_CONTENT => new DevblocksSearchField(self::FULLTEXT_COMMENT_CONTENT, 'ftcc', 'content', $translate->_('comment.filters.content'), 'FT'),
 		);
-
-		$tables = DevblocksPlatform::getDatabaseTables();
-		if(isset($tables['fulltext_comment_content'])) {
-			$columns[self::FULLTEXT_COMMENT_CONTENT] = new DevblocksSearchField(self::FULLTEXT_COMMENT_CONTENT, 'ftcc', 'content', $translate->_('comment.filters.content'), 'FT');
-		}
+		
+		// Fulltext indexes
+		
+		$columns[self::FULLTEXT_COMMENT_CONTENT]->ft_schema = Search_CommentContent::ID;
 		
 		// Custom fields with fieldsets
 		
@@ -1169,6 +1196,8 @@ class Context_TimeTracking extends Extension_DevblocksContext implements IDevblo
 			$timeentry = DAO_TimeTrackingEntry::get($timeentry);
 		} elseif($timeentry instanceof Model_TimeTrackingEntry) {
 			// It's what we want already.
+		} elseif(is_array($timeentry)) {
+			$timeentry = Cerb_ORMHelper::recastArrayToModel($timeentry, 'Model_TimeTrackingEntry');
 		} else {
 			$timeentry = null;
 		}
@@ -1176,20 +1205,24 @@ class Context_TimeTracking extends Extension_DevblocksContext implements IDevblo
 		// Token labels
 		$token_labels = array(
 			'_label' => $prefix,
-			'log_date' => $prefix.$translate->_('timetracking_entry.log_date'),
-			'summary' => $prefix.$translate->_('common.summary'),
+			'id' => $prefix.$translate->_('common.id'),
 			'is_closed' => $prefix.$translate->_('common.is_closed'),
+			'log_date' => $prefix.$translate->_('timetracking_entry.log_date'),
 			'mins' => $prefix.$translate->_('timetracking_entry.time_actual_mins'),
+			'summary' => $prefix.$translate->_('common.summary'),
+				
 			'record_url' => $prefix.$translate->_('common.url.record'),
 		);
 		
 		// Token types
 		$token_types = array(
 			'_label' => 'context_url',
-			'log_date' => Model_CustomField::TYPE_DATE,
-			'summary' => Model_CustomField::TYPE_SINGLE_LINE,
+			'id' => Model_CustomField::TYPE_NUMBER,
 			'is_closed' => Model_CustomField::TYPE_CHECKBOX,
+			'log_date' => Model_CustomField::TYPE_DATE,
 			'mins' => 'time_mins',
+			'summary' => Model_CustomField::TYPE_SINGLE_LINE,
+				
 			'record_url' => Model_CustomField::TYPE_URL,
 		);
 		
@@ -1217,6 +1250,9 @@ class Context_TimeTracking extends Extension_DevblocksContext implements IDevblo
 			$token_values['summary'] = $timeentry->getSummary();
 			$token_values['is_closed'] = $timeentry->is_closed;
 			$token_values['activity_id'] = $timeentry->activity_id;
+			
+			// Custom fields
+			$token_values = $this->_importModelCustomFieldsAsValues($timeentry, $token_values);
 			
 			// URL
 			$url_writer = DevblocksPlatform::getUrlService();

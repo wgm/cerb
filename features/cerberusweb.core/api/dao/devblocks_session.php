@@ -79,31 +79,8 @@ class DAO_DevblocksSession extends Cerb_ORMHelper {
 			if(empty($batch_ids))
 				continue;
 			
-			// Get state before changes
-			$object_changes = parent::_getUpdateDeltas($batch_ids, $fields, get_class());
-
 			// Make changes
 			parent::_update($batch_ids, 'devblocks_session', $fields);
-			
-			// Send events
-			if(!empty($object_changes)) {
-				// Local events
-				//self::_processUpdateEvents($object_changes);
-				
-				// Trigger an event about the changes
-				$eventMgr = DevblocksPlatform::getEventService();
-				$eventMgr->trigger(
-					new Model_DevblocksEvent(
-						'dao.devblocks_session.update',
-						array(
-							'objects' => $object_changes,
-						)
-					)
-				);
-				
-				// Log the context update
-				//DevblocksPlatform::markContextChanged(CerberusContexts::CONTEXT_, $batch_ids);
-			}
 		}
 	}
 	
@@ -159,7 +136,7 @@ class DAO_DevblocksSession extends Cerb_ORMHelper {
 	static private function _getObjectsFromResult($rs) {
 		$objects = array();
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$object = new Model_DevblocksSession();
 			$object->session_key = $row['session_key'];
 			$object->created = $row['created'];
@@ -171,39 +148,43 @@ class DAO_DevblocksSession extends Cerb_ORMHelper {
 			$objects[$object->session_key] = $object;
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return $objects;
 	}
 	
 	static function delete($ids) {
-		if(!is_array($ids)) $ids = array($ids);
+		if(!is_array($ids))
+			$ids = array($ids);
+		
 		$db = DevblocksPlatform::getDatabaseService();
 		
 		if(empty($ids))
 			return;
 
-		foreach($ids as $k => $v) {
-			$ids[$k] = Cerb_ORMHelper::qstr($v);
-		}
+		DevblocksPlatform::sanitizeArray($ids, 'integer');
 		
 		$ids_list = implode(',', $ids);
 		
 		$db->Execute(sprintf("DELETE FROM devblocks_session WHERE session_key IN (%s)", $ids_list));
 		
-		// Fire event
-		/*
-		$eventMgr = DevblocksPlatform::getEventService();
-		$eventMgr->trigger(
-			new Model_DevblocksEvent(
-				'context.delete',
-				array(
-					'context' => 'cerberusweb.contexts.',
-					'context_ids' => $ids
-				)
-			)
-		);
-		*/
+		return true;
+	}
+	
+	static function deleteByUserIds($ids) {
+		if(!is_array($ids))
+			$ids = array($ids);
+		
+		$db = DevblocksPlatform::getDatabaseService();
+		
+		if(empty($ids))
+			return;
+		
+		DevblocksPlatform::sanitizeArray($ids, 'integer');
+		
+		$ids_list = implode(',', $ids);
+		
+		$db->Execute(sprintf("DELETE FROM devblocks_session WHERE user_id IN (%s)", $ids_list));
 		
 		return true;
 	}
@@ -314,13 +295,12 @@ class DAO_DevblocksSession extends Cerb_ORMHelper {
 			$rs = $db->SelectLimit($sql,$limit,$page*$limit) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs ADORecordSet */
 		} else {
 			$rs = $db->Execute($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs ADORecordSet */
-			$total = mysql_num_rows($rs);
+			$total = mysqli_num_rows($rs);
 		}
 		
 		$results = array();
-		$total = -1;
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$result = array();
 			foreach($row as $f => $v) {
 				$result[$f] = $v;
@@ -329,16 +309,20 @@ class DAO_DevblocksSession extends Cerb_ORMHelper {
 			$results[$object_id] = $result;
 		}
 
-		// [JAS]: Count all
+		$total = count($results);
+		
 		if($withCounts) {
-			$count_sql =
-				($has_multiple_values ? "SELECT COUNT(DISTINCT devblocks_session.session_key) " : "SELECT COUNT(devblocks_session.session_key) ").
-				$join_sql.
-				$where_sql;
-			$total = $db->GetOne($count_sql);
+			// We can skip counting if we have a less-than-full single page
+			if(!(0 == $page && $total < $limit)) {
+				$count_sql =
+					($has_multiple_values ? "SELECT COUNT(DISTINCT devblocks_session.session_key) " : "SELECT COUNT(devblocks_session.session_key) ").
+					$join_sql.
+					$where_sql;
+				$total = $db->GetOne($count_sql);
+			}
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return array($results,$total);
 	}

@@ -98,7 +98,7 @@ class DAO_Address extends Cerb_ORMHelper {
 		return $id;
 	}
 	
-	static function update($ids, $fields) {
+	static function update($ids, $fields, $check_deltas=true) {
 		if(!is_array($ids))
 			$ids = array($ids);
 		
@@ -112,24 +112,23 @@ class DAO_Address extends Cerb_ORMHelper {
 			if(empty($batch_ids))
 				continue;
 			
-			// Get state before changes
-			$object_changes = parent::_getUpdateDeltas($batch_ids, $fields, get_class());
-
+			// Send events
+			if($check_deltas) {
+				CerberusContexts::checkpointChanges(CerberusContexts::CONTEXT_ADDRESS, $batch_ids);
+			}
+			
 			// Make changes
 			parent::_update($batch_ids, 'address', $fields);
 			
 			// Send events
-			if(!empty($object_changes)) {
-				// Local events
-				//self::_processUpdateEvents($object_changes);
-				
+			if($check_deltas) {
 				// Trigger an event about the changes
 				$eventMgr = DevblocksPlatform::getEventService();
 				$eventMgr->trigger(
 					new Model_DevblocksEvent(
 						'dao.address.update',
 						array(
-							'objects' => $object_changes,
+							'fields' => $fields,
 						)
 					)
 				);
@@ -148,7 +147,7 @@ class DAO_Address extends Cerb_ORMHelper {
 		$db = DevblocksPlatform::getDatabaseService();
 		$logger = DevblocksPlatform::getConsoleLog();
 		
-		$sql = "DELETE QUICK address_to_worker FROM address_to_worker LEFT JOIN worker ON address_to_worker.worker_id=worker.id WHERE worker.id IS NULL";
+		$sql = "DELETE FROM address_to_worker WHERE worker_id NOT IN (SELECT id FROM worker)";
 		$db->Execute($sql);
 		$logger->info('[Maint] Purged ' . $db->Affected_Rows() . ' address_to_worker records.');
 
@@ -177,7 +176,7 @@ class DAO_Address extends Cerb_ORMHelper {
 		$address_ids = implode(',', $ids);
 		
 		// Addresses
-		$sql = sprintf("DELETE QUICK FROM address WHERE id IN (%s)", $address_ids);
+		$sql = sprintf("DELETE FROM address WHERE id IN (%s)", $address_ids);
 		$db->Execute($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
 	
 		// Fire event
@@ -192,7 +191,7 @@ class DAO_Address extends Cerb_ORMHelper {
 			)
 		);
 	}
-		
+	
 	static function getWhere($where=null, $sortBy=null, $sortAsc=true, $limit=null) {
 		$db = DevblocksPlatform::getDatabaseService();
 		
@@ -219,7 +218,7 @@ class DAO_Address extends Cerb_ORMHelper {
 	static private function _getObjectsFromResult($rs) {
 		$objects = array();
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$object = new Model_Address();
 			$object->id = intval($row['id']);
 			$object->email = $row['email'];
@@ -235,7 +234,7 @@ class DAO_Address extends Cerb_ORMHelper {
 			$objects[$object->id] = $object;
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return $objects;
 	}
@@ -377,9 +376,7 @@ class DAO_Address extends Cerb_ORMHelper {
 			"LEFT JOIN contact_org o ON (o.id=a.contact_org_id) ".
 		
 			// [JAS]: Dynamic table joins
-			(isset($tables['context_link']) ? "INNER JOIN context_link ON (context_link.to_context = 'cerberusweb.contexts.address' AND context_link.to_context_id = a.id) " : " ").
-			(isset($tables['ftcc']) ? "INNER JOIN comment ON (comment.context = 'cerberusweb.contexts.address' AND comment.context_id = a.id) " : " ").
-			(isset($tables['ftcc']) ? "INNER JOIN fulltext_comment_content ftcc ON (ftcc.id=comment.id) " : " ")
+			(isset($tables['context_link']) ? "INNER JOIN context_link ON (context_link.to_context = 'cerberusweb.contexts.address' AND context_link.to_context_id = a.id) " : " ")
 			;
 
 		$cfield_index_map = array(
@@ -439,6 +436,19 @@ class DAO_Address extends Cerb_ORMHelper {
 		settype($param_key, 'string');
 		
 		switch($param_key) {
+			case SearchFields_Address::FULLTEXT_COMMENT_CONTENT:
+				$search = Extension_DevblocksSearchSchema::get(Search_CommentContent::ID);
+				$query = $search->getQueryFromParam($param);
+				$ids = $search->query($query, array('context_crc32' => sprintf("%u", crc32($from_context))));
+				
+				$from_ids = DAO_Comment::getContextIdsByContextAndIds($from_context, $ids);
+				
+				$args['where_sql'] .= sprintf('AND %s IN (%s) ',
+					$from_index,
+					implode(', ', (!empty($from_ids) ? $from_ids : array(-1)))
+				);
+				break;
+			
 			case SearchFields_Address::VIRTUAL_CONTEXT_LINK:
 				$args['has_multiple_values'] = true;
 				self::_searchComponentsVirtualContextLinks($param, $from_context, $from_index, $args['join_sql'], $args['where_sql']);
@@ -489,7 +499,7 @@ class DAO_Address extends Cerb_ORMHelper {
 		
 		$results = array();
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$result = array();
 			foreach($row as $f => $v) {
 				$result[$f] = $v;
@@ -498,17 +508,20 @@ class DAO_Address extends Cerb_ORMHelper {
 			$results[$id] = $result;
 		}
 
-		// [JAS]: Count all
-		$total = -1;
+		$total = count($results);
+		
 		if($withCounts) {
-			$count_sql =
-				($has_multiple_values ? "SELECT COUNT(DISTINCT a.id) " : "SELECT COUNT(*) ").
-				$join_sql.
-				$where_sql;
-			$total = $db->GetOne($count_sql);
+			// We can skip counting if we have a less-than-full single page
+			if(!(0 == $page && $total < $limit)) {
+				$count_sql =
+					($has_multiple_values ? "SELECT COUNT(DISTINCT a.id) " : "SELECT COUNT(*) ").
+					$join_sql.
+					$where_sql;
+				$total = $db->GetOne($count_sql);
+			}
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return array($results,$total);
 	}
@@ -569,12 +582,13 @@ class SearchFields_Address implements IDevblocksSearchFields {
 			
 			self::CONTEXT_LINK => new DevblocksSearchField(self::CONTEXT_LINK, 'context_link', 'from_context', null, null),
 			self::CONTEXT_LINK_ID => new DevblocksSearchField(self::CONTEXT_LINK_ID, 'context_link', 'from_context_id', null, null),
+				
+			self::FULLTEXT_COMMENT_CONTENT => new DevblocksSearchField(self::FULLTEXT_COMMENT_CONTENT, 'ftcc', 'content', $translate->_('comment.filters.content'), 'FT'),
 		);
 		
-		$tables = DevblocksPlatform::getDatabaseTables();
-		if(isset($tables['fulltext_comment_content'])) {
-			$columns[self::FULLTEXT_COMMENT_CONTENT] = new DevblocksSearchField(self::FULLTEXT_COMMENT_CONTENT, 'ftcc', 'content', $translate->_('comment.filters.content'), 'FT');
-		}
+		// Fulltext indexes
+		
+		$columns[self::FULLTEXT_COMMENT_CONTENT]->ft_schema = Search_CommentContent::ID;
 		
 		// Custom fields with fieldsets
 		
@@ -1211,10 +1225,16 @@ class Context_Address extends Extension_DevblocksContext implements IDevblocksCo
 		// Polymorph
 		if(is_numeric($address)) {
 			$address = DAO_Address::get($address);
+			
+		} elseif(is_array($address)) {
+			$address = Cerb_ORMHelper::recastArrayToModel($address, 'Model_Address');
+			
 		} elseif($address instanceof Model_Address) {
 			// It's what we want already.
+			
 		} elseif(is_string($address)) {
 			$address = DAO_Address::getByEmail($address);
+			
 		} else {
 			$address = null;
 		}
@@ -1222,6 +1242,7 @@ class Context_Address extends Extension_DevblocksContext implements IDevblocksCo
 		// Token labels
 		$token_labels = array(
 			'_label' => $prefix,
+			'id' => $prefix.$translate->_('common.id'),
 			'address' => $prefix.$translate->_('address.address'),
 			'first_name' => $prefix.$translate->_('address.first_name'),
 			'full_name' => $prefix.$translate->_('address.full_name'),
@@ -1237,6 +1258,7 @@ class Context_Address extends Extension_DevblocksContext implements IDevblocksCo
 		// Token types
 		$token_types = array(
 			'_label' => 'context_url',
+			'id' => Model_CustomField::TYPE_NUMBER,
 			'address' => Model_CustomField::TYPE_SINGLE_LINE,
 			'first_name' => Model_CustomField::TYPE_SINGLE_LINE,
 			'full_name' => Model_CustomField::TYPE_SINGLE_LINE,
@@ -1281,6 +1303,9 @@ class Context_Address extends Extension_DevblocksContext implements IDevblocksCo
 			$token_values['is_defunct'] = $address->is_defunct;
 			$token_values['updated'] = $address->updated;
 
+			// Custom fields
+			$token_values = $this->_importModelCustomFieldsAsValues($address, $token_values);
+			
 			// URL
 			$url_writer = DevblocksPlatform::getUrlService();
 			$token_values['record_url'] = $url_writer->writeNoProxy(sprintf("c=profiles&type=address&id=%d-%s",$address->id, DevblocksPlatform::strToPermalink($address->email)), true);

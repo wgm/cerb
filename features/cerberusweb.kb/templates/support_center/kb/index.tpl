@@ -13,10 +13,10 @@
 	{* Breadcrumb category navigation *}
 	<div style="padding-bottom:10px;">
 	{if !empty($root_id)}
-		<a href="{devblocks_url}c=kb&a=browse{/devblocks_url}" style="font-style:italic;">{'portal.kb.public.top'|devblocks_translate}</a> ::
+		<a href="{devblocks_url}c=kb&a=browse{/devblocks_url}">{'portal.kb.public.top'|devblocks_translate}</a> ::
 		{if !empty($breadcrumb)}
 			{foreach from=$breadcrumb item=bread_id}
-				<a href="{devblocks_url}c=kb&a=browse&id={$bread_id|string_format:"%06d"}{/devblocks_url}" style="font-style:italic;">{$categories.$bread_id->name}</a> :
+				<a href="{devblocks_url}c=kb&a=browse&id={$bread_id|string_format:"%06d"}{/devblocks_url}">{$categories.$bread_id->name}</a> :
 			{/foreach}
 		{/if}
 	{/if}
@@ -54,9 +54,9 @@
 </fieldset>
 
 {if !empty($root_id)}
-	<div class="header"><h1>Articles in {$categories.$root_id->name}</h1></div>
+	<div class="header"><b>Articles in {$categories.$root_id->name}</b></div>
 {elseif empty($root) && !empty($view)}
-	<div class="header"><h1>All Articles</h1></div>
+	<div class="header"><b>All Articles</b></div>
 {/if}
 
 {if !empty($view)}

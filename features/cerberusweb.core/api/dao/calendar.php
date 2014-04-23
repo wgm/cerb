@@ -21,7 +21,7 @@ class DAO_Calendar extends Cerb_ORMHelper {
 		return $id;
 	}
 	
-	static function update($ids, $fields) {
+	static function update($ids, $fields, $check_deltas=true) {
 		if(!is_array($ids))
 			$ids = array($ids);
 		
@@ -32,24 +32,23 @@ class DAO_Calendar extends Cerb_ORMHelper {
 			if(empty($batch_ids))
 				continue;
 			
-			// Get state before changes
-			$object_changes = parent::_getUpdateDeltas($batch_ids, $fields, get_class());
-
+			// Send events
+			if($check_deltas) {
+				CerberusContexts::checkpointChanges(CerberusContexts::CONTEXT_CALENDAR, $batch_ids);
+			}
+			
 			// Make changes
 			parent::_update($batch_ids, 'calendar', $fields);
 			
 			// Send events
-			if(!empty($object_changes)) {
-				// Local events
-				//self::_processUpdateEvents($object_changes);
-				
+			if($check_deltas) {
 				// Trigger an event about the changes
 				$eventMgr = DevblocksPlatform::getEventService();
 				$eventMgr->trigger(
 					new Model_DevblocksEvent(
 						'dao.calendar.update',
 						array(
-							'objects' => $object_changes,
+							'fields' => $fields,
 						)
 					)
 				);
@@ -171,7 +170,7 @@ class DAO_Calendar extends Cerb_ORMHelper {
 	static private function _getObjectsFromResult($rs) {
 		$objects = array();
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$object = new Model_Calendar();
 			$object->id = $row['id'];
 			$object->name = $row['name'];
@@ -185,9 +184,13 @@ class DAO_Calendar extends Cerb_ORMHelper {
 			$objects[$object->id] = $object;
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return $objects;
+	}
+	
+	static function random() {
+		return self::_getRandom('calendar');
 	}
 	
 	static function delete($ids) {
@@ -387,13 +390,12 @@ class DAO_Calendar extends Cerb_ORMHelper {
 			$rs = $db->SelectLimit($sql,$limit,$page*$limit) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs ADORecordSet */
 		} else {
 			$rs = $db->Execute($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs ADORecordSet */
-			$total = mysql_num_rows($rs);
+			$total = mysqli_num_rows($rs);
 		}
 		
 		$results = array();
-		$total = -1;
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$result = array();
 			foreach($row as $f => $v) {
 				$result[$f] = $v;
@@ -401,17 +403,21 @@ class DAO_Calendar extends Cerb_ORMHelper {
 			$object_id = intval($row[SearchFields_Calendar::ID]);
 			$results[$object_id] = $result;
 		}
-
-		// [JAS]: Count all
+		
+		$total = count($results);
+		
 		if($withCounts) {
-			$count_sql =
-				($has_multiple_values ? "SELECT COUNT(DISTINCT calendar.id) " : "SELECT COUNT(calendar.id) ").
-				$join_sql.
-				$where_sql;
-			$total = $db->GetOne($count_sql);
+			// We can skip counting if we have a less-than-full single page
+			if(!(0 == $page && $total < $limit)) {
+				$count_sql =
+					($has_multiple_values ? "SELECT COUNT(DISTINCT calendar.id) " : "SELECT COUNT(calendar.id) ").
+					$join_sql.
+					$where_sql;
+				$total = $db->GetOne($count_sql);
+			}
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return array($results,$total);
 	}
@@ -1203,7 +1209,7 @@ class View_Calendar extends C4_AbstractView implements IAbstractView_Subtotals {
 
 class Context_Calendar extends Extension_DevblocksContext implements IDevblocksContextProfile, IDevblocksContextPeek { // IDevblocksContextImport
 	function getRandom() {
-		//return DAO_Calendar::random();
+		return DAO_Calendar::random();
 	}
 	
 	function profileGetUrl($context_id) {
@@ -1273,6 +1279,8 @@ class Context_Calendar extends Extension_DevblocksContext implements IDevblocksC
 			$calendar = DAO_Calendar::get($calendar);
 		} elseif($calendar instanceof Model_Calendar) {
 			// It's what we want already.
+		} elseif(is_array($calendar)) {
+			$calendar = Cerb_ORMHelper::recastArrayToModel($calendar, 'Model_Calendar');
 		} else {
 			$calendar = null;
 		}
@@ -1317,6 +1325,9 @@ class Context_Calendar extends Extension_DevblocksContext implements IDevblocksC
 			$token_values['id'] = $calendar->id;
 			$token_values['name'] = $calendar->name;
 			$token_values['updated_at'] = $calendar->updated_at;
+			
+			// Custom fields
+			$token_values = $this->_mergeModelCustomFields($calendar, $token_values);
 			
 			// URL
 			$url_writer = DevblocksPlatform::getUrlService();

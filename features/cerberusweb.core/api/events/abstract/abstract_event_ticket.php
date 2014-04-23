@@ -20,12 +20,12 @@ abstract class AbstractEvent_Ticket extends Extension_DevblocksEvent {
 	
 	/**
 	 *
-	 * @param integer $ticket_id
+	 * @param integer $context_id
 	 * @param integer $group_id
 	 * @return Model_DevblocksEvent
 	 */
-	function generateSampleEventModel(Model_TriggerEvent $trigger, $ticket_id=null, $comment_id=null) {
-		if(empty($ticket_id)) {
+	function generateSampleEventModel(Model_TriggerEvent $trigger, $context_id=null, $comment_id=null) {
+		if(empty($context_id)) {
 			// Pull the latest ticket
 			list($results) = DAO_Ticket::search(
 				array(),
@@ -43,37 +43,38 @@ abstract class AbstractEvent_Ticket extends Extension_DevblocksEvent {
 			
 			$result = array_shift($results);
 			
-			$ticket_id = $result[SearchFields_Ticket::TICKET_ID];
+			$context_id = $result[SearchFields_Ticket::TICKET_ID];
 		}
 
 		// If this is the 'new comment on convo in group' event, simulate a comment
 		if(empty($comment_id) && get_class($this) == 'Event_CommentOnTicketInGroup') {
-			if(!empty($ticket_id))
-				$comment_id = DAO_Comment::random(CerberusContexts::CONTEXT_TICKET, $ticket_id);
+			if(!empty($context_id))
+				$comment_id = DAO_Comment::random(CerberusContexts::CONTEXT_TICKET, $context_id);
 		}
 		
 		return new Model_DevblocksEvent(
 			$this->_event_id,
 			array(
-				'ticket_id' => $ticket_id,
+				'context_id' => $context_id,
 				'comment_id' => $comment_id,
 			)
 		);
 	}
 	
-	function setEvent(Model_DevblocksEvent $event_model=null) {
+	function setEvent(Model_DevblocksEvent $event_model=null, Model_TriggerEvent $trigger=null) {
 		$labels = array();
 		$values = array();
 		$blank = array();
 
-		@$ticket_id = $event_model->params['ticket_id'];
+		// We can accept a model object or a context_id
+		@$model = $event_model->params['context_model'] ?: $event_model->params['context_id'];
 		
 		/**
 		 * Ticket
 		 */
 		$merge_token_labels = array();
 		$merge_token_values = array();
-		CerberusContexts::getContext(CerberusContexts::CONTEXT_TICKET, $ticket_id, $merge_token_labels, $merge_token_values, null, true);
+		CerberusContexts::getContext(CerberusContexts::CONTEXT_TICKET, $model, $merge_token_labels, $merge_token_values, null, true);
 
 			@$group_id = $merge_token_values['group_id'];
 
@@ -96,7 +97,7 @@ abstract class AbstractEvent_Ticket extends Extension_DevblocksEvent {
 				$labels,
 				$values
 			);
-
+			
 		/**
 		 * Group
 		 */
@@ -147,7 +148,7 @@ abstract class AbstractEvent_Ticket extends Extension_DevblocksEvent {
 	
 	function renderSimulatorTarget($trigger, $event_model) {
 		$context = CerberusContexts::CONTEXT_TICKET;
-		$context_id = $event_model->params['ticket_id'];
+		$context_id = $event_model->params['context_id'];
 		DevblocksEventHelper::renderSimulatorTarget($context, $context_id, $trigger, $event_model);
 	}
 	
@@ -213,8 +214,8 @@ abstract class AbstractEvent_Ticket extends Extension_DevblocksEvent {
 		return $vals_to_ctx;
 	}
 	
-	function getConditionExtensions() {
-		$labels = $this->getLabels();
+	function getConditionExtensions(Model_TriggerEvent $trigger) {
+		$labels = $this->getLabels($trigger);
 		$types = $this->getTypes();
 		
 		$labels['ticket_has_owner'] = 'Ticket has owner';
@@ -582,7 +583,7 @@ abstract class AbstractEvent_Ticket extends Extension_DevblocksEvent {
 		return $pass;
 	}
 	
-	function getActionExtensions() {
+	function getActionExtensions(Model_TriggerEvent $trigger) {
 		$actions =
 			array(
 				'add_recipients' => array('label' =>'Add recipients'),
@@ -604,7 +605,7 @@ abstract class AbstractEvent_Ticket extends Extension_DevblocksEvent {
 				'set_subject' => array('label' => 'Set ticket subject'),
 				'set_links' => array('label' => 'Set links'),
 			)
-			+ DevblocksEventHelper::getActionCustomFieldsFromLabels($this->getLabels())
+			+ DevblocksEventHelper::getActionCustomFieldsFromLabels($this->getLabels($trigger))
 			;
 		
 		return $actions;
@@ -1110,7 +1111,7 @@ abstract class AbstractEvent_Ticket extends Extension_DevblocksEvent {
 				if($to_group_id != $current_group_id) {
 					$merge_token_labels = array();
 					$merge_token_values = array();
-					$labels = $this->getLabels();
+					$labels = $this->getLabels($trigger);
 					CerberusContexts::getContext(CerberusContexts::CONTEXT_GROUP, $to_group_id, $merge_token_labels, $merge_token_values, '', true);
 			
 					CerberusContexts::merge(
@@ -1126,7 +1127,7 @@ abstract class AbstractEvent_Ticket extends Extension_DevblocksEvent {
 				if(!empty($to_bucket_id)) {
 					$merge_token_labels = array();
 					$merge_token_values = array();
-					$labels = $this->getLabels();
+					$labels = $this->getLabels($trigger);
 					CerberusContexts::getContext(CerberusContexts::CONTEXT_BUCKET, $to_bucket_id, $merge_token_labels, $merge_token_values, '', true);
 			
 					CerberusContexts::merge(

@@ -129,7 +129,7 @@ class DAO_CommunityTool extends Cerb_ORMHelper {
 	static private function _createObjectsFromResultSet($rs) {
 		$objects = array();
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$object = new Model_CommunityTool();
 			$object->id = intval($row['id']);
 			$object->name = $row['name'];
@@ -138,7 +138,7 @@ class DAO_CommunityTool extends Cerb_ORMHelper {
 			$objects[$object->id] = $object;
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return $objects;
 	}
@@ -161,10 +161,10 @@ class DAO_CommunityTool extends Cerb_ORMHelper {
 			 * orphaned data.
 			 */
 			
-			$sql = sprintf("DELETE QUICK FROM community_tool WHERE id = %d", $id);
+			$sql = sprintf("DELETE FROM community_tool WHERE id = %d", $id);
 			$db->Execute($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
 			
-			$sql = sprintf("DELETE QUICK FROM community_tool_property WHERE tool_code = '%s'", $tool->code);
+			$sql = sprintf("DELETE FROM community_tool_property WHERE tool_code = '%s'", $tool->code);
 			$db->Execute($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
 		}
 	}
@@ -253,13 +253,12 @@ class DAO_CommunityTool extends Cerb_ORMHelper {
 			$rs = $db->SelectLimit($sql,$limit,$page*$limit) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
 		} else {
 			$rs = $db->Execute($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
-			$total = mysql_num_rows($rs);
+			$total = mysqli_num_rows($rs);
 		}
 		
 		$results = array();
-		$total = -1;
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$result = array();
 			foreach($row as $f => $v) {
 				$result[$f] = $v;
@@ -268,16 +267,20 @@ class DAO_CommunityTool extends Cerb_ORMHelper {
 			$results[$object_id] = $result;
 		}
 
-		// [JAS]: Count all
+		$total = count($results);
+		
 		if($withCounts) {
-			$count_sql =
-				($has_multiple_values ? "SELECT COUNT(DISTINCT ct.id) " : "SELECT COUNT(ct.id) ").
-				$join_sql.
-				$where_sql;
-			$total = $db->GetOne($count_sql);
+			// We can skip counting if we have a less-than-full single page
+			if(!(0 == $page && $total < $limit)) {
+				$count_sql =
+					($has_multiple_values ? "SELECT COUNT(DISTINCT ct.id) " : "SELECT COUNT(ct.id) ").
+					$join_sql.
+					$where_sql;
+				$total = $db->GetOne($count_sql);
+			}
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return array($results,$total);
 	}
@@ -343,13 +346,13 @@ class DAO_CommunityToolProperty {
 			
 			$props = array();
 			
-			while($row = mysql_fetch_assoc($rs)) {
+			while($row = mysqli_fetch_assoc($rs)) {
 				$k = $row['property_key'];
 				$v = $row['property_value'];
 				$props[$k] = $v;
 			}
 			
-			mysql_free_result($rs);
+			mysqli_free_result($rs);
 			
 			$cache->save($props, self::_CACHE_PREFIX.$tool_code);
 		}
@@ -357,15 +360,26 @@ class DAO_CommunityToolProperty {
 		return $props;
 	}
 	
-	static function get($tool_code, $key, $default=null) {
+	static function get($tool_code, $key, $default=null, $json_decode=false) {
 		$props = self::getAllByTool($tool_code);
 		@$val = $props[$key];
 		
-		return (is_null($val) || (!is_numeric($val) && empty($val))) ? $default : $val;
+		$val = (is_null($val) || (!is_numeric($val) && empty($val))) ? $default : $val;
+		
+		if($json_decode)
+			$val = @json_decode($val, true);
+		
+		if(false === $val)
+			$val = $default;
+		
+		return $val;
 	}
 	
-	static function set($tool_code, $key, $value) {
+	static function set($tool_code, $key, $value, $json_encode=false) {
 		$db = DevblocksPlatform::getDatabaseService();
+		
+		if($json_encode)
+			$value = json_encode($value);
 		
 		$db->Execute(sprintf("REPLACE INTO community_tool_property (tool_code, property_key, property_value) ".
 			"VALUES (%s, %s, %s)",
@@ -464,7 +478,7 @@ class DAO_CommunitySession {
 	
 	static private function gc() {
 		$db = DevblocksPlatform::getDatabaseService();
-		$sql = sprintf("DELETE QUICK FROM community_session WHERE updated < %d",
+		$sql = sprintf("DELETE FROM community_session WHERE updated < %d",
 			(time()-(60*60)) // 1 hr
 		);
 		$db->Execute($sql);

@@ -25,7 +25,6 @@ class DAO_Worker extends Cerb_ORMHelper {
 	const LAST_NAME = 'last_name';
 	const TITLE = 'title';
 	const EMAIL = 'email';
-	const PASSWORD = 'pass';
 	const IS_SUPERUSER = 'is_superuser';
 	const IS_DISABLED = 'is_disabled';
 	const LAST_ACTIVITY = 'last_activity';
@@ -145,7 +144,7 @@ class DAO_Worker extends Cerb_ORMHelper {
 		
 		list($where_sql, $sort_sql, $limit_sql) = self::_getWhereSQL($where, $sortBy, $sortAsc, $limit);
 		
-		$sql = "SELECT id, first_name, last_name, email, pass, title, is_superuser, is_disabled, last_activity_date, last_activity, last_activity_ip, auth_extension_id ".
+		$sql = "SELECT id, first_name, last_name, email, title, is_superuser, is_disabled, last_activity_date, last_activity, last_activity_ip, auth_extension_id ".
 			"FROM worker ".
 			$where_sql.
 			$sort_sql.
@@ -164,13 +163,12 @@ class DAO_Worker extends Cerb_ORMHelper {
 	static private function _createObjectsFromResultSet($rs=null) {
 		$objects = array();
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$object = new Model_Worker();
 			$object->id = intval($row['id']);
 			$object->first_name = $row['first_name'];
 			$object->last_name = $row['last_name'];
 			$object->email = $row['email'];
-			$object->pass = $row['pass'];
 			$object->title = $row['title'];
 			$object->is_superuser = intval($row['is_superuser']);
 			$object->is_disabled = intval($row['is_disabled']);
@@ -186,24 +184,9 @@ class DAO_Worker extends Cerb_ORMHelper {
 			$objects[$object->id] = $object;
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return $objects;
-	}
-	
-	static function getList($ids=array()) {
-		if(!is_array($ids)) $ids = array($ids);
-
-		$workers = self::getWhere(
-			sprintf("%s IN (%s)",
-				DAO_Worker::ID,
-				(!empty($ids) ? implode(',', $ids) : '0')
-			),
-			array(DAO_Worker::FIRST_NAME, DAO_Worker::LAST_NAME),
-			array(true, true)
-		);
-		
-		return $workers;
 	}
 	
 	/**
@@ -227,15 +210,16 @@ class DAO_Worker extends Cerb_ORMHelper {
 	 * @return integer $id
 	 */
 	static function getByEmail($email) {
-		if(empty($email)) return null;
-		$db = DevblocksPlatform::getDatabaseService();
+		if(empty($email))
+			return null;
 		
-		$sql = sprintf("SELECT a.id FROM worker a WHERE a.email = %s",
-			$db->qstr($email)
-		);
+		$workers = DAO_Worker::getAll();
 		
-		if(null != ($id = $db->GetOne($sql)))
-			return $id;
+		if(is_array($workers))
+		foreach($workers as $worker) {
+			if(0 == strcasecmp($worker->email, $email))
+				return $worker;
+		}
 		
 		return null;
 	}
@@ -262,7 +246,8 @@ class DAO_Worker extends Cerb_ORMHelper {
 		return $results;
 	}
 	
-	static function update($ids, $fields, $option_bits=0) {
+	// [TODO] Fix 'option_bits'
+	static function update($ids, $fields, $option_bits=0, $check_deltas=true) {
 		if(!is_array($ids))
 			$ids = array($ids);
 		
@@ -273,17 +258,19 @@ class DAO_Worker extends Cerb_ORMHelper {
 			if(empty($batch_ids))
 				continue;
 			
-			// Get state before changes
-			$object_changes = parent::_getUpdateDeltas($batch_ids, $fields, get_class());
-
+			// Send events
+			if($check_deltas) {
+				CerberusContexts::checkpointChanges(CerberusContexts::CONTEXT_WORKER, $batch_ids);
+			}
+			
 			// Make changes
 			parent::_update($batch_ids, 'worker', $fields);
 			
 			// Send events
 			if(0 == ($option_bits & DevblocksORMHelper::OPT_UPDATE_NO_EVENTS)) {
-				if(!empty($object_changes)) {
+				if($check_deltas) {
 					// Local events
-					self::_processUpdateEvents($object_changes);
+					self::_processUpdateEvents($batch_ids, $fields);
 					
 					// Trigger an event about the changes
 					$eventMgr = DevblocksPlatform::getEventService();
@@ -291,7 +278,7 @@ class DAO_Worker extends Cerb_ORMHelper {
 						new Model_DevblocksEvent(
 							'dao.worker.update',
 							array(
-								'objects' => $object_changes,
+								'fields' => $fields,
 							)
 						)
 					);
@@ -308,45 +295,55 @@ class DAO_Worker extends Cerb_ORMHelper {
 		}
 	}
 	
-	static function _processUpdateEvents($objects) {
-		if(is_array($objects))
-		foreach($objects as $object_id => $object) {
-			@$model = $object['model'];
-			@$changes = $object['changes'];
-			
-			if(empty($model) || empty($changes))
-				continue;
+	static function _processUpdateEvents($ids, $change_fields) {
+		// We only care about these fields, so abort if they aren't referenced
+
+		$observed_fields = array(
+			DAO_Worker::IS_DISABLED,
+		);
+		
+		$used_fields = array_intersect($observed_fields, array_keys($change_fields));
+		
+		if(empty($used_fields))
+			return;
+		
+		// Load records only if they're needed
+		
+		if(false == ($before_models = CerberusContexts::getCheckpoints(CerberusContexts::CONTEXT_WORKER, $ids)))
+			return;
+		
+		foreach($before_models as $id => $before_model) {
+			$before_model = (object) $before_model;
 			
 			/*
 			 * Worker deactivated
 			 */
-			@$is_disabled = $changes[DAO_Worker::IS_DISABLED];
 			
-			if(!empty($is_disabled) && !empty($model[DAO_Worker::IS_DISABLED])) {
-				Cerb_DevblocksSessionHandler::destroyByWorkerIds($model[DAO_Worker::ID]);
+			@$is_disabled = $change_fields[DAO_Worker::IS_DISABLED];
+			
+			if($is_disabled == $before_model->is_disabled)
+				unset($change_fields[DAO_Worker::IS_DISABLED]);
+			
+			if(isset($change_fields[DAO_Worker::IS_DISABLED]) && $is_disabled) {
+				Cerb_DevblocksSessionHandler::destroyByWorkerIds($before_model->id);
 			}
-			
-		} // foreach
+		}
 	}
 	
 	static function maint() {
 		$db = DevblocksPlatform::getDatabaseService();
 		$logger = DevblocksPlatform::getConsoleLog();
 		
-		$sql = "DELETE QUICK view_rss FROM view_rss LEFT JOIN worker ON view_rss.worker_id = worker.id WHERE worker.id IS NULL";
-		$db->Execute($sql);
+		$db->Execute("DELETE FROM view_rss WHERE worker_id NOT IN (SELECT id FROM worker)");
 		$logger->info('[Maint] Purged ' . $db->Affected_Rows() . ' view_rss records.');
 		
-		$sql = "DELETE QUICK worker_pref FROM worker_pref LEFT JOIN worker ON worker_pref.worker_id = worker.id WHERE worker.id IS NULL";
-		$db->Execute($sql);
+		$db->Execute("DELETE FROM worker_pref WHERE worker_id NOT IN (SELECT id FROM worker)");
 		$logger->info('[Maint] Purged ' . $db->Affected_Rows() . ' worker_pref records.');
-
-		$sql = "DELETE QUICK worker_view_model FROM worker_view_model LEFT JOIN worker ON worker_view_model.worker_id = worker.id WHERE worker.id IS NULL";
-		$db->Execute($sql);
+		
+		$db->Execute("DELETE FROM worker_view_model WHERE worker_id NOT IN (SELECT id FROM worker)");
 		$logger->info('[Maint] Purged ' . $db->Affected_Rows() . ' worker_view_model records.');
 		
-		$sql = "DELETE QUICK worker_to_group FROM worker_to_group LEFT JOIN worker ON worker_to_group.worker_id = worker.id WHERE worker.id IS NULL";
-		$db->Execute($sql);
+		$db->Execute("DELETE FROM worker_to_group WHERE worker_id NOT IN (SELECT id FROM worker)");
 		$logger->info('[Maint] Purged ' . $db->Affected_Rows() . ' worker_to_group records.');
 		
 		// Fire event
@@ -366,8 +363,6 @@ class DAO_Worker extends Cerb_ORMHelper {
 	static function delete($id) {
 		if(empty($id)) return;
 		
-		// [TODO] Delete worker notes, comments, etc.
-		
 		/* This event fires before the delete takes place in the db,
 		 * so we can denote what is actually changing against the db state
 		 */
@@ -383,21 +378,27 @@ class DAO_Worker extends Cerb_ORMHelper {
 		
 		$db = DevblocksPlatform::getDatabaseService();
 		
-		$sql = sprintf("DELETE QUICK FROM worker WHERE id = %d", $id);
+		$sql = sprintf("DELETE FROM worker WHERE id = %d", $id);
 		$db->Execute($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
 		
-		$sql = sprintf("DELETE QUICK FROM address_to_worker WHERE worker_id = %d", $id);
+		$sql = sprintf("DELETE FROM worker_auth_hash WHERE worker_id = %d", $id);
 		$db->Execute($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
 		
-		$sql = sprintf("DELETE QUICK FROM worker_to_group WHERE worker_id = %d", $id);
+		$sql = sprintf("DELETE FROM address_to_worker WHERE worker_id = %d", $id);
+		$db->Execute($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
+		
+		$sql = sprintf("DELETE FROM worker_to_group WHERE worker_id = %d", $id);
 		$db->Execute($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
 
-		$sql = sprintf("DELETE QUICK FROM view_rss WHERE worker_id = %d", $id);
+		$sql = sprintf("DELETE FROM view_rss WHERE worker_id = %d", $id);
 		$db->Execute($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
 		
 		$sql = sprintf("DELETE FROM snippet_use_history WHERE worker_id = %d", $id);
 		$db->Execute($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
-
+		
+		// Sessions
+		DAO_DevblocksSession::deleteByUserIds($id);
+		
 		// Fire event
 		$eventMgr = DevblocksPlatform::getEventService();
 		$eventMgr->trigger(
@@ -416,22 +417,54 @@ class DAO_Worker extends Cerb_ORMHelper {
 		$cache->remove(DAO_Group::CACHE_ROSTERS);
 	}
 	
+	static function hasAuth($worker_id) {
+		$db = DevblocksPlatform::getDatabaseService();
+		$worker_auth = $db->GetRow(sprintf("SELECT pass_hash, pass_salt, method FROM worker_auth_hash WHERE worker_id = %d", $worker_id));
+		return (is_array($worker_auth) && isset($worker_auth['pass_hash']));
+	}
+	
+	static function setAuth($worker_id, $password) {
+		$db = DevblocksPlatform::getDatabaseService();
+		
+		if(is_null($password)) {
+			return $db->Execute(sprintf("DELETE FROM worker_auth_hash WHERE worker_id = %d",
+				$worker_id
+			));
+			
+		} else {
+			$salt = CerberusApplication::generatePassword(12);
+			
+			return $db->Execute(sprintf("REPLACE INTO worker_auth_hash (worker_id, pass_hash, pass_salt, method) ".
+				"VALUES (%d, %s, %s, %d)",
+				$worker_id,
+				$db->qstr(sha1($salt.md5($password))),
+				$db->qstr($salt),
+				0
+			));
+		}
+	}
+	
 	static function login($email, $password) {
 		$db = DevblocksPlatform::getDatabaseService();
 
-		// [TODO] Uniquely salt hashes
-		$sql = sprintf("SELECT id ".
-			"FROM worker ".
-			"WHERE is_disabled = 0 ".
-			"AND email = %s ".
-			"AND pass = MD5(%s)",
-				$db->qstr($email),
-				$db->qstr($password)
-		);
-		$worker_id = $db->GetOne($sql); // or die(__CLASS__ . ':' . $db->ErrorMsg());
-
-		if(!empty($worker_id)) {
-			return self::get($worker_id);
+		if(null == ($worker = DAO_Worker::getByEmail($email)) || $worker->is_disabled)
+			return null;
+		
+		$worker_auth = $db->GetRow(sprintf("SELECT pass_hash, pass_salt, method FROM worker_auth_hash WHERE worker_id = %d", $worker->id));
+		
+		if(!isset($worker_auth['pass_hash']) || !isset($worker_auth['pass_salt']))
+			return null;
+		
+		if(empty($worker_auth['pass_hash']) || empty($worker_auth['pass_salt']))
+			return null;
+		
+		switch(@$worker_auth['method']) {
+			default:
+				$given_hash = sha1($worker_auth['pass_salt'] . md5($password));
+				
+				if($given_hash == $worker_auth['pass_hash'])
+					return $worker;
+				break;
 		}
 		
 		return null;
@@ -716,13 +749,12 @@ class DAO_Worker extends Cerb_ORMHelper {
 			$rs = $db->SelectLimit($sql,$limit,$page*$limit) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
 		} else {
 			$rs = $db->Execute($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
-			$total = mysql_num_rows($rs);
+			$total = mysqli_num_rows($rs);
 		}
 		
 		$results = array();
-		$total = -1;
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$result = array();
 			foreach($row as $f => $v) {
 				$result[$f] = $v;
@@ -731,16 +763,20 @@ class DAO_Worker extends Cerb_ORMHelper {
 			$results[$object_id] = $result;
 		}
 		
-		// [JAS]: Count all
+		$total = count($results);
+		
 		if($withCounts) {
-			$count_sql =
-				($has_multiple_values ? "SELECT COUNT(DISTINCT w.id) " : "SELECT COUNT(w.id) ").
-				$join_sql.
-				$where_sql;
-			$total = $db->GetOne($count_sql);
+			// We can skip counting if we have a less-than-full single page
+			if(!(0 == $page && $total < $limit)) {
+				$count_sql =
+					($has_multiple_values ? "SELECT COUNT(DISTINCT w.id) " : "SELECT COUNT(w.id) ").
+					$join_sql.
+					$where_sql;
+				$total = $db->GetOne($count_sql);
+			}
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return array($results,$total);
 	}
@@ -820,7 +856,6 @@ class Model_Worker {
 	public $first_name;
 	public $last_name;
 	public $email;
-	public $pass;
 	public $title;
 	public $is_superuser=0;
 	public $is_disabled=0;
@@ -1412,11 +1447,11 @@ class DAO_WorkerPref extends DevblocksORMHelper {
 			
 			$objects = array();
 			
-			while($row = mysql_fetch_assoc($rs)) {
+			while($row = mysqli_fetch_assoc($rs)) {
 				$objects[$row['setting']] = $row['value'];
 			}
 			
-			mysql_free_result($rs);
+			mysqli_free_result($rs);
 			
 			$cache->save($objects, self::CACHE_PREFIX.$worker_id);
 		}
@@ -1516,6 +1551,8 @@ class Context_Worker extends Extension_DevblocksContext {
 			$worker = DAO_Worker::get($worker);
 		} elseif($worker instanceof Model_Worker) {
 			// It's what we want already.
+		} elseif(is_array($worker)) {
+			$worker = Cerb_ORMHelper::recastArrayToModel($worker, 'Model_Worker');
 		} else {
 			$worker = null;
 		}
@@ -1525,6 +1562,7 @@ class Context_Worker extends Extension_DevblocksContext {
 			'_label' => $prefix,
 			'first_name' => $prefix.$translate->_('worker.first_name'),
 			'full_name' => $prefix.$translate->_('worker.full_name'),
+			'id' => $prefix.$translate->_('common.id'),
 			'is_disabled' => $prefix.$translate->_('common.disabled'),
 			'is_superuser' => $prefix.$translate->_('worker.is_superuser'),
 			'last_name' => $prefix.$translate->_('worker.last_name'),
@@ -1538,6 +1576,7 @@ class Context_Worker extends Extension_DevblocksContext {
 			'_label' => 'context_url',
 			'first_name' => Model_CustomField::TYPE_SINGLE_LINE,
 			'full_name' => Model_CustomField::TYPE_SINGLE_LINE,
+			'id' => Model_CustomField::TYPE_NUMBER,
 			'is_disabled' => Model_CustomField::TYPE_CHECKBOX,
 			'is_superuser' => Model_CustomField::TYPE_CHECKBOX,
 			'last_name' => Model_CustomField::TYPE_SINGLE_LINE,
@@ -1574,6 +1613,9 @@ class Context_Worker extends Extension_DevblocksContext {
 			$token_values['last_activity_date'] = $worker->last_activity_date;
 			$token_values['title'] = $worker->title;
 
+			// Custom fields
+			$token_values = $this->_importModelCustomFieldsAsValues($worker, $token_values);
+			
 			// URL
 			$url_writer = DevblocksPlatform::getUrlService();
 			$token_values['record_url'] = $url_writer->writeNoProxy(sprintf("c=profiles&type=worker&id=%d-%s",$worker->id, DevblocksPlatform::strToPermalink($worker->getName())), true);

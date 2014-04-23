@@ -69,7 +69,7 @@ foreach($fields as $field_name => $field_type) {
 		return $id;
 	}
 	
-	static function update($ids, $fields) {
+	static function update($ids, $fields, $check_deltas=true) {
 		if(!is_array($ids))
 			$ids = array($ids);
 		
@@ -79,25 +79,24 @@ foreach($fields as $field_name => $field_type) {
 		while($batch_ids = array_shift($chunks)) {
 			if(empty($batch_ids))
 				continue;
+				
+			// Send events
+			if($check_deltas) {
+				//CerberusContexts::checkpointChanges(CerberusContexts::CONTEXT_, $batch_ids);
+			}
 			
-			// Get state before changes
-			$object_changes = parent::_getUpdateDeltas($batch_ids, $fields, get_class());
-
 			// Make changes
 			parent::_update($batch_ids, '<?php echo $table_name; ?>', $fields);
 			
 			// Send events
-			if(!empty($object_changes)) {
-				// Local events
-				//self::_processUpdateEvents($object_changes);
-				
+			if($check_deltas) {
 				// Trigger an event about the changes
 				$eventMgr = DevblocksPlatform::getEventService();
 				$eventMgr->trigger(
 					new Model_DevblocksEvent(
 						'dao.<?php echo $table_name; ?>.update',
 						array(
-							'objects' => $object_changes,
+							'fields' => $fields,
 						)
 					)
 				);
@@ -159,7 +158,7 @@ foreach($fields as $field_name => $field_type) {
 	static private function _getObjectsFromResult($rs) {
 		$objects = array();
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$object = new Model_<?php echo $class_name; ?>();
 <?php
 foreach($fields as $field_name => $field_type) {
@@ -172,9 +171,13 @@ foreach($fields as $field_name => $field_type) {
 			$objects[$object->id] = $object;
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return $objects;
+	}
+	
+	static function random() {
+		return self::_getRandom('<?php echo $table_name; ?>');
 	}
 	
 	static function delete($ids) {
@@ -340,13 +343,12 @@ foreach($fields as $field_name => $field_type) {
 			$rs = $db->SelectLimit($sql,$limit,$page*$limit) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs ADORecordSet */
 		} else {
 			$rs = $db->Execute($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs ADORecordSet */
-			$total = mysql_num_rows($rs);
+			$total = mysqli_num_rows($rs);
 		}
 		
 		$results = array();
-		$total = -1;
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$result = array();
 			foreach($row as $f => $v) {
 				$result[$f] = $v;
@@ -355,16 +357,20 @@ foreach($fields as $field_name => $field_type) {
 			$results[$object_id] = $result;
 		}
 
-		// [JAS]: Count all
+		$total = count($results);
+		
 		if($withCounts) {
-			$count_sql =
-				($has_multiple_values ? "SELECT COUNT(DISTINCT <?php echo $table_name; ?>.id) " : "SELECT COUNT(<?php echo $table_name; ?>.id) ").
-				$join_sql.
-				$where_sql;
-			$total = $db->GetOne($count_sql);
+			// We can skip counting if we have a less-than-full single page
+			if(!(0 == $page && $total < $limit)) {
+				$count_sql =
+					($has_multiple_values ? "SELECT COUNT(DISTINCT <?php echo $table_name; ?>.id) " : "SELECT COUNT(<?php echo $table_name; ?>.id) ").
+					$join_sql.
+					$where_sql;
+				$total = $db->GetOne($count_sql);
+			}
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return array($results,$total);
 	}
@@ -870,7 +876,7 @@ foreach($fields as $field_name => $field_type) {
 <textarea style="width:98%;height:200px;">
 class Context_<?php echo $class_name;?> extends Extension_DevblocksContext implements IDevblocksContextProfile, IDevblocksContextPeek { // IDevblocksContextImport
 	function getRandom() {
-		//return DAO_<?php echo $class_name; ?>::random();
+		return DAO_<?php echo $class_name; ?>::random();
 	}
 	
 	function profileGetUrl($context_id) {
@@ -918,6 +924,8 @@ class Context_<?php echo $class_name;?> extends Extension_DevblocksContext imple
 			$<?php echo $ctx_var_model; ?> = DAO_<?php echo $class_name; ?>::get($<?php echo $ctx_var_model; ?>);
 		} elseif($<?php echo $ctx_var_model; ?> instanceof Model_<?php echo $class_name; ?>) {
 			// It's what we want already.
+		} elseif(is_array($<?php echo $ctx_var_model; ?>)) {
+			$<?php echo $ctx_var_model; ?> = Cerb_ORMHelper::recastArrayToModel($<?php echo $ctx_var_model; ?>, 'Model_<?php echo $class_name; ?>'); ?>;
 		} else {
 			$<?php echo $ctx_var_model; ?> = null;
 		}
@@ -960,6 +968,9 @@ class Context_<?php echo $class_name;?> extends Extension_DevblocksContext imple
 			$token_values['id'] = $<?php echo $ctx_var_model; ?>->id;
 			$token_values['name'] = $<?php echo $ctx_var_model; ?>->name;
 			$token_values['updated_at'] = $<?php echo $ctx_var_model; ?>->updated_at;
+			
+			// Custom fields
+			$token_values = $this->_importModelCustomFieldsAsValues($<?php echo $ctx_var_model; ?>, $token_values);
 			
 			// URL
 			$url_writer = DevblocksPlatform::getUrlService();
@@ -1797,14 +1808,17 @@ class PageSection_Profiles<?php echo $class_name; ?> extends Extension_PageSecti
 </div>
 <br>
 
-{$tab_selected_idx=0}
+{$selected_tab_idx=0}
 {foreach from=$tabs item=tab_label name=tabs}
-	{if $tab_label==$tab_selected}{$tab_selected_idx = $smarty.foreach.tabs.index}{/if}
+	{if $tab_label==$tab_selected}{$selected_tab_idx = $smarty.foreach.tabs.index}{/if}
 {/foreach}
 
 <script type="text/javascript">
 	$(function() {
-		var tabs = $("#<?php echo $table_name; ?>Tabs").tabs( { active:{$tab_selected_idx} } );
+		var tabOptions = Devblocks.getDefaultjQueryUiTabOptions();
+		tabOptions.active = {$selected_tab_idx};
+	
+		var tabs = $("#<?php echo $table_name; ?>Tabs").tabs(tabOptions);
 		
 		$('#btnDisplay<?php echo $class_name; ?>Edit').bind('click', function() {
 			$popup = genericAjaxPopup('peek','c=internal&a=showPeekPopup&context={$page_context}&context_id={$page_context_id}',null,false,'550');

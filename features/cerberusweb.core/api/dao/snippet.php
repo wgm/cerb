@@ -39,7 +39,7 @@ class DAO_Snippet extends Cerb_ORMHelper {
 		return $id;
 	}
 	
-	static function update($ids, $fields) {
+	static function update($ids, $fields, $check_deltas=true) {
 		if(!is_array($ids))
 			$ids = array($ids);
 		
@@ -52,17 +52,17 @@ class DAO_Snippet extends Cerb_ORMHelper {
 		while($batch_ids = array_shift($chunks)) {
 			if(empty($batch_ids))
 				continue;
-			
-			// Get state before changes
-			$object_changes = parent::_getUpdateDeltas($batch_ids, $fields, get_class());
 
+			// Send events
+			if($check_deltas) {
+				CerberusContexts::checkpointChanges(CerberusContexts::CONTEXT_SNIPPET, $batch_ids);
+			}
+			
 			// Make changes
 			parent::_update($batch_ids, 'snippet', $fields);
 			
 			// Send events
-			if(!empty($object_changes)) {
-				// Local events
-				//self::_processUpdateEvents($object_changes);
+			if($check_deltas) {
 				
 				// Trigger an event about the changes
 				$eventMgr = DevblocksPlatform::getEventService();
@@ -70,7 +70,7 @@ class DAO_Snippet extends Cerb_ORMHelper {
 					new Model_DevblocksEvent(
 						'dao.snippet.update',
 						array(
-							'objects' => $object_changes,
+							'fields' => $fields,
 						)
 					)
 				);
@@ -128,7 +128,7 @@ class DAO_Snippet extends Cerb_ORMHelper {
 		
 		return self::_getObjectsFromResult($rs);
 	}
-
+	
 	/**
 	 * @param integer $id
 	 * @return Model_Snippet
@@ -152,7 +152,7 @@ class DAO_Snippet extends Cerb_ORMHelper {
 	static private function _getObjectsFromResult($rs) {
 		$objects = array();
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$object = new Model_Snippet();
 			$object->id = $row['id'];
 			$object->title = $row['title'];
@@ -165,7 +165,7 @@ class DAO_Snippet extends Cerb_ORMHelper {
 			$objects[$object->id] = $object;
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return $objects;
 	}
@@ -174,10 +174,11 @@ class DAO_Snippet extends Cerb_ORMHelper {
 		$db = DevblocksPlatform::getDatabaseService();
 		$logger = DevblocksPlatform::getConsoleLog();
 		
-		$sql = "DELETE snippet_use_history FROM snippet_use_history LEFT JOIN worker ON snippet_use_history.worker_id = worker.id WHERE worker.id IS NULL";
-		$db->Execute($sql);
-		
-		$logger->info('[Maint] Purged ' . $db->Affected_Rows() . ' snippet_use_history records.');
+		$db->Execute("DELETE FROM snippet_use_history WHERE worker_id NOT IN (SELECT id FROM worker)");
+		$logger->info('[Maint] Purged ' . $db->Affected_Rows() . ' snippet_use_history records by worker.');
+
+		$db->Execute("DELETE FROM snippet_use_history WHERE snippet_id NOT IN (SELECT id FROM snippet)");
+		$logger->info('[Maint] Purged ' . $db->Affected_Rows() . ' snippet_use_history records by snippet.');
 	}
 	
 	static function delete($ids) {
@@ -389,13 +390,12 @@ class DAO_Snippet extends Cerb_ORMHelper {
 			$rs = $db->SelectLimit($sql,$limit,$page*$limit) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs ADORecordSet */
 		} else {
 			$rs = $db->Execute($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs ADORecordSet */
-			$total = mysql_num_rows($rs);
+			$total = mysqli_num_rows($rs);
 		}
 		
 		$results = array();
-		$total = -1;
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$result = array();
 			foreach($row as $f => $v) {
 				$result[$f] = $v;
@@ -404,16 +404,20 @@ class DAO_Snippet extends Cerb_ORMHelper {
 			$results[$object_id] = $result;
 		}
 
-		// [JAS]: Count all
+		$total = count($results);
+		
 		if($withCounts) {
-			$count_sql =
-				($has_multiple_values ? "SELECT COUNT(DISTINCT snippet.id) " : "SELECT COUNT(snippet.id) ").
-				$join_sql.
-				$where_sql;
-			$total = $db->GetOne($count_sql);
+			// We can skip counting if we have a less-than-full single page
+			if(!(0 == $page && $total < $limit)) {
+				$count_sql =
+					($has_multiple_values ? "SELECT COUNT(DISTINCT snippet.id) " : "SELECT COUNT(snippet.id) ").
+					$join_sql.
+					$where_sql;
+				$total = $db->GetOne($count_sql);
+			}
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return array($results,$total);
 	}
@@ -1037,6 +1041,8 @@ class Context_Snippet extends Extension_DevblocksContext {
 			$snippet = DAO_Snippet::get($snippet);
 		} elseif($snippet instanceof Model_Snippet) {
 			// It's what we want already.
+		} elseif(is_array($snippet)) {
+			$snippet = Cerb_ORMHelper::recastArrayToModel($snippet, 'Model_Snippet');
 		} else {
 			$snippet = null;
 		}
@@ -1044,7 +1050,8 @@ class Context_Snippet extends Extension_DevblocksContext {
 		// Token labels
 		$token_labels = array(
 			'_label' => $prefix,
-			'title' => $prefix.$translate->_('dao.common.title'),
+			'id' => $prefix.$translate->_('common.id'),
+			'title' => $prefix.$translate->_('common.title'),
 			'context' => $prefix.$translate->_('common.context'),
 			'content' => $prefix.$translate->_('common.content'),
 			'owner__label' => $prefix.$translate->_('common.owner'),
@@ -1055,6 +1062,7 @@ class Context_Snippet extends Extension_DevblocksContext {
 		// Token types
 		$token_types = array(
 			'_label' => 'context_url',
+			'id' => Model_CustomField::TYPE_NUMBER,
 			'title' => Model_CustomField::TYPE_SINGLE_LINE,
 			'context' => Model_CustomField::TYPE_SINGLE_LINE,
 			'content' => Model_CustomField::TYPE_MULTI_LINE,
@@ -1088,6 +1096,9 @@ class Context_Snippet extends Extension_DevblocksContext {
 			$token_values['title'] = $snippet->title;
 			$token_values['total_uses'] = $snippet->total_uses;
 			$token_values['updated_at'] = $snippet->updated_at;
+			
+			// Custom fields
+			$token_values = $this->_importModelCustomFieldsAsValues($snippet, $token_values);
 		}
 
 		return true;

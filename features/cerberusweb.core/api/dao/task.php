@@ -80,7 +80,7 @@ class DAO_Task extends Cerb_ORMHelper {
 		return $id;
 	}
 	
-	static function update($ids, $fields) {
+	static function update($ids, $fields, $check_deltas=true) {
 		if(!is_array($ids))
 			$ids = array($ids);
 		
@@ -91,16 +91,18 @@ class DAO_Task extends Cerb_ORMHelper {
 			if(empty($batch_ids))
 				continue;
 			
-			// Get state before changes
-			$object_changes = parent::_getUpdateDeltas($batch_ids, $fields, get_class());
-
+			// Send events
+			if($check_deltas) {
+				CerberusContexts::checkpointChanges(CerberusContexts::CONTEXT_TASK, $batch_ids);
+			}
+			
 			// Make changes
 			parent::_update($batch_ids, 'task', $fields);
 			
 			// Send events
-			if(!empty($object_changes)) {
+			if($check_deltas) {
 				// Local events
-				self::_processUpdateEvents($object_changes);
+				self::_processUpdateEvents($batch_ids, $fields);
 				
 				// Trigger an event about the changes
 				$eventMgr = DevblocksPlatform::getEventService();
@@ -108,7 +110,7 @@ class DAO_Task extends Cerb_ORMHelper {
 					new Model_DevblocksEvent(
 						'dao.task.update',
 						array(
-							'objects' => $object_changes,
+							'fields' => $fields,
 						)
 					)
 				);
@@ -119,21 +121,44 @@ class DAO_Task extends Cerb_ORMHelper {
 		}
 	}
 	
-	static function _processUpdateEvents($objects) {
-		if(is_array($objects))
-		foreach($objects as $object_id => $object) {
-			@$model = $object['model'];
-			@$changes = $object['changes'];
-			
-			if(empty($model) || empty($changes))
+	static function _processUpdateEvents($ids, $change_fields) {
+		// We only care about these fields, so abort if they aren't referenced
+
+		$observed_fields = array(
+			DAO_Task::IS_COMPLETED,
+		);
+		
+		$used_fields = array_intersect($observed_fields, array_keys($change_fields));
+		
+		if(empty($used_fields))
+			return;
+		
+		// Load records only if they're needed
+		
+		if(false == ($before_models = CerberusContexts::getCheckpoints(CerberusContexts::CONTEXT_TASK, $ids)))
+			return;
+		
+		if(false == ($models = DAO_Task::getIds($ids)))
+			return;
+		
+		foreach($models as $id => $model) {
+			if(!isset($before_models[$id]))
 				continue;
+			
+			$before_model = (object) $before_models[$id];
 			
 			/*
 			 * Task completed
 			 */
-			@$is_completed = $changes[DAO_Task::IS_COMPLETED];
 			
-			if(!empty($is_completed) && !empty($model[DAO_Task::IS_COMPLETED])) {
+			// [TODO] We can merge this with 'Record changed'
+			
+			@$is_completed = $change_fields[DAO_Task::IS_COMPLETED];
+			
+			if($is_completed == $before_model->is_completed)
+				unset($change_fields[DAO_Task::IS_COMPLETED]);
+			
+			if(isset($change_fields[DAO_Task::IS_COMPLETED]) && $model->is_completed) {
 				/*
 				 * Log activity (task.status.*)
 				 */
@@ -141,16 +166,16 @@ class DAO_Task extends Cerb_ORMHelper {
 					//{{actor}} completed task {{target}}
 					'message' => 'activities.task.status.completed',
 					'variables' => array(
-						'target' => sprintf("%s", $model[DAO_Task::TITLE]),
+						'target' => sprintf("%s", $model->title),
 						),
 					'urls' => array(
-						'target' => sprintf("ctx://%s:%d", CerberusContexts::CONTEXT_TASK, $object_id)
+						'target' => sprintf("ctx://%s:%d", CerberusContexts::CONTEXT_TASK, $model->id)
 						)
 				);
-				CerberusContexts::logActivity('task.status.completed', CerberusContexts::CONTEXT_TASK, $object_id, $entry);
+				CerberusContexts::logActivity('task.status.completed', CerberusContexts::CONTEXT_TASK, $model->id, $entry);
 			}
-			
-		} // foreach
+		}
+		
 	}
 	
 	static function updateWhere($fields, $where) {
@@ -172,7 +197,7 @@ class DAO_Task extends Cerb_ORMHelper {
 		
 		return self::_getObjectsFromResult($rs);
 	}
-
+	
 	/**
 	 * @param integer $id
 	 * @return Model_Task	 */
@@ -195,7 +220,7 @@ class DAO_Task extends Cerb_ORMHelper {
 	static private function _getObjectsFromResult($rs) {
 		$objects = array();
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$object = new Model_Task();
 			$object->id = $row['id'];
 			$object->title = $row['title'];
@@ -207,7 +232,7 @@ class DAO_Task extends Cerb_ORMHelper {
 			$objects[$object->id] = $object;
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return $objects;
 	}
@@ -227,7 +252,7 @@ class DAO_Task extends Cerb_ORMHelper {
 		$ids_list = implode(',', $ids);
 		
 		// Tasks
-		$db->Execute(sprintf("DELETE QUICK FROM task WHERE id IN (%s)", $ids_list));
+		$db->Execute(sprintf("DELETE FROM task WHERE id IN (%s)", $ids_list));
 
 		// Fire event
 		$eventMgr = DevblocksPlatform::getEventService();
@@ -293,9 +318,7 @@ class DAO_Task extends Cerb_ORMHelper {
 			"FROM task t ".
 
 			// [JAS]: Dynamic table joins
-			(isset($tables['context_link']) ? "INNER JOIN context_link ON (context_link.to_context = 'cerberusweb.contexts.task' AND context_link.to_context_id = t.id) " : " ").
-			(isset($tables['ftcc']) ? "INNER JOIN comment ON (comment.context = 'cerberusweb.contexts.task' AND comment.context_id = t.id) " : " ").
-			(isset($tables['ftcc']) ? "INNER JOIN fulltext_comment_content ftcc ON (ftcc.id=comment.id) " : " ")
+			(isset($tables['context_link']) ? "INNER JOIN context_link ON (context_link.to_context = 'cerberusweb.contexts.task' AND context_link.to_context_id = t.id) " : " ")
 			;
 
 		// Custom field joins
@@ -350,6 +373,19 @@ class DAO_Task extends Cerb_ORMHelper {
 		settype($param_key, 'string');
 		
 		switch($param_key) {
+			case SearchFields_Task::FULLTEXT_COMMENT_CONTENT:
+				$search = Extension_DevblocksSearchSchema::get(Search_CommentContent::ID);
+				$query = $search->getQueryFromParam($param);
+				$ids = $search->query($query, array('context_crc32' => sprintf("%u", crc32($from_context))));
+				
+				$from_ids = DAO_Comment::getContextIdsByContextAndIds($from_context, $ids);
+				
+				$args['where_sql'] .= sprintf('AND %s IN (%s) ',
+					$from_index,
+					implode(', ', (!empty($from_ids) ? $from_ids : array(-1)))
+				);
+				break;
+			
 			case SearchFields_Task::VIRTUAL_CONTEXT_LINK:
 				$args['has_multiple_values'] = true;
 				self::_searchComponentsVirtualContextLinks($param, $from_context, $from_index, $args['join_sql'], $args['where_sql']);
@@ -401,7 +437,7 @@ class DAO_Task extends Cerb_ORMHelper {
 		
 		$results = array();
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$result = array();
 			foreach($row as $f => $v) {
 				$result[$f] = $v;
@@ -410,17 +446,20 @@ class DAO_Task extends Cerb_ORMHelper {
 			$results[$id] = $result;
 		}
 
-		// [JAS]: Count all
-		$total = -1;
+		$total = count($results);
+		
 		if($withCounts) {
-			$count_sql =
-				($has_multiple_values ? "SELECT COUNT(DISTINCT t.id) " : "SELECT COUNT(t.id) ").
-				$join_sql.
-				$where_sql;
-			$total = $db->GetOne($count_sql);
+			// We can skip counting if we have a less-than-full single page
+			if(!(0 == $page && $total < $limit)) {
+				$count_sql =
+					($has_multiple_values ? "SELECT COUNT(DISTINCT t.id) " : "SELECT COUNT(t.id) ").
+					$join_sql.
+					$where_sql;
+				$total = $db->GetOne($count_sql);
+			}
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return array($results,$total);
 	}
@@ -468,12 +507,13 @@ class SearchFields_Task implements IDevblocksSearchFields {
 			
 			self::CONTEXT_LINK => new DevblocksSearchField(self::CONTEXT_LINK, 'context_link', 'from_context', null),
 			self::CONTEXT_LINK_ID => new DevblocksSearchField(self::CONTEXT_LINK_ID, 'context_link', 'from_context_id', null),
+				
+			self::FULLTEXT_COMMENT_CONTENT => new DevblocksSearchField(self::FULLTEXT_COMMENT_CONTENT, 'ftcc', 'content', $translate->_('comment.filters.content'), 'FT'),
 		);
 		
-		$tables = DevblocksPlatform::getDatabaseTables();
-		if(isset($tables['fulltext_comment_content'])) {
-			$columns[self::FULLTEXT_COMMENT_CONTENT] = new DevblocksSearchField(self::FULLTEXT_COMMENT_CONTENT, 'ftcc', 'content', $translate->_('comment.filters.content'), 'FT');
-		}
+		// Fulltext indexes
+		
+		$columns[self::FULLTEXT_COMMENT_CONTENT]->ft_schema = Search_CommentContent::ID;
 		
 		// Custom fields with fieldsets
 		
@@ -994,6 +1034,8 @@ class Context_Task extends Extension_DevblocksContext implements IDevblocksConte
 			$task = DAO_Task::get($task);
 		} elseif($task instanceof Model_Task) {
 			// It's what we want already.
+		} elseif(is_array($task)) {
+			$task = Cerb_ORMHelper::recastArrayToModel($task, 'Model_Task');
 		} else {
 			$task = null;
 		}
@@ -1057,9 +1099,11 @@ class Context_Task extends Extension_DevblocksContext implements IDevblocksConte
 			} else {
 				$token_values['status'] = 'active';
 			}
+
+			// Custom fields
+			$token_values = $this->_importModelCustomFieldsAsValues($task, $token_values);
 			
 			// URL
-			
 			$url_writer = DevblocksPlatform::getUrlService();
 			$token_values['record_url'] = $url_writer->writeNoProxy(sprintf("c=profiles&type=task&id=%d-%s",$task->id, DevblocksPlatform::strToPermalink($task->title)), true);
 		}

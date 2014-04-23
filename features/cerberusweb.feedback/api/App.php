@@ -70,7 +70,7 @@ class DAO_FeedbackEntry extends Cerb_ORMHelper {
 		return $id;
 	}
 	
-	static function update($ids, $fields) {
+	static function update($ids, $fields, $check_deltas=true) {
 		if(!is_array($ids))
 			$ids = array($ids);
 		
@@ -81,16 +81,16 @@ class DAO_FeedbackEntry extends Cerb_ORMHelper {
 			if(empty($batch_ids))
 				continue;
 			
-			// Get state before changes
-			$object_changes = parent::_getUpdateDeltas($batch_ids, $fields, get_class());
-
+			// Send events
+			if($check_deltas) {
+				CerberusContexts::checkpointChanges(CerberusContexts::CONTEXT_FEEDBACK, $batch_ids);
+			}
+			
 			// Make changes
 			parent::_update($batch_ids, 'feedback_entry', $fields);
 			
 			// Send events
-			if(!empty($object_changes)) {
-				// Local events
-				//self::_processUpdateEvents($object_changes);
+			if($check_deltas) {
 				
 				// Trigger an event about the changes
 				$eventMgr = DevblocksPlatform::getEventService();
@@ -98,7 +98,7 @@ class DAO_FeedbackEntry extends Cerb_ORMHelper {
 					new Model_DevblocksEvent(
 						'dao.feedback_entry.update',
 						array(
-							'objects' => $object_changes,
+							'fields' => $fields,
 						)
 					)
 				);
@@ -147,7 +147,7 @@ class DAO_FeedbackEntry extends Cerb_ORMHelper {
 	static private function _getObjectsFromResult($rs) {
 		$objects = array();
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$object = new Model_FeedbackEntry();
 			$object->id = $row['id'];
 			$object->log_date = $row['log_date'];
@@ -159,7 +159,7 @@ class DAO_FeedbackEntry extends Cerb_ORMHelper {
 			$objects[$object->id] = $object;
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return $objects;
 	}
@@ -330,7 +330,7 @@ class DAO_FeedbackEntry extends Cerb_ORMHelper {
 		
 		$results = array();
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$result = array();
 			foreach($row as $f => $v) {
 				$result[$f] = $v;
@@ -339,17 +339,20 @@ class DAO_FeedbackEntry extends Cerb_ORMHelper {
 			$results[$id] = $result;
 		}
 
-		// [JAS]: Count all
-		$total = -1;
+		$total = count($results);
+		
 		if($withCounts) {
-			$count_sql =
-				($has_multiple_values ? "SELECT COUNT(DISTINCT f.id) " : "SELECT COUNT(f.id) ").
-				$join_sql.
-				$where_sql;
-			$total = $db->GetOne($count_sql);
+			// We can skip counting if we have a less-than-full single page
+			if(!(0 == $page && $total < $limit)) {
+				$count_sql =
+					($has_multiple_values ? "SELECT COUNT(DISTINCT f.id) " : "SELECT COUNT(f.id) ").
+					$join_sql.
+					$where_sql;
+				$total = $db->GetOne($count_sql);
+			}
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return array($results,$total);
 	}
@@ -1082,6 +1085,8 @@ class Context_Feedback extends Extension_DevblocksContext implements IDevblocksC
 			$feedback = DAO_FeedbackEntry::get($feedback);
 		} elseif($feedback instanceof Model_FeedbackEntry) {
 			// It's what we want already.
+		} elseif(is_array($feedback)) {
+			$feedback = Cerb_ORMHelper::recastArrayToModel($feedback, 'Model_FeedbackEntry');
 		} else {
 			$feedback = null;
 		}
@@ -1139,6 +1144,9 @@ class Context_Feedback extends Extension_DevblocksContext implements IDevblocksC
 			// Created by worker
 			@$assignee_id = $feedback->worker_id;
 			$token_values['worker_id'] = $assignee_id;
+			
+			// Custom fields
+			$token_values = $this->_importModelCustomFieldsAsValues($feedback, $token_values);
 		}
 
 		// Author

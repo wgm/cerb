@@ -8,7 +8,7 @@ $tables = $db->metaTables();
 if(!isset($tables['mail_to_group_rule'])) {
 	$sql = sprintf("
 		CREATE TABLE IF NOT EXISTS mail_to_group_rule (
-			id INT UNSIGNED NOT NULL AUTO_INCREMENT UNIQUE,
+			id INT UNSIGNED NOT NULL AUTO_INCREMENT,
 			pos SMALLINT UNSIGNED DEFAULT 0 NOT NULL,
 			created INT UNSIGNED DEFAULT 0 NOT NULL,
 			name VARCHAR(128) DEFAULT '' NOT NULL,
@@ -28,7 +28,7 @@ if(isset($columns['id'])
 	&& ('int(10) unsigned' != $columns['id']['type'] 
 	|| 'auto_increment' != $columns['id']['extra'])
 ) {
-	$db->Execute("ALTER TABLE mail_to_group_rule MODIFY COLUMN id INT UNSIGNED NOT NULL AUTO_INCREMENT UNIQUE");
+	$db->Execute("ALTER TABLE mail_to_group_rule MODIFY COLUMN id INT UNSIGNED NOT NULL AUTO_INCREMENT");
 }
 
 if(isset($tables['mail_routing'])) {
@@ -36,7 +36,7 @@ if(isset($tables['mail_routing'])) {
 	$rs = $db->Execute($sql);
 	
 	// Migrate data out of the table and drop it
-	while($row = mysql_fetch_assoc($rs)) {
+	while($row = mysqli_fetch_assoc($rs)) {
 		// Turn 'pattern' into a criteria on 'TO/CC'
 		$criteria = array(
 			'tocc' => array('value' => $row['pattern']),
@@ -58,7 +58,7 @@ if(isset($tables['mail_routing'])) {
 		$db->Execute($sql);
 	}
 	
-	mysql_free_result($rs);
+	mysqli_free_result($rs);
 	
 	// Drop it
 	$db->Execute('DROP TABLE mail_routing');
@@ -90,7 +90,7 @@ if(isset($columns['criteria_ser'])) {
 	$sql = "SELECT id, criteria_ser FROM preparse_rule";
 	$rs = $db->Execute($sql);
 	
-	while($row = mysql_fetch_assoc($rs)) {
+	while($row = mysqli_fetch_assoc($rs)) {
 		$criteria_ser = $row['criteria_ser'];
 		if(!empty($criteria_ser) && false !== (@$criteria = unserialize($criteria_ser))) {
 			if(isset($criteria['to'])) {
@@ -103,7 +103,7 @@ if(isset($columns['criteria_ser'])) {
 		}
 	}
 	
-	mysql_free_result($rs);
+	mysqli_free_result($rs);
 }
 
 // ===========================================================================

@@ -21,13 +21,8 @@ class PageSection_InternalDashboards extends Extension_PageSection {
 	
 	function renderWidgetAction() {
 		@$widget_id = DevblocksPlatform::importGPC($_REQUEST['widget_id'], 'integer', 0);
-		
-		$tpl = DevblocksPlatform::getTemplateService();
-				
-		if(!empty($widget_id) && null != ($widget = DAO_WorkspaceWidget::get($widget_id))) {
-			$tpl->assign('widget', $widget);
-			$tpl->display('devblocks:cerberusweb.core::internal/workspaces/widgets/render.tpl');
-		}
+		@$nocache = DevblocksPlatform::importGPC($_REQUEST['nocache'], 'boolean', false);
+		Extension_WorkspaceWidget::renderWidgetFromCache($widget_id, true, $nocache);
 	}
 	
 	function showWidgetPopupAction() {
@@ -60,6 +55,7 @@ class PageSection_InternalDashboards extends Extension_PageSection {
 	function saveWidgetPopupAction() {
 		@$id = DevblocksPlatform::importGPC($_REQUEST['id'], 'integer', 0);
 		@$label = DevblocksPlatform::importGPC($_REQUEST['label'], 'string', 'Widget');
+		@$cache_ttl = DevblocksPlatform::importGPC($_REQUEST['cache_ttl'], 'integer', 0);
 		@$do_delete = DevblocksPlatform::importGPC($_REQUEST['do_delete'], 'integer', 0);
 
 		if(!empty($id) && !empty($do_delete)) {
@@ -68,6 +64,7 @@ class PageSection_InternalDashboards extends Extension_PageSection {
 		} else {
 			$fields = array(
 				DAO_WorkspaceWidget::LABEL => $label,
+				DAO_WorkspaceWidget::CACHE_TTL => DevblocksPlatform::intClamp($cache_ttl, 0, 604800),
 			);
 			
 			if(null != ($widget = DAO_WorkspaceWidget::get($id))) {
@@ -101,6 +98,7 @@ class PageSection_InternalDashboards extends Extension_PageSection {
 			DAO_WorkspaceWidget::EXTENSION_ID => $extension_id,
 			DAO_WorkspaceWidget::WORKSPACE_TAB_ID => $workspace_tab_id,
 			DAO_WorkspaceWidget::POS => '0000',
+			DAO_WorkspaceWidget::CACHE_TTL => 60,
 		));
 		
 		echo json_encode(array(
@@ -176,6 +174,7 @@ class PageSection_InternalDashboards extends Extension_PageSection {
 				DAO_WorkspaceWidget::EXTENSION_ID => $extension_id,
 				DAO_WorkspaceWidget::WORKSPACE_TAB_ID => $workspace_tab_id,
 				DAO_WorkspaceWidget::POS => '0000',
+				DAO_WorkspaceWidget::CACHE_TTL => @$widget_json['widget']['cache_ttl'] ?: 60,
 				DAO_WorkspaceWidget::PARAMS_JSON => json_encode($widget_json['widget']['params'])
 			));
 			
@@ -205,6 +204,7 @@ class PageSection_InternalDashboards extends Extension_PageSection {
 			'widget' => array(
 				'label' => $widget->label,
 				'extension_id' => $widget->extension_id,
+				'cache_ttl' => $widget->cache_ttl,
 				'params' => $widget->params,
 			),
 		));
@@ -339,6 +339,46 @@ endif;
 
 if(class_exists('Extension_WorkspaceTab')):
 class WorkspaceTab_Dashboards extends Extension_WorkspaceTab {
+	public function renderTabConfig(Model_WorkspacePage $page, Model_WorkspaceTab $tab) {
+		$tpl = DevblocksPlatform::getTemplateService();
+		
+		$tpl->assign('workspace_page', $page);
+		$tpl->assign('workspace_tab', $tab);
+		
+		// Render template
+		
+		$tpl->display('devblocks:cerberusweb.core::internal/workspaces/tabs/dashboard/config.tpl');
+	}
+	
+	function saveTabConfig(Model_WorkspacePage $page, Model_WorkspaceTab $tab) {
+		@$params = DevblocksPlatform::importGPC($_REQUEST['params'], 'array');
+
+		@$prev_column_count = intval($tab->params['num_columns']);
+		@$new_column_count = DevblocksPlatform::intClamp(intval($params['num_columns']), 1, 4);
+
+		// Rebalance widgets if we're reducing the columns
+		if($new_column_count < $prev_column_count) {
+			$widgets = DAO_WorkspaceWidget::getByTab($tab->id);
+			$columns_left = $new_column_count;
+			
+			for($col_idx = 0; $col_idx < $new_column_count; $col_idx++) {
+				$idx = 0;
+				$items = array_splice($widgets, 0, ceil(count($widgets)/$columns_left));
+				
+				foreach($items as $item) {
+					$pos = sprintf("%d%03d", $col_idx, $idx++);
+					DAO_WorkspaceWidget::update($item->id, array(DAO_WorkspaceWidget::POS => $pos));
+				}
+				
+				$columns_left--;
+			}
+		}
+		
+		DAO_WorkspaceTab::update($tab->id, array(
+			DAO_WorkspaceTab::PARAMS_JSON => json_encode($params),
+		));
+	}
+	
 	public function renderTab(Model_WorkspacePage $page, Model_WorkspaceTab $tab) {
 		$tpl = DevblocksPlatform::getTemplateService();
 		

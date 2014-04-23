@@ -27,31 +27,20 @@ class DAO_ContextActivityLog extends Cerb_ORMHelper {
 
 	static function create($fields) {
 		$db = DevblocksPlatform::getDatabaseService();
-		
-		$sql = "INSERT INTO context_activity_log () VALUES ()";
-		$db->Execute($sql);
-		$id = $db->LastInsertId();
-		
-		self::update($id, $fields);
-		
-		return $id;
-	}
-	
-	static function update($ids, $fields) {
+
 		@$target_context = $fields[DAO_ContextActivityLog::TARGET_CONTEXT];
 		@$target_context_id = $fields[DAO_ContextActivityLog::TARGET_CONTEXT_ID];
-
+		
 		if(is_null($target_context))
 			$fields[DAO_ContextActivityLog::TARGET_CONTEXT] = '';
 		
 		if(is_null($target_context_id))
 			$fields[DAO_ContextActivityLog::TARGET_CONTEXT_ID] = 0;
 		
-		parent::_update($ids, 'context_activity_log', $fields);
-	}
-	
-	static function updateWhere($fields, $where) {
-		parent::_updateWhere('context_activity_log', $fields, $where);
+		// [TODO] This should be an example for insertion of other immutable records
+		$id = parent::_insert('context_activity_log', $fields);
+		
+		return $id;
 	}
 	
 	/**
@@ -100,7 +89,7 @@ class DAO_ContextActivityLog extends Cerb_ORMHelper {
 	static private function _getObjectsFromResult($rs) {
 		$objects = array();
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$object = new Model_ContextActivityLog();
 			$object->id = $row['id'];
 			$object->activity_point = $row['activity_point'];
@@ -113,9 +102,13 @@ class DAO_ContextActivityLog extends Cerb_ORMHelper {
 			$objects[$object->id] = $object;
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return $objects;
+	}
+
+	static function random() {
+		return self::_getRandom('context_activity_log');
 	}
 	
 	static function delete($ids) {
@@ -294,13 +287,12 @@ class DAO_ContextActivityLog extends Cerb_ORMHelper {
 			$rs = $db->SelectLimit($sql,$limit,$page*$limit) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs ADORecordSet */
 		} else {
 			$rs = $db->Execute($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs ADORecordSet */
-			$total = mysql_num_rows($rs);
+			$total = mysqli_num_rows($rs);
 		}
 		
 		$results = array();
-		$total = -1;
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$result = array();
 			foreach($row as $f => $v) {
 				$result[$f] = $v;
@@ -309,16 +301,20 @@ class DAO_ContextActivityLog extends Cerb_ORMHelper {
 			$results[$object_id] = $result;
 		}
 
-		// [JAS]: Count all
+		$total = count($results);
+		
 		if($withCounts) {
-			$count_sql =
-				($has_multiple_values ? "SELECT COUNT(DISTINCT context_activity_log.id) " : "SELECT COUNT(context_activity_log.id) ").
-				$join_sql.
-				$where_sql;
-			$total = $db->GetOne($count_sql);
+			// We can skip counting if we have a less-than-full single page
+			if(!(0 == $page && $total < $limit)) {
+				$count_sql =
+					($has_multiple_values ? "SELECT COUNT(DISTINCT context_activity_log.id) " : "SELECT COUNT(context_activity_log.id) ").
+					$join_sql.
+					$where_sql;
+				$total = $db->GetOne($count_sql);
+			}
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return array($results,$total);
 	}
@@ -672,63 +668,11 @@ class View_ContextActivityLog extends C4_AbstractView implements IAbstractView_S
 			$this->renderPage = 0;
 		}
 	}
-		
-	function doBulkUpdate($filter, $do, $ids=array()) {
-		@set_time_limit(600); // 10m
-		
-		$change_fields = array();
-		$custom_fields = array();
-
-		// Make sure we have actions
-		if(empty($do))
-			return;
-
-		// Make sure we have checked items if we want a checked list
-		if(0 == strcasecmp($filter,"checks") && empty($ids))
-			return;
-			
-		if(is_array($do))
-		foreach($do as $k => $v) {
-			switch($k) {
-				case 'example':
-					//$change_fields[DAO_ContextActivityLog::EXAMPLE] = 'some value';
-					break;
-			}
-		}
-
-		$pg = 0;
-
-		if(empty($ids))
-		do {
-			list($objects,$null) = DAO_ContextActivityLog::search(
-				array(),
-				$this->getParams(),
-				100,
-				$pg++,
-				SearchFields_ContextActivityLog::ID,
-				true,
-				false
-			);
-			$ids = array_merge($ids, array_keys($objects));
-			 
-		} while(!empty($objects));
-
-		$batch_total = count($ids);
-		for($x=0;$x<=$batch_total;$x+=100) {
-			$batch_ids = array_slice($ids,$x,100);
-			
-			DAO_ContextActivityLog::update($batch_ids, $change_fields);
-
-			unset($batch_ids);
-		}
-
-		unset($ids);
-	}
 };
 
 class Context_ContextActivityLog extends Extension_DevblocksContext {
 	function getRandom() {
-		return null;
+		return DAO_ContextActivityLog::random();
 	}
 	
 	function getMeta($context_id) {
@@ -786,6 +730,8 @@ class Context_ContextActivityLog extends Extension_DevblocksContext {
 			$entry = DAO_ContextActivityLog::get($entry);
 		} elseif($entry instanceof Model_ContextActivityLog) {
 			// It's what we want already.
+		} elseif(is_array($entry)) {
+			$entry = Cerb_ORMHelper::recastArrayToModel($entry, 'Model_ContextActivityLog');
 		} else {
 			$entry = null;
 		}

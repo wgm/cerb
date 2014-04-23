@@ -158,7 +158,7 @@ class DAO_WorkspacePage extends Cerb_ORMHelper {
 	static private function _getObjectsFromResult($rs) {
 		$objects = array();
 
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$object = new Model_WorkspacePage();
 			$object->id = $row['id'];
 			$object->name = $row['name'];
@@ -168,7 +168,7 @@ class DAO_WorkspacePage extends Cerb_ORMHelper {
 			$objects[$object->id] = $object;
 		}
 
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 
 		return $objects;
 	}
@@ -292,13 +292,12 @@ class DAO_WorkspacePage extends Cerb_ORMHelper {
 			$rs = $db->SelectLimit($sql,$limit,$page*$limit) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs ADORecordSet */
 		} else {
 			$rs = $db->Execute($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs ADORecordSet */
-			$total = mysql_num_rows($rs);
+			$total = mysqli_num_rows($rs);
 		}
 
 		$results = array();
-		$total = -1;
 
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$result = array();
 			foreach($row as $f => $v) {
 				$result[$f] = $v;
@@ -307,16 +306,20 @@ class DAO_WorkspacePage extends Cerb_ORMHelper {
 			$results[$object_id] = $result;
 		}
 
-		// [JAS]: Count all
+		$total = count($results);
+		
 		if($withCounts) {
-			$count_sql =
-			($has_multiple_values ? "SELECT COUNT(DISTINCT workspace_page.id) " : "SELECT COUNT(workspace_page.id) ").
-			$join_sql.
-			$where_sql;
-			$total = $db->GetOne($count_sql);
+			// We can skip counting if we have a less-than-full single page
+			if(!(0 == $page && $total < $limit)) {
+				$count_sql =
+					($has_multiple_values ? "SELECT COUNT(DISTINCT workspace_page.id) " : "SELECT COUNT(workspace_page.id) ").
+					$join_sql.
+					$where_sql;
+				$total = $db->GetOne($count_sql);
+			}
 		}
 
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 
 		return array($results,$total);
 	}
@@ -359,8 +362,7 @@ class DAO_WorkspacePage extends Cerb_ORMHelper {
 		$db = DevblocksPlatform::getDatabaseService();
 		$logger = DevblocksPlatform::getConsoleLog();
 
-		$sql = "DELETE QUICK workspace_tab FROM workspace_tab LEFT JOIN workspace_page ON (workspace_tab.workspace_page_id = workspace_page.id) WHERE workspace_page.id IS NULL";
-		$db->Execute($sql);
+		$db->Execute("DELETE FROM workspace_tab WHERE workspace_page_id NOT IN (SELECT id FROM workspace_page)");
 		$logger->info('[Maint] Purged ' . $db->Affected_Rows() . ' workspace_tab records.');
 	}
 
@@ -473,7 +475,7 @@ class DAO_WorkspaceTab extends Cerb_ORMHelper {
 	static private function _getObjectsFromResult($rs) {
 		$objects = array();
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$object = new Model_WorkspaceTab();
 			$object->id = $row['id'];
 			$object->name = $row['name'];
@@ -487,9 +489,13 @@ class DAO_WorkspaceTab extends Cerb_ORMHelper {
 			$objects[$object->id] = $object;
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return $objects;
+	}
+	
+	static function random() {
+		return self::_getRandom('workspace_tab');
 	}
 	
 	static function delete($ids) {
@@ -610,13 +616,12 @@ class DAO_WorkspaceTab extends Cerb_ORMHelper {
 			$rs = $db->SelectLimit($sql,$limit,$page*$limit) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs ADORecordSet */
 		} else {
 			$rs = $db->Execute($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs ADORecordSet */
-			$total = mysql_num_rows($rs);
+			$total = mysqli_num_rows($rs);
 		}
 		
 		$results = array();
-		$total = -1;
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$result = array();
 			foreach($row as $f => $v) {
 				$result[$f] = $v;
@@ -625,16 +630,20 @@ class DAO_WorkspaceTab extends Cerb_ORMHelper {
 			$results[$object_id] = $result;
 		}
 
-		// [JAS]: Count all
+		$total = count($results);
+		
 		if($withCounts) {
-			$count_sql =
-				($has_multiple_values ? "SELECT COUNT(DISTINCT workspace_tab.id) " : "SELECT COUNT(workspace_tab.id) ").
-				$join_sql.
-				$where_sql;
-			$total = $db->GetOne($count_sql);
+			// We can skip counting if we have a less-than-full single page
+			if(!(0 == $page && $total < $limit)) {
+				$count_sql =
+					($has_multiple_values ? "SELECT COUNT(DISTINCT workspace_tab.id) " : "SELECT COUNT(workspace_tab.id) ").
+					$join_sql.
+					$where_sql;
+				$total = $db->GetOne($count_sql);
+			}
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return array($results,$total);
 	}
@@ -643,8 +652,7 @@ class DAO_WorkspaceTab extends Cerb_ORMHelper {
 		$db = DevblocksPlatform::getDatabaseService();
 		$logger = DevblocksPlatform::getConsoleLog();
 		
-		$sql = "DELETE QUICK workspace_list FROM workspace_list LEFT JOIN workspace_tab ON (workspace_list.workspace_tab_id = workspace_tab.id) WHERE workspace_tab.id IS NULL";
-		$db->Execute($sql);
+		$db->Execute("DELETE FROM workspace_list WHERE workspace_tab_id NOT IN (SELECT id FROM workspace_tab)");
 		$logger->info('[Maint] Purged ' . $db->Affected_Rows() . ' workspace_list records.');
 	}
 
@@ -928,7 +936,7 @@ class DAO_WorkspaceList extends DevblocksORMHelper {
 
 		$objects = array();
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$object = new Model_WorkspaceList();
 			$object->id = intval($row['id']);
 			$object->workspace_tab_id = intval($row['workspace_tab_id']);
@@ -943,7 +951,7 @@ class DAO_WorkspaceList extends DevblocksORMHelper {
 			$objects[$object->id] = $object;
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return $objects;
 	}
@@ -964,6 +972,10 @@ class DAO_WorkspaceList extends DevblocksORMHelper {
 		parent::_updateWhere('workspace_list', $fields, $where);
 	}
 	
+	static function random() {
+		return self::_getRandom('workspace_list');
+	}
+	
 	static function delete($ids) {
 		if(!is_array($ids)) $ids = array($ids);
 		
@@ -973,7 +985,7 @@ class DAO_WorkspaceList extends DevblocksORMHelper {
 		$db = DevblocksPlatform::getDatabaseService();
 		$ids_list = implode(',', $ids);
 		
-		$db->Execute(sprintf("DELETE QUICK FROM workspace_list WHERE id IN (%s)", $ids_list)) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
+		$db->Execute(sprintf("DELETE FROM workspace_list WHERE id IN (%s)", $ids_list)) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
 		
 		// Delete worker view prefs
 		foreach($ids as $id) {
@@ -1188,7 +1200,7 @@ class View_WorkspacePage extends C4_AbstractView {
 
 class Context_WorkspacePage extends Extension_DevblocksContext {
 	function getRandom() {
-		//return DAO_Address::random();
+		return DAO_WorkspacePage::random();
 	}
 	
 	function getMeta($context_id) {
@@ -1226,6 +1238,8 @@ class Context_WorkspacePage extends Extension_DevblocksContext {
 			$page = DAO_WorkspacePage::get($page);
 		} elseif($page instanceof Model_WorkspacePage) {
 			// It's what we want already.
+		} elseif(is_array($page)) {
+			$page = Cerb_ORMHelper::recastArrayToModel($page, 'Model_WorkspacePage');
 		} else {
 			$page = null;
 		}
@@ -1272,6 +1286,9 @@ class Context_WorkspacePage extends Extension_DevblocksContext {
 			$token_values['name'] = $page->name;
 			$token_values['extension_id'] = $page->extension_id;
 
+			// Custom fields
+			$token_values = $this->_importModelCustomFieldsAsValues($page, $token_values);
+			
 			// URL
 			$url_writer = DevblocksPlatform::getUrlService();
 			$token_values['record_url'] = $url_writer->writeNoProxy(sprintf("c=pages&id=%d-%s",$page->id, DevblocksPlatform::strToPermalink($page->name)), true);
@@ -1425,7 +1442,7 @@ class Context_WorkspacePage extends Extension_DevblocksContext {
 
 class Context_WorkspaceTab extends Extension_DevblocksContext {
 	function getRandom() {
-		//return DAO_WorkspaceTab::random();
+		return DAO_WorkspaceTab::random();
 	}
 	
 	function getMeta($context_id) {
@@ -1457,6 +1474,8 @@ class Context_WorkspaceTab extends Extension_DevblocksContext {
 			$tab = DAO_WorkspaceTab::get($tab);
 		} elseif($tab instanceof Model_WorkspaceTab) {
 			// It's what we want already.
+		} elseif(is_array($tab)) {
+			$tab = Cerb_ORMHelper::recastArrayToModel($tab, 'Model_WorkspaceTab');
 		} else {
 			$tab = null;
 		}
@@ -1464,15 +1483,17 @@ class Context_WorkspaceTab extends Extension_DevblocksContext {
 		// Token labels
 		$token_labels = array(
 			'_label' => $prefix,
-			'name' => $prefix.$translate->_('common.name'),
 			'extension_id' => $prefix.$translate->_('common.extension'),
+			'id' => $prefix.$translate->_('common.id'),
+			'name' => $prefix.$translate->_('common.name'),
 		);
 		
 		// Token types
 		$token_types = array(
 			'_label' => 'context_url',
-			'name' => Model_CustomField::TYPE_SINGLE_LINE,
 			'extension_id' => Model_CustomField::TYPE_SINGLE_LINE,
+			'id' => Model_CustomField::TYPE_NUMBER,
+			'name' => Model_CustomField::TYPE_SINGLE_LINE,
 		);
 		
 		// Custom field/fieldset token labels
@@ -1492,6 +1513,9 @@ class Context_WorkspaceTab extends Extension_DevblocksContext {
 			$token_values['id'] = $tab->id;
 			$token_values['name'] = $tab->name;
 			$token_values['extension_id'] = $tab->extension_id;
+			
+			// Custom fields
+			$token_values = $this->_importModelCustomFieldsAsValues($tab, $token_values);
 		}
 		
 		return true;

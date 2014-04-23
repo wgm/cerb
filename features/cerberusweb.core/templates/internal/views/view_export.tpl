@@ -2,57 +2,149 @@
 <input type="hidden" name="c" value="internal">
 <input type="hidden" name="a" value="viewDoExport">
 <input type="hidden" name="view_id" value="{$view_id}">
+<input type="hidden" name="cursor_key" value="">
+
+<div class="export-settings">
 
 <h1>{'common.export'|devblocks_translate|capitalize}</h1>
 <br>
 
-<b>Columns:</b>
- &nbsp; 
-<a href="javascript:;" onclick="Devblocks.resetSelectElements('frm{$view_id}_export','columns[]');">{'common.clear'|devblocks_translate|capitalize}</a>
-<br>
-{section start=0 step=1 loop=15 name=columns}
-{assign var=index value=$smarty.section.columns.index}
-{math equation="x+1" x=$index format="%02d"}: 
-<select name="columns[]">
-	<option value=""></option>
-	
-	{foreach from=$model_columns item=model_column}
-		{if substr($model_column->token,0,3) != "cf_"}
-			{if !empty($model_column->db_label) && !empty($model_column->token)}
-				<option value="{$model_column->token}" {if $view->view_columns.$index==$model_column->token}selected{/if}>{$model_column->db_label|capitalize}</option>
-			{/if}
-		{else}
-			{assign var=has_custom value=1}
-		{/if}
-	{/foreach}
-	
-	{if $has_custom}
-	<optgroup label="Custom Fields">
-	{foreach from=$model_columns item=model_column}
-		{if substr($model_column->token,0,3) == "cf_"}
-			{if !empty($model_column->db_label) && !empty($model_column->token)}
-			<option value="{$model_column->token}" {if $view->view_columns.$index==$model_column->token}selected{/if}>{$model_column->db_label|capitalize}</option>
-			{/if}
-		{/if}
-	{/foreach}
-	</optgroup>
-	{/if}
-	
-</select>
-<br>
-{/section}
-<br>
+<div style="margin-bottom:10px;">
+	<b>Fields:</b>
+ </div>
 
-<b>Export List As:</b><br>
-<select name="export_as">
-	<option value="csv" selected="selected">Comma-separated values (.csv)</option>
-	<option value="xml">XML (.xml)</option>
-	<option value="json">JSON (.json)</option>
-</select>
-<br>
+<ul class="bubbles sortable" style="display:block;padding:0;"></ul>
 
-<br>
-<button type="button" onclick="this.form.submit();" style=""><span class="cerb-sprite2 sprite-tick-circle"></span> {'common.export'|devblocks_translate|capitalize}</button>
-<button type="button" onclick="toggleDiv('{$view_id}_tips','none');$('#{$view_id}_tips').html('');" style=""><span class="cerb-sprite2 sprite-cross-circle"></span> Cancel</button>
+<div style="margin:10px 0px 0px 0px;">
+	<input type="text" size="16" class="input_search filter">
+</div>
+
+<ul class="cerb-popupmenu" style="border:0;margin:0px 0px 15px 0px;display:block;max-height:300px;overflow:auto;">
+	{foreach from=$context_labels item=label key=token}
+	<li><a href="javascript:;" token="{$token}">{$label}</a></li>
+	{/foreach}
+</ul>
+
+<div style="margin-bottom:10px;">
+	<b>Format dates as:</b>
+	<div style="margin-left:10px;">
+		<label><input type="radio" name="format_timestamps" value="1" checked="checked"> Text</label>
+		<label><input type="radio" name="format_timestamps" value="0"> Unix Timestamps</label>
+	</div>
+</div>
+
+<div style="margin-bottom:10px;">
+	<b>Export list as:</b>
+	<div style="margin-left:10px;">
+		<select name="export_as">
+			<option value="csv" selected="selected">Comma-separated values (.csv)</option>
+			<option value="json">JSON (.json)</option>
+			<option value="xml">XML (.xml)</option>
+		</select>
+	</div>
+</div>
+
+<button type="button" class="submit"><span class="cerb-sprite2 sprite-tick-circle"></span> {'common.export'|devblocks_translate|capitalize}</button>
+<button type="button" onclick="$('#{$view_id}_tips').html('').hide();" style="cancel"><span class="cerb-sprite2 sprite-cross-circle"></span> Cancel</button>
+
+</div>
+
+<div class="export-status"></div>
 
 </form>
+
+<script type="text/javascript">
+$(function() {
+	var $frm = $('#frm{$view_id}_export');
+	var $menu = $frm.find('ul.cerb-popupmenu');
+	var $fields_menu = $frm.find('ul.cerb-popupmenu');
+	var $input = $frm.find('input.filter');
+
+	var $settings = $frm.find('div.export-settings');
+	var $status = $frm.find('div.export-status');
+	
+	$frm.find('ul.bubbles.sortable').sortable({
+		placeholder: 'ui-state-highlight',
+		items: 'li',
+		distance: 10
+	});
+	
+	$frm.on('export_increment', function() {
+		genericAjaxPost('frm{$view_id}_export', null, 'c=internal&a=doViewExport', function(json) {
+			
+			// If complete, display the download link
+			if(json.completed) {
+				$frm.find('input:hidden[name=cursor_key]').val('');
+				
+				$status.html('<a href="javascript:;" class="close"><span class="cerb-sprite2 sprite-cross-circle" style="position:relative;float:right;"></span></a><div style="font-size:18px;font-weight:bold;text-align:center;">Download: <a href="' + json.attachment_url + '" target="_blank">' + json.attachment_name + '</a></div>').fadeIn();
+				$status.find('a.close').click(function() {
+					$('#{$view_id}_tips').html('').hide();
+				});
+				return;
+			}
+			
+			$frm.find('input:hidden[name=cursor_key]').val(json.key);
+			
+			// If in progress, continue looping pages
+			$status.html('<div style="font-size:18px;font-weight:bold;text-align:center;padding:10px;margin:10px;">Exported ' + json.rows_exported + ' records<br><span class="cerb-ajax-spinner"></span></div>').fadeIn();
+			$frm.trigger('export_increment');
+			
+		});
+		
+	})
+	
+	$frm.find('button.submit').click(function() {
+		$settings.hide();
+		$frm.trigger('export_increment');
+	});
+	
+	// Menu
+	
+	$input.keyup(
+		function(e) {
+			var term = $(this).val().toLowerCase();
+			$fields_menu.find('> li a').each(function(e) {
+				if(-1 != $(this).html().toLowerCase().indexOf(term)) {
+					$(this).parent().show();
+				} else {
+					$(this).parent().hide();
+				}
+			});
+		}
+	);
+
+	$fields_menu.find('> li').click(function(e) {
+		e.stopPropagation();
+		if(!$(e.target).is('li'))
+			return;
+
+		$(this).find('a').trigger('click');
+	});
+
+	$fields_menu.find('> li > a').click(function() {
+		var $item = $(this);
+		var token = $item.attr('token');
+		var $bubbles = $fields_menu.siblings('ul.bubbles');
+		
+		var $bubble = $('<li></li>');
+		$bubble.css('cursor', 'move');
+		
+		var $hidden = $('<input>');
+		$hidden.attr('type', 'hidden');
+		$hidden.attr('name', 'tokens[]');
+		$hidden.attr('value', token);
+		
+		var $a = $('<a href="javascript:;"><span class="ui-icon ui-icon-trash" style="display:inline-block;width:14px;height:14px;"></span></a>');
+		$a.click(function(e) {
+			$(this).closest('li').remove();
+		})
+		
+		$bubble.append($hidden);
+		$bubble.append($item.text());
+		$bubble.append($a);
+		$bubbles.append($bubble);
+		
+		$input.focus().select();
+	});
+});
+</script>

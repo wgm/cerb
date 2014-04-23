@@ -119,7 +119,7 @@ class DAO_CustomField extends DevblocksORMHelper {
 		
 		$objects = array();
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$object = new Model_CustomField();
 			$object->id = intval($row['id']);
 			$object->name = $row['name'];
@@ -139,9 +139,13 @@ class DAO_CustomField extends DevblocksORMHelper {
 			$objects[$object->id] = $object;
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return $objects;
+	}
+	
+	static function random() {
+		return self::_getRandom('custom_field');
 	}
 	
 	public static function delete($ids) {
@@ -176,6 +180,14 @@ class DAO_CustomField extends DevblocksORMHelper {
 		);
 		
 		self::clearCache();
+	}
+	
+	public static function maint() {
+		$db = DevblocksPlatform::getDatabaseService();
+		$logger = DevblocksPlatform::getConsoleLog();
+		
+		$db->Execute("DELETE FROM custom_field WHERE custom_fieldset_id != 0 AND custom_fieldset_id NOT IN (SELECT id FROM custom_fieldset)");
+		$logger->info('[Maint] Purged ' . $db->Affected_Rows() . ' custom_field records.');
 	}
 	
 	public static function clearCache() {
@@ -327,7 +339,7 @@ class DAO_CustomFieldValue extends DevblocksORMHelper {
 		
 		if(empty($context) || empty($context_id) || !is_array($values))
 			return;
-
+		
 		self::_linkCustomFieldsets($context, $context_id, $values);
 		
 		$fields = DAO_CustomField::getByContext($context);
@@ -482,11 +494,11 @@ class DAO_CustomFieldValue extends DevblocksORMHelper {
 					break;
 			}
 		}
-		
-		DevblocksPlatform::markContextChanged($context, $context_id);
 	}
 	
 	public static function setFieldValue($context, $context_id, $field_id, $value, $delta=false) {
+		CerberusContexts::checkpointChanges($context, array($context_id));
+		
 		$db = DevblocksPlatform::getDatabaseService();
 		
 		if(null == ($field = DAO_CustomField::get($field_id)))
@@ -546,10 +558,14 @@ class DAO_CustomFieldValue extends DevblocksORMHelper {
 				break;
 		}
 		
+		DevblocksPlatform::markContextChanged($context, $context_id);
+		
 		return TRUE;
 	}
 	
 	public static function unsetFieldValue($context, $context_id, $field_id, $value=null) {
+		CerberusContexts::checkpointChanges($context, array($context_id));
+		
 		$db = DevblocksPlatform::getDatabaseService();
 		
 		if(null == ($field = DAO_CustomField::get($field_id)))
@@ -574,6 +590,7 @@ class DAO_CustomFieldValue extends DevblocksORMHelper {
 		}
 		
 		// We need to remove context links on file attachments
+		// [TODO] Optimize
 		switch($field->type) {
 			case Model_CustomField::TYPE_FILE:
 			case Model_CustomField::TYPE_FILES:
@@ -831,7 +848,7 @@ class DAO_CustomFieldValue extends DevblocksORMHelper {
 		$sql = implode(' UNION ALL ', $sqls);
 		$rs = $db->Execute($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$context_id = intval($row['context_id']);
 			$field_id = intval($row['field_id']);
 			$field_value = $row['field_value'];
@@ -860,7 +877,7 @@ class DAO_CustomFieldValue extends DevblocksORMHelper {
 			}
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return $results;
 	}
@@ -959,7 +976,7 @@ class Context_CustomField extends Extension_DevblocksContext {
 	}
 	
 	function getRandom() {
-		//return DAO_WorkerRole::random();
+		return DAO_CustomField::random();
 	}
 	
 	function getMeta($context_id) {
@@ -986,6 +1003,8 @@ class Context_CustomField extends Extension_DevblocksContext {
 			$cfield = DAO_CustomField::get($cfield);
  		} elseif($cfield instanceof Model_CustomField) {
 			// It's what we want already.
+		} elseif(is_array($cfield)) {
+			$cfield = Cerb_ORMHelper::recastArrayToModel($cfield, 'Model_CustomField');
 		} else {
 			$cfield = null;
 		}
@@ -993,6 +1012,7 @@ class Context_CustomField extends Extension_DevblocksContext {
 		// Token labels
 		$token_labels = array(
 			'_label' => $prefix,
+			'id' => $prefix.$translate->_('common.id'),
 			'name' => $prefix.$translate->_('common.name'),
 			//'record_url' => $prefix.$translate->_('common.url.record'),
 		);
@@ -1000,6 +1020,7 @@ class Context_CustomField extends Extension_DevblocksContext {
 		// Token types
 		$token_types = array(
 			'_label' => 'context_url',
+			'id' => Model_CustomField::TYPE_NUMBER,
 			'name' => Model_CustomField::TYPE_SINGLE_LINE,
 		);
 		

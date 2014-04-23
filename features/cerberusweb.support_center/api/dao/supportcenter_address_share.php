@@ -20,8 +20,8 @@ class DAO_SupportCenterAddressShare extends DevblocksORMHelper {
 		);
 		$rs = $db->Execute($sql);
 		
-		if(is_resource($rs))
-		while($row = mysql_fetch_array($rs)) {
+		if($rs instanceof mysqli_result)
+		while($row = mysqli_fetch_array($rs)) {
 			$id = intval($row['id']);
 			$ids[$id] = $id;
 		}
@@ -97,8 +97,8 @@ class DAO_SupportCenterAddressShare extends DevblocksORMHelper {
 	private static function getObjectsFromResultSet($rs) {
 		$objects = array();
 		
-		if(is_resource($rs))
-		while($row = mysql_fetch_assoc($rs)) {
+		if($rs instanceof mysqli_result)
+		while($row = mysqli_fetch_assoc($rs)) {
 			$object = new Model_SupportCenterAddressShare();
 			$object->share_address_id = $row['share_address_id'];
 			$object->share_address = $row['share_address'];
@@ -146,20 +146,10 @@ class DAO_SupportCenterAddressShare extends DevblocksORMHelper {
 		$db = DevblocksPlatform::getDatabaseService();
 		
 		// Clear orphaned address share rows
-		$sql = "DELETE supportcenter_address_share ".
-			"FROM supportcenter_address_share ".
-			"LEFT JOIN address AS a1 ON (supportcenter_address_share.share_address_id = a1.id) ".
-			"LEFT JOIN address AS a2 ON (supportcenter_address_share.with_address_id = a2.id) ".
-			"LEFT JOIN contact_person AS cp1 ON (a1.contact_person_id = cp1.id) ".
-			"LEFT JOIN contact_person AS cp2 ON (a2.contact_person_id = cp2.id) ".
-			"WHERE a1.id IS NULL ". // address is missing
-			"OR a2.id IS NULL ".
-			"OR a1.contact_person_id = 0 ". // contact isn't assigned
-			"OR a2.contact_person_id = 0 ".
-			"OR cp1.id IS NULL ". // contact is missing
-			"OR cp2.id IS NULL "
-			;
-		$db->Execute($sql);
+		$db->Execute("DELETE FROM supportcenter_address_share ".
+			"WHERE (share_address_id NOT IN (SELECT id FROM address WHERE contact_person_id != 0)) ".
+			"OR (with_address_id NOT IN (SELECT id FROM address WHERE contact_person_id != 0)) "
+		);
 	}
 };
 

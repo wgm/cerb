@@ -19,7 +19,7 @@ class DAO_ExampleObject extends Cerb_ORMHelper {
 		return $id;
 	}
 	
-	static function update($ids, $fields) {
+	static function update($ids, $fields, $check_deltas=true) {
 		if(!is_array($ids))
 			$ids = array($ids);
 		
@@ -30,16 +30,16 @@ class DAO_ExampleObject extends Cerb_ORMHelper {
 			if(empty($batch_ids))
 				continue;
 			
-			// Get state before changes
-			$object_changes = parent::_getUpdateDeltas($batch_ids, $fields, get_class());
-
+			// Send events
+			if($check_deltas) {
+				//CerberusContexts::checkpointChanges(CerberusContexts::CONTEXT_, $batch_ids);
+			}
+			
 			// Make changes
 			parent::_update($batch_ids, 'example_object', $fields);
 			
 			// Send events
-			if(!empty($object_changes)) {
-				// Local events
-				//self::_processUpdateEvents($object_changes);
+			if($check_deltas) {
 				
 				// Trigger an event about the changes
 				$eventMgr = DevblocksPlatform::getEventService();
@@ -47,7 +47,7 @@ class DAO_ExampleObject extends Cerb_ORMHelper {
 					new Model_DevblocksEvent(
 						'dao.example_object.update',
 						array(
-							'objects' => $object_changes,
+							'fields' => $fields,
 						)
 					)
 				);
@@ -108,7 +108,7 @@ class DAO_ExampleObject extends Cerb_ORMHelper {
 	static private function _getObjectsFromResult($rs) {
 		$objects = array();
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$object = new Model_ExampleObject();
 			$object->id = $row['id'];
 			$object->name = $row['name'];
@@ -116,25 +116,24 @@ class DAO_ExampleObject extends Cerb_ORMHelper {
 			$objects[$object->id] = $object;
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return $objects;
 	}
 	
 	static function maint() {
-		$db = DevblocksPlatform::getDatabaseService();
-		$logger = DevblocksPlatform::getConsoleLog();
-
-		// Context Links
-		$db->Execute(sprintf("DELETE QUICK context_link FROM context_link LEFT JOIN example_object ON context_link.from_context_id=example_object WHERE context_link.from_context = %s AND example_object.id IS NULL",
-			$db->qstr(Context_ExampleObject::ID)
-		));
-		$logger->info('[Maint] Purged ' . $db->Affected_Rows() . ' example_object context link sources.');
-		
-		$db->Execute(sprintf("DELETE QUICK context_link FROM context_link LEFT JOIN example_object ON context_link.to_context_id=example_object.id WHERE context_link.to_context = %s AND example_object IS NULL",
-			$db->qstr(Context_ExampleObject::ID)
-		));
-		$logger->info('[Maint] Purged ' . $db->Affected_Rows() . ' example_object context link targets.');
+		// Fire event
+		$eventMgr = DevblocksPlatform::getEventService();
+		$eventMgr->trigger(
+			new Model_DevblocksEvent(
+				'context.maint',
+				array(
+					'context' => Context_ExampleObject::ID,
+					'context_table' => 'example_object',
+					'context_key' => 'id',
+				)
+			)
+		);
 	}
 	
 	static function delete($ids) {
@@ -147,16 +146,16 @@ class DAO_ExampleObject extends Cerb_ORMHelper {
 		$ids_list = implode(',', $ids);
 		
 		// Fire event
-	    $eventMgr = DevblocksPlatform::getEventService();
-	    $eventMgr->trigger(
-	        new Model_DevblocksEvent(
-	            'context.delete',
-                array(
-                	'context' => Context_ExampleObject::ID,
-                	'context_ids' => $ids
-                )
-            )
-	    );
+		$eventMgr = DevblocksPlatform::getEventService();
+		$eventMgr->trigger(
+			new Model_DevblocksEvent(
+				'context.delete',
+				array(
+					'context' => Context_ExampleObject::ID,
+					'context_ids' => $ids
+				)
+			)
+		);
 		
 		$db->Execute(sprintf("DELETE FROM example_object WHERE id IN (%s)", $ids_list));
 		
@@ -174,7 +173,7 @@ class DAO_ExampleObject extends Cerb_ORMHelper {
 		if('*'==substr($sortBy,0,1) || !isset($fields[$sortBy]) || !in_array($sortBy,$columns))
 			$sortBy=null;
 
-        list($tables,$wheres) = parent::_parseSearchParams($params, $columns, $fields, $sortBy);
+		list($tables,$wheres) = parent::_parseSearchParams($params, $columns, $fields, $sortBy);
 		
 		$select_sql = sprintf("SELECT ".
 			"example_object.id as %s, ".
@@ -233,19 +232,19 @@ class DAO_ExampleObject extends Cerb_ORMHelper {
 		);
 	}
 	
-    /**
-     * Enter description here...
-     *
-     * @param array $columns
-     * @param DevblocksSearchCriteria[] $params
-     * @param integer $limit
-     * @param integer $page
-     * @param string $sortBy
-     * @param boolean $sortAsc
-     * @param boolean $withCounts
-     * @return array
-     */
-    static function search($columns, $params, $limit=10, $page=0, $sortBy=null, $sortAsc=null, $withCounts=true) {
+	/**
+	 * Enter description here...
+	 *
+	 * @param array $columns
+	 * @param DevblocksSearchCriteria[] $params
+	 * @param integer $limit
+	 * @param integer $page
+	 * @param string $sortBy
+	 * @param boolean $sortAsc
+	 * @param boolean $withCounts
+	 * @return array
+	 */
+	static function search($columns, $params, $limit=10, $page=0, $sortBy=null, $sortAsc=null, $withCounts=true) {
 		$db = DevblocksPlatform::getDatabaseService();
 		
 		// Build search queries
@@ -265,16 +264,15 @@ class DAO_ExampleObject extends Cerb_ORMHelper {
 			$sort_sql;
 			
 		if($limit > 0) {
-    		$rs = $db->SelectLimit($sql,$limit,$page*$limit) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs ADORecordSet */
+			$rs = $db->SelectLimit($sql,$limit,$page*$limit) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs ADORecordSet */
 		} else {
-		    $rs = $db->Execute($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs ADORecordSet */
-            $total = mysql_num_rows($rs);
+			$rs = $db->Execute($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs ADORecordSet */
+			$total = mysqli_num_rows($rs);
 		}
 		
 		$results = array();
-		$total = -1;
 		
-		while($row = mysql_fetch_assoc($rs)) {
+		while($row = mysqli_fetch_assoc($rs)) {
 			$result = array();
 			foreach($row as $f => $v) {
 				$result[$f] = $v;
@@ -283,16 +281,20 @@ class DAO_ExampleObject extends Cerb_ORMHelper {
 			$results[$object_id] = $result;
 		}
 
-		// [JAS]: Count all
+		$total = count($results);
+		
 		if($withCounts) {
-			$count_sql =
-				($has_multiple_values ? "SELECT COUNT(DISTINCT example_object.id) " : "SELECT COUNT(example_object.id) ").
-				$join_sql.
-				$where_sql;
-			$total = $db->GetOne($count_sql);
+			// We can skip counting if we have a less-than-full single page
+			if(!(0 == $page && $total < $limit)) {
+				$count_sql =
+					($has_multiple_values ? "SELECT COUNT(DISTINCT example_object.id) " : "SELECT COUNT(example_object.id) ").
+					$join_sql.
+					$where_sql;
+				$total = $db->GetOne($count_sql);
+			}
 		}
 		
-		mysql_free_result($rs);
+		mysqli_free_result($rs);
 		
 		return array($results,$total);
 	}
@@ -689,6 +691,8 @@ class Context_ExampleObject extends Extension_DevblocksContext {
 			$object = DAO_ExampleObject::get($object);
 		} elseif($object instanceof Model_ExampleObject) {
 			// It's what we want already.
+		} elseif(is_array($object)) {
+			$object = Cerb_ORMHelper::recastArrayToModel($object, 'Model_ExampleObject');
 		} else {
 			$object = null;
 		}
@@ -731,6 +735,9 @@ class Context_ExampleObject extends Extension_DevblocksContext {
 			$token_values['created'] = $object->created;
 			$token_values['id'] = $object->id;
 			$token_values['name'] = $object->name;
+			
+			// Custom fields
+			$token_values = $this->_importModelCustomFieldsAsValues($object, $token_values);
 			
 			// URL
 			$url_writer = DevblocksPlatform::getUrlService();
