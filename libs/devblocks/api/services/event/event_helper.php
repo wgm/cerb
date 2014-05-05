@@ -3289,7 +3289,8 @@ class DevblocksEventHelper {
 			return;
 		}
 		
-		$replyto = $group->getReplyTo($bucket_id);
+		$replyto = DAO_AddressOutgoing::getDefault();
+
 		$relay_list = isset($params['to']) ? $params['to'] : array();
 		
 		// Attachments
@@ -3347,16 +3348,14 @@ class DevblocksEventHelper {
 	
 				$headers = $mail->getHeaders(); /* @var $headers Swift_Mime_Header */
 
-				if(!empty($sender_name)) {
-					$mail->setFrom($sender_email, $sender_name);
-				} else {
-					$mail->setFrom($sender_email);
-				}
-				
 				$replyto_personal = $replyto->getReplyPersonal($worker);
+				
 				if(!empty($replyto_personal)) {
+					$mail->setFrom($replyto->email, $replyto_personal);
 					$mail->setReplyTo($replyto->email, $replyto_personal);
+					
 				} else {
+					$mail->setFrom($replyto->email);
 					$mail->setReplyTo($replyto->email);
 				}
 				

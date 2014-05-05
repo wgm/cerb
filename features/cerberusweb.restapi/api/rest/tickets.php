@@ -94,10 +94,10 @@ class ChRest_Tickets extends Extension_RestController implements IExtensionRestC
 		$this->error(self::ERRNO_NOT_IMPLEMENTED);
 	}
 	
-	function getContext($id) {
+	function getContext($model) {
 		$labels = array();
 		$values = array();
-		$context = CerberusContexts::getContext(CerberusContexts::CONTEXT_TICKET, $id, $labels, $values, null, true);
+		$context = CerberusContexts::getContext(CerberusContexts::CONTEXT_TICKET, $model, $labels, $values, null, true);
 
 		unset($values['initial_message_content']);
 		unset($values['latest_message_content']);
@@ -221,6 +221,7 @@ class ChRest_Tickets extends Extension_RestController implements IExtensionRestC
 		$fields = array(
 			DAO_Ticket::IS_CLOSED => 1,
 			DAO_Ticket::IS_DELETED => 1,
+			DAO_Ticket::IS_WAITING => 0,
 		);
 		
 		// Only update fields that changed
@@ -266,9 +267,33 @@ class ChRest_Tickets extends Extension_RestController implements IExtensionRestC
 				'id' => DAO_Ticket::ID,
 				'is_closed' => DAO_Ticket::IS_CLOSED,
 				'is_deleted' => DAO_Ticket::IS_DELETED,
+				'is_waiting' => DAO_Ticket::IS_WAITING,
 				'mask' => DAO_Ticket::MASK,
 				'subject' => DAO_Ticket::SUBJECT,
 			);
+			
+		} elseif ('subtotal'==$type) {
+			$tokens = array(
+				'fieldsets' => SearchFields_Ticket::VIRTUAL_HAS_FIELDSET,
+				'links' => SearchFields_Ticket::VIRTUAL_CONTEXT_LINK,
+				'watchers' => SearchFields_Ticket::VIRTUAL_WATCHERS,
+				
+				'first_wrote' => SearchFields_Ticket::TICKET_FIRST_WROTE,
+				'group' => SearchFields_Ticket::TICKET_GROUP_ID,
+				'last_action' => SearchFields_Ticket::TICKET_LAST_ACTION_CODE,
+				'last_wrote' => SearchFields_Ticket::TICKET_LAST_WROTE,
+				'org_name' => SearchFields_Ticket::ORG_NAME,
+				'owner' => SearchFields_Ticket::TICKET_OWNER_ID,
+				'spam_training' => SearchFields_Ticket::TICKET_SPAM_TRAINING,
+				'status' => SearchFields_Ticket::VIRTUAL_STATUS,
+				'subject' => SearchFields_Ticket::TICKET_SUBJECT,
+			);
+			
+			$tokens_cfields = $this->_handleSearchTokensCustomFields(CerberusContexts::CONTEXT_TICKET);
+			
+			if(is_array($tokens_cfields))
+				$tokens = array_merge($tokens, $tokens_cfields);
+			
 		} else {
 			$tokens = array(
 				'content' => SearchFields_Ticket::FULLTEXT_MESSAGE_CONTENT,
@@ -277,6 +302,7 @@ class ChRest_Tickets extends Extension_RestController implements IExtensionRestC
 				'id' => SearchFields_Ticket::TICKET_ID,
 				'is_closed' => SearchFields_Ticket::TICKET_CLOSED,
 				'is_deleted' => SearchFields_Ticket::TICKET_DELETED,
+				'is_waiting' => SearchFields_Ticket::TICKET_WAITING,
 				'last_wrote' => SearchFields_Ticket::TICKET_LAST_WROTE,
 				'mask' => SearchFields_Ticket::TICKET_MASK,
 				'requester' => SearchFields_Ticket::REQUESTER_ADDRESS,
@@ -296,7 +322,10 @@ class ChRest_Tickets extends Extension_RestController implements IExtensionRestC
 		return NULL;
 	}
 	
-	function search($filters=array(), $sortToken='updated', $sortAsc=0, $page=1, $limit=10) {
+	function search($filters=array(), $sortToken='updated', $sortAsc=0, $page=1, $limit=10, $options=array()) {
+		@$show_results = DevblocksPlatform::importVar($options['show_results'], 'boolean', true);
+		@$subtotals = DevblocksPlatform::importVar($options['subtotals'], 'array', array());
+		
 		$worker = CerberusApplication::getActiveWorker();
 
 		$custom_field_params = $this->_handleSearchBuildParamsCustomFields($filters, CerberusContexts::CONTEXT_TICKET);
@@ -316,32 +345,50 @@ class ChRest_Tickets extends Extension_RestController implements IExtensionRestC
 		// Sort
 		$sortBy = $this->translateToken($sortToken, 'search');
 		$sortAsc = !empty($sortAsc) ? true : false;
-		
+
 		// Search
 		
-		list($results, $total) = DAO_Ticket::search(
-			!empty($sortBy) ? array($sortBy) : array(),
+		$view = $this->_getSearchView(
+			CerberusContexts::CONTEXT_TICKET,
 			$params,
 			$limit,
-			max(0,$page-1),
+			$page,
 			$sortBy,
-			$sortAsc,
-			true
+			$sortAsc
 		);
 		
-		$objects = array();
+		if($show_results)
+			list($results, $total) = $view->getData();
 		
-		foreach($results as $id => $result) {
-			$values = $this->getContext($id);
-			$objects[$id] = $values;
+		// Get subtotal data, if provided
+		if(!empty($subtotals))
+			$subtotal_data = $this->_handleSearchSubtotals($view, $subtotals);
+		
+		if($show_results) {
+			$objects = array();
+			
+			$models = CerberusContexts::getModels(CerberusContexts::CONTEXT_TICKET, array_keys($results));
+			
+			unset($results);
+			
+			foreach($models as $id => $model) {
+				$values = $this->getContext($model);
+				$objects[$id] = $values;
+			}
 		}
 		
-		$container = array(
-			'total' => $total,
-			'count' => count($objects),
-			'page' => $page,
-			'results' => $objects,
-		);
+		$container = array();
+		
+		if($show_results) {
+			$container['results'] = $objects;
+			$container['total'] = $total;
+			$container['count'] = count($objects);
+			$container['page'] = $page;
+		}
+		
+		if(!empty($subtotals)) {
+			$container['subtotals'] = $subtotal_data;
+		}
 		
 		return $container;
 	}

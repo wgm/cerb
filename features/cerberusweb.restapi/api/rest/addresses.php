@@ -92,18 +92,38 @@ class ChRest_Addresses extends Extension_RestController implements IExtensionRes
 				'email' => DAO_Address::EMAIL,
 				'first_name' => DAO_Address::FIRST_NAME,
 				'is_banned' => DAO_Address::IS_BANNED,
+				'is_defunct' => DAO_Address::IS_DEFUNCT,
 				'last_name' => DAO_Address::LAST_NAME,
 //				'num_nonspam' => DAO_Address::NUM_NONSPAM,
 //				'num_spam' => DAO_Address::NUM_SPAM,
 				'org_id' => DAO_Address::CONTACT_ORG_ID,
 				'updated' => DAO_Address::UPDATED,
 			);
+			
+		} elseif ('subtotal'==$type) {
+			$tokens = array(
+				'fieldsets' => SearchFields_Address::VIRTUAL_HAS_FIELDSET,
+				'links' => SearchFields_Address::VIRTUAL_CONTEXT_LINK,
+				'watchers' => SearchFields_Address::VIRTUAL_WATCHERS,
+					
+				'first_name' => SearchFields_Address::FIRST_NAME,
+				'is_banned' => SearchFields_Address::IS_BANNED,
+				'is_defunct' => SearchFields_Address::IS_DEFUNCT,
+				'org_name' => SearchFields_Address::ORG_NAME,
+			);
+			
+			$tokens_cfields = $this->_handleSearchTokensCustomFields(CerberusContexts::CONTEXT_ADDRESS);
+			
+			if(is_array($tokens_cfields))
+				$tokens = array_merge($tokens, $tokens_cfields);
+			
 		} else {
 			$tokens = array(
 				'id' => SearchFields_Address::ID,
 				'email' => SearchFields_Address::EMAIL,
 				'first_name' => SearchFields_Address::FIRST_NAME,
 				'is_banned' => SearchFields_Address::IS_BANNED,
+				'is_defunct' => SearchFields_Address::IS_DEFUNCT,
 				'last_name' => SearchFields_Address::LAST_NAME,
 				'num_nonspam' => SearchFields_Address::NUM_NONSPAM,
 				'num_spam' => SearchFields_Address::NUM_SPAM,
@@ -119,15 +139,18 @@ class ChRest_Addresses extends Extension_RestController implements IExtensionRes
 		return NULL;
 	}
 	
-	function getContext($id) {
+	function getContext($model) {
 		$labels = array();
 		$values = array();
-		$context = CerberusContexts::getContext(CerberusContexts::CONTEXT_ADDRESS, $id, $labels, $values, null, true);
+		$context = CerberusContexts::getContext(CerberusContexts::CONTEXT_ADDRESS, $model, $labels, $values, null, true);
 
 		return $values;
 	}
 	
-	function search($filters=array(), $sortToken='email', $sortAsc=1, $page=1, $limit=10) {
+	function search($filters=array(), $sortToken='email', $sortAsc=1, $page=1, $limit=10, $options=array()) {
+		@$show_results = DevblocksPlatform::importVar($options['show_results'], 'boolean', true);
+		@$subtotals = DevblocksPlatform::importVar($options['subtotals'], 'array', array());
+		
 		$worker = CerberusApplication::getActiveWorker();
 
 		$custom_field_params = $this->_handleSearchBuildParamsCustomFields($filters, CerberusContexts::CONTEXT_ADDRESS);
@@ -137,31 +160,50 @@ class ChRest_Addresses extends Extension_RestController implements IExtensionRes
 		// Sort
 		$sortBy = $this->translateToken($sortToken, 'search');
 		$sortAsc = !empty($sortAsc) ? true : false;
-		
+
 		// Search
-		list($results, $total) = DAO_Address::search(
-			!empty($sortBy) ? array($sortBy) : array(),
+		
+		$view = $this->_getSearchView(
+			CerberusContexts::CONTEXT_ADDRESS,
 			$params,
 			$limit,
-			max(0,$page-1),
+			$page,
 			$sortBy,
-			$sortAsc,
-			true
+			$sortAsc
 		);
 		
-		$objects = array();
+		if($show_results)
+			list($results, $total) = $view->getData();
 		
-		foreach($results as $id => $result) {
-			$values = $this->getContext($id);
-			$objects[$id] = $values;
+		// Get subtotal data, if provided
+		if(!empty($subtotals))
+			$subtotal_data = $this->_handleSearchSubtotals($view, $subtotals);
+		
+		if($show_results) {
+			$objects = array();
+			
+			$models = CerberusContexts::getModels(CerberusContexts::CONTEXT_ADDRESS, array_keys($results));
+			
+			unset($results);
+			
+			foreach($models as $id => $model) {
+				$values = $this->getContext($model);
+				$objects[$id] = $values;
+			}
 		}
 		
-		$container = array(
-			'total' => $total,
-			'count' => count($objects),
-			'page' => $page,
-			'results' => $objects,
-		);
+		$container = array();
+		
+		if($show_results) {
+			$container['results'] = $objects;
+			$container['total'] = $total;
+			$container['count'] = count($objects);
+			$container['page'] = $page;
+		}
+		
+		if(!empty($subtotals)) {
+			$container['subtotals'] = $subtotal_data;
+		}
 		
 		return $container;
 	}

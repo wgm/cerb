@@ -75,6 +75,19 @@ class ChRest_Comments extends Extension_RestController implements IExtensionRest
 				'comment' => DAO_Comment::COMMENT,
 				'created' => DAO_Comment::CREATED,
 			);
+			
+		} elseif ('subtotal'==$type) {
+			$tokens = array(
+				'fieldsets' => SearchFields_Comment::VIRTUAL_HAS_FIELDSET,
+				'owner' => SearchFields_Comment::VIRTUAL_OWNER,
+				'target' => SearchFields_Comment::VIRTUAL_TARGET,
+			);
+			
+			$tokens_cfields = $this->_handleSearchTokensCustomFields(CerberusContexts::CONTEXT_COMMENT);
+			
+			if(is_array($tokens_cfields))
+				$tokens = array_merge($tokens, $tokens_cfields);
+			
 		} else {
 			$tokens = array(
 				'id' => SearchFields_Comment::ID,
@@ -92,15 +105,18 @@ class ChRest_Comments extends Extension_RestController implements IExtensionRest
 		return NULL;
 	}
 	
-	function getContext($id) {
+	function getContext($model) {
 		$labels = array();
 		$values = array();
-		$context = CerberusContexts::getContext(CerberusContexts::CONTEXT_COMMENT, $id, $labels, $values, null, true);
+		$context = CerberusContexts::getContext(CerberusContexts::CONTEXT_COMMENT, $model, $labels, $values, null, true);
 
 		return $values;
 	}
 	
-	function search($filters=array(), $sortToken='email', $sortAsc=1, $page=1, $limit=10) {
+	function search($filters=array(), $sortToken='email', $sortAsc=1, $page=1, $limit=10, $options=array()) {
+		@$show_results = DevblocksPlatform::importVar($options['show_results'], 'boolean', true);
+		@$subtotals = DevblocksPlatform::importVar($options['subtotals'], 'array', array());
+		
 		$worker = CerberusApplication::getActiveWorker();
 
 		$params = $this->_handleSearchBuildParams($filters);
@@ -110,29 +126,48 @@ class ChRest_Comments extends Extension_RestController implements IExtensionRest
 		$sortAsc = !empty($sortAsc) ? true : false;
 		
 		// Search
-		list($results, $total) = DAO_Comment::search(
-			!empty($sortBy) ? array($sortBy) : array(),
+		
+		$view = $this->_getSearchView(
+			CerberusContexts::CONTEXT_COMMENT,
 			$params,
 			$limit,
-			max(0,$page-1),
+			$page,
 			$sortBy,
-			$sortAsc,
-			true
+			$sortAsc
 		);
 		
-		$objects = array();
+		if($show_results)
+			list($results, $total) = $view->getData();
 		
-		foreach($results as $id => $result) {
-			$values = $this->getContext($id);
-			$objects[$id] = $values;
+		// Get subtotal data, if provided
+		if(!empty($subtotals))
+			$subtotal_data = $this->_handleSearchSubtotals($view, $subtotals);
+		
+		if($show_results) {
+			$objects = array();
+			
+			$models = CerberusContexts::getModels(CerberusContexts::CONTEXT_COMMENT, array_keys($results));
+			
+			unset($results);
+			
+			foreach($models as $id => $model) {
+				$values = $this->getContext($model);
+				$objects[$id] = $values;
+			}
 		}
 		
-		$container = array(
-			'total' => $total,
-			'count' => count($objects),
-			'page' => $page,
-			'results' => $objects,
-		);
+		$container = array();
+		
+		if($show_results) {
+			$container['results'] = $objects;
+			$container['total'] = $total;
+			$container['count'] = count($objects);
+			$container['page'] = $page;
+		}
+		
+		if(!empty($subtotals)) {
+			$container['subtotals'] = $subtotal_data;
+		}
 		
 		return $container;
 	}

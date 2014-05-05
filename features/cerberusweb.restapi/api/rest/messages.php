@@ -66,15 +66,37 @@ class ChRest_Messages extends Extension_RestController implements IExtensionRest
 		
 		if('dao'==$type) {
 			$tokens = array(
-//				'example' => DAO_Example::PROPERTY,
+				'is_broadcast' => DAO_Message::IS_BROADCAST,
+				'is_outgoing' => DAO_Message::IS_OUTGOING,
+				'ticket_id' => DAO_Message::TICKET_ID,
+				'worker_id' => DAO_Message::WORKER_ID,
 			);
+			
+		} elseif ('subtotal'==$type) {
+			$tokens = array(
+				'ticket_status' => SearchFields_Message::VIRTUAL_TICKET_STATUS,
+				'sender_address' => SearchFields_Message::ADDRESS_EMAIL,
+				'is_broadcast' => SearchFields_Message::IS_BROADCAST,
+				'is_outgoing' => SearchFields_Message::IS_OUTGOING,
+				'ticket_group' => SearchFields_Message::TICKET_GROUP_ID,
+				'worker' => SearchFields_Message::WORKER_ID,
+			);
+			
+			$tokens_cfields = $this->_handleSearchTokensCustomFields(CerberusContexts::CONTEXT_MESSAGE);
+			
+			if(is_array($tokens_cfields))
+				$tokens = array_merge($tokens, $tokens_cfields);
+			
 		} else {
 			$tokens = array(
 				'created' => SearchFields_Message::CREATED_DATE,
 				'content' => SearchFields_Message::MESSAGE_CONTENT,
 				'id' => SearchFields_Message::ID,
+				'is_broadcast' => SearchFields_Message::IS_BROADCAST,
+				'is_outgoing' => SearchFields_Message::IS_OUTGOING,
 				'sender_id' => SearchFields_Message::ADDRESS_ID,
 				'ticket_id' => SearchFields_Message::TICKET_ID,
+				'worker_id' => SearchFields_Message::WORKER_ID,
 			);
 		}
 		
@@ -84,15 +106,18 @@ class ChRest_Messages extends Extension_RestController implements IExtensionRest
 		return NULL;
 	}
 	
-	function getContext($id) {
+	function getContext($model) {
 		$labels = array();
 		$values = array();
-		$context = CerberusContexts::getContext(CerberusContexts::CONTEXT_MESSAGE, $id, $labels, $values, null, true);
+		$context = CerberusContexts::getContext(CerberusContexts::CONTEXT_MESSAGE, $model, $labels, $values, null, true);
 
 		return $values;
 	}
 	
-	function search($filters=array(), $sortToken='id', $sortAsc=1, $page=1, $limit=10) {
+	function search($filters=array(), $sortToken='id', $sortAsc=1, $page=1, $limit=10, $options=array()) {
+		@$show_results = DevblocksPlatform::importVar($options['show_results'], 'boolean', true);
+		@$subtotals = DevblocksPlatform::importVar($options['subtotals'], 'array', array());
+		
 		$worker = CerberusApplication::getActiveWorker();
 
 		$params = $this->_handleSearchBuildParams($filters);
@@ -110,31 +135,50 @@ class ChRest_Messages extends Extension_RestController implements IExtensionRest
 		// Sort
 		$sortBy = $this->translateToken($sortToken, 'search');
 		$sortAsc = !empty($sortAsc) ? true : false;
-		
+
 		// Search
-		list($results, $total) = DAO_Message::search(
-			array(),
+		
+		$view = $this->_getSearchView(
+			CerberusContexts::CONTEXT_MESSAGE,
 			$params,
 			$limit,
-			max(0,$page-1),
+			$page,
 			$sortBy,
-			$sortAsc,
-			true
+			$sortAsc
 		);
 		
-		$objects = array();
+		if($show_results)
+			list($results, $total) = $view->getData();
 		
-		foreach($results as $id => $result) {
-			$values = $this->getContext($id);
-			$objects[$id] = $values;
+		// Get subtotal data, if provided
+		if(!empty($subtotals))
+			$subtotal_data = $this->_handleSearchSubtotals($view, $subtotals);
+		
+		if($show_results) {
+			$objects = array();
+			
+			$models = CerberusContexts::getModels(CerberusContexts::CONTEXT_MESSAGE, array_keys($results));
+			
+			unset($results);
+			
+			foreach($models as $id => $model) {
+				$values = $this->getContext($model);
+				$objects[$id] = $values;
+			}
 		}
 		
-		$container = array(
-			'total' => $total,
-			'count' => count($objects),
-			'page' => $page,
-			'results' => $objects,
-		);
+		$container = array();
+		
+		if($show_results) {
+			$container['results'] = $objects;
+			$container['total'] = $total;
+			$container['count'] = count($objects);
+			$container['page'] = $page;
+		}
+		
+		if(!empty($subtotals)) {
+			$container['subtotals'] = $subtotal_data;
+		}
 		
 		return $container;
 	}

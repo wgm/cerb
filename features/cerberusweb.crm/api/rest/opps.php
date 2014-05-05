@@ -77,10 +77,10 @@ class ChRest_Opps extends Extension_RestController implements IExtensionRestCont
 		$this->error(self::ERRNO_NOT_IMPLEMENTED);
 	}
 	
-	function getContext($id) {
+	function getContext($model) {
 		$labels = array();
 		$values = array();
-		$context = CerberusContexts::getContext(CerberusContexts::CONTEXT_OPPORTUNITY, $id, $labels, $values, null, true);
+		$context = CerberusContexts::getContext(CerberusContexts::CONTEXT_OPPORTUNITY, $model, $labels, $values, null, true);
 
 //		unset($dict->initial_message_content);
 		
@@ -93,7 +93,6 @@ class ChRest_Opps extends Extension_RestController implements IExtensionRestCont
 		if('dao'==$type) {
 			$tokens = array(
 				'amount' => DAO_CrmOpportunity::AMOUNT,
-//				'assignee_id' => DAO_CrmOpportunity::WORKER_ID,
 				'created' => DAO_CrmOpportunity::CREATED_DATE,
 				'email_id' => DAO_CrmOpportunity::PRIMARY_EMAIL_ID,
 				'is_closed' => DAO_CrmOpportunity::IS_CLOSED,
@@ -101,6 +100,27 @@ class ChRest_Opps extends Extension_RestController implements IExtensionRestCont
 				'title' => DAO_CrmOpportunity::NAME,
 				'updated' => DAO_CrmOpportunity::UPDATED_DATE,
 			);
+			
+		} elseif ('subtotal'==$type) {
+			$tokens = array(
+				'fieldsets' => SearchFields_CrmOpportunity::VIRTUAL_HAS_FIELDSET,
+				'links' => SearchFields_CrmOpportunity::VIRTUAL_CONTEXT_LINK,
+				'watchers' => SearchFields_CrmOpportunity::VIRTUAL_WATCHERS,
+					
+				'email_address' => SearchFields_CrmOpportunity::EMAIL_ADDRESS,
+				'email_is_defunct' => SearchFields_CrmOpportunity::EMAIL_IS_DEFUNCT,
+				'email_first_name' => SearchFields_CrmOpportunity::EMAIL_FIRST_NAME,
+				'email_last_name' => SearchFields_CrmOpportunity::EMAIL_LAST_NAME,
+				'is_closed' => SearchFields_CrmOpportunity::IS_CLOSED,
+				'is_won' => SearchFields_CrmOpportunity::IS_WON,
+				'org' => SearchFields_CrmOpportunity::ORG_NAME,
+			);
+			
+			$tokens_cfields = $this->_handleSearchTokensCustomFields(CerberusContexts::CONTEXT_OPPORTUNITY);
+			
+			if(is_array($tokens_cfields))
+				$tokens = array_merge($tokens, $tokens_cfields);
+			
 		} else {
 			$tokens = array(
 				'amount' => SearchFields_CrmOpportunity::AMOUNT,
@@ -140,7 +160,10 @@ class ChRest_Opps extends Extension_RestController implements IExtensionRestCont
 		$this->error(self::ERRNO_CUSTOM, sprintf("Invalid opportunity id '%d'", $id));
 	}
 	
-	function search($filters=array(), $sortToken='id', $sortAsc=1, $page=1, $limit=10) {
+	function search($filters=array(), $sortToken='id', $sortAsc=1, $page=1, $limit=10, $options=array()) {
+		@$show_results = DevblocksPlatform::importVar($options['show_results'], 'boolean', true);
+		@$subtotals = DevblocksPlatform::importVar($options['subtotals'], 'array', array());
+		
 		$worker = CerberusApplication::getActiveWorker();
 
 		$params = $this->_handleSearchBuildParams($filters);
@@ -150,29 +173,48 @@ class ChRest_Opps extends Extension_RestController implements IExtensionRestCont
 		$sortAsc = !empty($sortAsc) ? true : false;
 		
 		// Search
-		list($results, $total) = DAO_CrmOpportunity::search(
-			!empty($sortBy) ? array($sortBy) : array(),
+		
+		$view = $this->_getSearchView(
+			CerberusContexts::CONTEXT_OPPORTUNITY,
 			$params,
 			$limit,
-			max(0,$page-1),
+			$page,
 			$sortBy,
-			$sortAsc,
-			true
+			$sortAsc
 		);
 		
-		$objects = array();
+		if($show_results)
+			list($results, $total) = $view->getData();
 		
-		foreach($results as $id => $result) {
-			$values = $this->getContext($id);
-			$objects[$id] = $values;
+		// Get subtotal data, if provided
+		if(!empty($subtotals))
+			$subtotal_data = $this->_handleSearchSubtotals($view, $subtotals);
+		
+		if($show_results) {
+			$objects = array();
+			
+			$models = CerberusContexts::getModels(CerberusContexts::CONTEXT_OPPORTUNITY, array_keys($results));
+			
+			unset($results);
+			
+			foreach($models as $id => $model) {
+				$values = $this->getContext($model);
+				$objects[$id] = $values;
+			}
 		}
 		
-		$container = array(
-			'total' => $total,
-			'count' => count($objects),
-			'page' => $page,
-			'results' => $objects,
-		);
+		$container = array();
+		
+		if($show_results) {
+			$container['results'] = $objects;
+			$container['total'] = $total;
+			$container['count'] = count($objects);
+			$container['page'] = $page;
+		}
+		
+		if(!empty($subtotals)) {
+			$container['subtotals'] = $subtotal_data;
+		}
 		
 		return $container;
 	}

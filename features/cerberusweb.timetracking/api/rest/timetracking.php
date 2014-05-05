@@ -103,6 +103,23 @@ class ChRest_TimeTracking extends Extension_RestController implements IExtension
 				'mins' => DAO_TimeTrackingEntry::TIME_ACTUAL_MINS,
 				'worker_id' => DAO_TimeTrackingEntry::WORKER_ID,
 			);
+			
+		} elseif ('subtotal'==$type) {
+			$tokens = array(
+				'fieldsets' => SearchFields_TimeTrackingEntry::VIRTUAL_HAS_FIELDSET,
+				'links' => SearchFields_TimeTrackingEntry::VIRTUAL_CONTEXT_LINK,
+				'watchers' => SearchFields_TimeTrackingEntry::VIRTUAL_WATCHERS,
+					
+				'activity' => SearchFields_TimeTrackingEntry::ACTIVITY_ID,
+				'is_closed' => SearchFields_TimeTrackingEntry::IS_CLOSED,
+				'worker_id' => SearchFields_TimeTrackingEntry::WORKER_ID,
+			);
+			
+			$tokens_cfields = $this->_handleSearchTokensCustomFields(CerberusContexts::CONTEXT_TIMETRACKING);
+			
+			if(is_array($tokens_cfields))
+				$tokens = array_merge($tokens, $tokens_cfields);
+			
 		} else {
 			$tokens = array(
 				'activity_id' => SearchFields_TimeTrackingEntry::ACTIVITY_ID,
@@ -120,15 +137,18 @@ class ChRest_TimeTracking extends Extension_RestController implements IExtension
 		return NULL;
 	}
 	
-	function getContext($id) {
+	function getContext($model) {
 		$labels = array();
 		$values = array();
-		$context = CerberusContexts::getContext(CerberusContexts::CONTEXT_TIMETRACKING, $id, $labels, $values, null, true);
+		$context = CerberusContexts::getContext(CerberusContexts::CONTEXT_TIMETRACKING, $model, $labels, $values, null, true);
 
 		return $values;
 	}
 	
-	function search($filters=array(), $sortToken='id', $sortAsc=1, $page=1, $limit=10) {
+	function search($filters=array(), $sortToken='id', $sortAsc=1, $page=1, $limit=10, $options=array()) {
+		@$show_results = DevblocksPlatform::importVar($options['show_results'], 'boolean', true);
+		@$subtotals = DevblocksPlatform::importVar($options['subtotals'], 'array', array());
+		
 		$worker = CerberusApplication::getActiveWorker();
 
 		$params = $this->_handleSearchBuildParams($filters);
@@ -138,29 +158,48 @@ class ChRest_TimeTracking extends Extension_RestController implements IExtension
 		$sortAsc = !empty($sortAsc) ? true : false;
 		
 		// Search
-		list($results, $total) = DAO_TimeTrackingEntry::search(
-			!empty($sortBy) ? array($sortBy) : array(),
+		
+		$view = $this->_getSearchView(
+			CerberusContexts::CONTEXT_TIMETRACKING,
 			$params,
 			$limit,
-			max(0,$page-1),
+			$page,
 			$sortBy,
-			$sortAsc,
-			true
+			$sortAsc
 		);
 		
-		$objects = array();
+		if($show_results)
+			list($results, $total) = $view->getData();
 		
-		foreach($results as $id => $result) {
-			$values = $this->getContext($id);
-			$objects[$id] = $values;
+		// Get subtotal data, if provided
+		if(!empty($subtotals))
+			$subtotal_data = $this->_handleSearchSubtotals($view, $subtotals);
+		
+		if($show_results) {
+			$objects = array();
+			
+			$models = CerberusContexts::getModels(CerberusContexts::CONTEXT_TIMETRACKING, array_keys($results));
+			
+			unset($results);
+			
+			foreach($models as $id => $model) {
+				$values = $this->getContext($model);
+				$objects[$id] = $values;
+			}
 		}
 		
-		$container = array(
-			'total' => $total,
-			'count' => count($objects),
-			'page' => $page,
-			'results' => $objects,
-		);
+		$container = array();
+		
+		if($show_results) {
+			$container['results'] = $objects;
+			$container['total'] = $total;
+			$container['count'] = count($objects);
+			$container['page'] = $page;
+		}
+		
+		if(!empty($subtotals)) {
+			$container['subtotals'] = $subtotal_data;
+		}
 		
 		return $container;
 	}

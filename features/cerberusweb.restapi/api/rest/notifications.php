@@ -45,6 +45,10 @@ class ChRest_Notifications extends Extension_RestController implements IExtensio
 			case 'create':
 				$this->postCreate();
 				break;
+				
+			case 'search':
+				$this->postSearch();
+				break;
 		}
 		
 		$this->error(self::ERRNO_NOT_IMPLEMENTED);
@@ -60,15 +64,29 @@ class ChRest_Notifications extends Extension_RestController implements IExtensio
 		if('dao'==$type) {
 			$tokens = array(
 				'assignee_id' => DAO_Notification::WORKER_ID,
-				'message' => DAO_Notification::MESSAGE,
 				'created' => DAO_Notification::CREATED_DATE,
 				'is_read' => DAO_Notification::IS_READ,
+				'message' => DAO_Notification::MESSAGE,
 				'url' => DAO_Notification::URL,
 			);
+			
+		} elseif ('subtotal'==$type) {
+			$tokens = array(
+				'is_read' => SearchFields_Notification::IS_READ,
+				'url' => SearchFields_Notification::URL,
+			);
+			
+			$tokens_cfields = $this->_handleSearchTokensCustomFields(CerberusContexts::CONTEXT_NOTIFICATION);
+			
+			if(is_array($tokens_cfields))
+				$tokens = array_merge($tokens, $tokens_cfields);
+			
 		} else {
 			$tokens = array(
+				'created' => SearchFields_Notification::CREATED_DATE,
 				'id' => SearchFields_Notification::ID,
 				'is_read' => SearchFields_Notification::IS_READ,
+				'message' => SearchFields_Notification::MESSAGE,
 				'url' => SearchFields_Notification::URL,
 				'worker_id' => SearchFields_Notification::WORKER_ID,
 			);
@@ -80,10 +98,10 @@ class ChRest_Notifications extends Extension_RestController implements IExtensio
 		return NULL;
 	}
 	
-	function getContext($id) {
+	function getContext($model) {
 		$labels = array();
 		$values = array();
-		$context = CerberusContexts::getContext(CerberusContexts::CONTEXT_NOTIFICATION, $id, $labels, $values, null, true);
+		$context = CerberusContexts::getContext(CerberusContexts::CONTEXT_NOTIFICATION, $model, $labels, $values, null, true);
 
 		return $values;
 	}
@@ -129,7 +147,10 @@ class ChRest_Notifications extends Extension_RestController implements IExtensio
 		$this->success($container);
 	}
 
-	function search($filters=array(), $sortToken='id', $sortAsc=1, $page=1, $limit=10) {
+	function search($filters=array(), $sortToken='id', $sortAsc=1, $page=1, $limit=10, $options=array()) {
+		@$show_results = DevblocksPlatform::importVar($options['show_results'], 'boolean', true);
+		@$subtotals = DevblocksPlatform::importVar($options['subtotals'], 'array', array());
+		
 		$worker = CerberusApplication::getActiveWorker();
 
 		$params = $this->_handleSearchBuildParams($filters);
@@ -148,29 +169,48 @@ class ChRest_Notifications extends Extension_RestController implements IExtensio
 		$sortAsc = !empty($sortAsc) ? true : false;
 		
 		// Search
-		list($results, $total) = DAO_Notification::search(
-			array(),
+		
+		$view = $this->_getSearchView(
+			CerberusContexts::CONTEXT_NOTIFICATION,
 			$params,
 			$limit,
-			max(0,$page-1),
+			$page,
 			$sortBy,
-			$sortAsc,
-			true
+			$sortAsc
 		);
 		
-		$objects = array();
+		if($show_results)
+			list($results, $total) = $view->getData();
 		
-		foreach($results as $id => $result) {
-			$values = $this->getContext($id);
-			$objects[$id] = $values;
+		// Get subtotal data, if provided
+		if(!empty($subtotals))
+			$subtotal_data = $this->_handleSearchSubtotals($view, $subtotals);
+		
+		if($show_results) {
+			$objects = array();
+			
+			$models = CerberusContexts::getModels(CerberusContexts::CONTEXT_NOTIFICATION, array_keys($results));
+			
+			unset($results);
+			
+			foreach($models as $id => $model) {
+				$values = $this->getContext($model);
+				$objects[$id] = $values;
+			}
 		}
 		
-		$container = array(
-			'total' => $total,
-			'count' => count($objects),
-			'page' => $page,
-			'results' => $objects,
-		);
+		$container = array();
+		
+		if($show_results) {
+			$container['results'] = $objects;
+			$container['total'] = $total;
+			$container['count'] = count($objects);
+			$container['page'] = $page;
+		}
+		
+		if(!empty($subtotals)) {
+			$container['subtotals'] = $subtotal_data;
+		}
 		
 		return $container;
 	}

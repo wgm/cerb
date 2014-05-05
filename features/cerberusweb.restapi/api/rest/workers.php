@@ -71,10 +71,10 @@ class ChRest_Workers extends Extension_RestController implements IExtensionRestC
 //		$this->success($result);
 	}
 	
-	function getContext($id) {
+	function getContext($model) {
 		$labels = array();
 		$values = array();
-		$context = CerberusContexts::getContext(CerberusContexts::CONTEXT_WORKER, $id, $labels, $values, null, true);
+		$context = CerberusContexts::getContext(CerberusContexts::CONTEXT_WORKER, $model, $labels, $values, null, true);
 
 //		unset($values['initial_message_content']);
 
@@ -94,6 +94,24 @@ class ChRest_Workers extends Extension_RestController implements IExtensionRestC
 				'password' => 'password',
 				'title' => DAO_Worker::TITLE,
 			);
+			
+		} elseif ('subtotal'==$type) {
+			$tokens = array(
+				'fieldsets' => SearchFields_Worker::VIRTUAL_HAS_FIELDSET,
+				'links' => SearchFields_Worker::VIRTUAL_CONTEXT_LINK,
+					
+				'first_name' => SearchFields_Worker::FIRST_NAME,
+				'is_disabled' => SearchFields_Worker::IS_DISABLED,
+				'is_superuser' => SearchFields_Worker::IS_SUPERUSER,
+				'last_name' => SearchFields_Worker::LAST_NAME,
+				'title' => SearchFields_Worker::TITLE,
+			);
+			
+			$tokens_cfields = $this->_handleSearchTokensCustomFields(CerberusContexts::CONTEXT_WORKER);
+			
+			if(is_array($tokens_cfields))
+				$tokens = array_merge($tokens, $tokens_cfields);
+			
 		} else {
 			$tokens = array(
 				'id' => SearchFields_Worker::ID,
@@ -136,7 +154,10 @@ class ChRest_Workers extends Extension_RestController implements IExtensionRestC
 		$this->success($container);
 	}
 	
-	function search($filters=array(), $sortToken='first_name', $sortAsc=1, $page=1, $limit=10) {
+	function search($filters=array(), $sortToken='first_name', $sortAsc=1, $page=1, $limit=10, $options=array()) {
+		@$show_results = DevblocksPlatform::importVar($options['show_results'], 'boolean', true);
+		@$subtotals = DevblocksPlatform::importVar($options['subtotals'], 'array', array());
+		
 		$worker = CerberusApplication::getActiveWorker();
 		
 		$params = $this->_handleSearchBuildParams($filters);
@@ -155,29 +176,48 @@ class ChRest_Workers extends Extension_RestController implements IExtensionRestC
 		$sortAsc = !empty($sortAsc) ? true : false;
 		
 		// Search
-		list($results, $total) = DAO_Worker::search(
-			!empty($sortBy) ? array($sortBy) : array(),
+		
+		$view = $this->_getSearchView(
+			CerberusContexts::CONTEXT_WORKER,
 			$params,
 			$limit,
-			max(0,$page-1),
+			$page,
 			$sortBy,
-			$sortAsc,
-			true
+			$sortAsc
 		);
 		
-		$objects = array();
+		if($show_results)
+			list($results, $total) = $view->getData();
 		
-		foreach($results as $id => $result) {
-			$values = $this->getContext($id);
-			$objects[$id] = $values;
+		// Get subtotal data, if provided
+		if(!empty($subtotals))
+			$subtotal_data = $this->_handleSearchSubtotals($view, $subtotals);
+		
+		if($show_results) {
+			$objects = array();
+			
+			$models = CerberusContexts::getModels(CerberusContexts::CONTEXT_WORKER, array_keys($results));
+			
+			unset($results);
+			
+			foreach($models as $id => $model) {
+				$values = $this->getContext($model);
+				$objects[$id] = $values;
+			}
 		}
 		
-		$container = array(
-			'total' => $total,
-			'count' => count($objects),
-			'page' => $page,
-			'results' => $objects,
-		);
+		$container = array();
+		
+		if($show_results) {
+			$container['results'] = $objects;
+			$container['total'] = $total;
+			$container['count'] = count($objects);
+			$container['page'] = $page;
+		}
+		
+		if(!empty($subtotals)) {
+			$container['subtotals'] = $subtotal_data;
+		}
 		
 		return $container;
 	}

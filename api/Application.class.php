@@ -46,8 +46,8 @@
  \* - Jeff Standen, Darren Sugita, Dan Hildebrandt
  *	 Webgroup Media LLC - Developers of Cerb
  */
-define("APP_BUILD", 2014042801);
-define("APP_VERSION", '6.7.1');
+define("APP_BUILD", 2014050401);
+define("APP_VERSION", '6.7.2');
 
 define("APP_MAIL_PATH", APP_STORAGE_PATH . '/mail/');
 
@@ -635,11 +635,14 @@ class CerberusContexts {
 	private static $_default_actor_context = null;
 	private static $_default_actor_context_id = null;
 	
+	private static $_stack = array();
+	
 	const CONTEXT_APPLICATION = 'cerberusweb.contexts.app';
 	const CONTEXT_ACTIVITY_LOG = 'cerberusweb.contexts.activity_log';
 	const CONTEXT_ADDRESS = 'cerberusweb.contexts.address';
 	const CONTEXT_ASSET = 'cerberusweb.contexts.asset';
 	const CONTEXT_ATTACHMENT = 'cerberusweb.contexts.attachment';
+	const CONTEXT_ATTACHMENT_LINK = 'cerberusweb.contexts.attachment_link';
 	const CONTEXT_BUCKET = 'cerberusweb.contexts.bucket';
 	const CONTEXT_CALENDAR = 'cerberusweb.contexts.calendar';
 	const CONTEXT_CALENDAR_EVENT = 'cerberusweb.contexts.calendar_event';
@@ -686,12 +689,24 @@ class CerberusContexts {
 		}
 	}
 	
+	public static function getStack() {
+		return self::$_stack;
+	}
+	
+	public static function pushStack($context) {
+		self::$_stack[] = $context;
+		return self::$_stack;
+	}
+	
+	public static function popStack() {
+		return array_pop(self::$_stack);
+	}
+	
 	public static function getContext($context, $context_object, &$labels, &$values, $prefix=null, $nested=false, $skip_labels=false) {
+		// Push the stack
+		self::$_stack[] = $context;
+		
 		switch($context) {
-			case 'cerberusweb.contexts.attachment':
-				self::_getAttachmentContext($context_object, $labels, $values, $prefix);
-				break;
-				
 			default:
 				// Migrated
 				
@@ -829,6 +844,9 @@ class CerberusContexts {
 			
 			$values['_labels'] = $labels;
 		}
+		
+		// Pop the stack
+		array_pop(self::$_stack);
 		
 		return null;
 	}
@@ -1551,46 +1569,6 @@ class CerberusContexts {
 		} // end if($do_notifications)
 		
 		return $activity_entry_id;
-	}
-	
-	private static function _getAttachmentContext($attachment, &$token_labels, &$token_values, $prefix=null) {
-		if(is_null($prefix))
-			$prefix = 'Attachment:';
-		
-		$translate = DevblocksPlatform::getTranslationService();
-		
-		// Polymorph
-		if(is_numeric($attachment)) {
-			$attachment = DAO_Attachment::get($attachment);
-		} elseif($attachment instanceof Model_Attachment) {
-			// It's what we want already.
-		} elseif(is_array($attachment)) {
-			$attachment = Cerb_ORMHelper::recastArrayToModel($attachment, 'Model_Attachment');
-		} else {
-			$attachment = null;
-		}
-			
-		// Token labels
-		$token_labels = array(
-			'id' => $prefix.$translate->_('common.id'),
-			'mime_type' => $prefix.$translate->_('attachment.mime_type'),
-			'name' => $prefix.$translate->_('attachment.display_name'),
-			'size' => $prefix.$translate->_('attachment.storage_size'),
-			'updated' => $prefix.$translate->_('common.updated'),
-		);
-		
-		// Token values
-		$token_values = array();
-		
-		if(null != $attachment) {
-			$token_values['id'] = $attachment->id;
-			$token_values['mime_type'] = $attachment->mime_type;
-			$token_values['name'] = $attachment->display_name;
-			$token_values['size'] = $attachment->storage_size;
-			$token_values['updated'] = $attachment->updated;
-		}
-		
-		return true;
 	}
 	
 	static function getModels($context, array $ids) {

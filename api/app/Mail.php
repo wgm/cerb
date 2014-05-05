@@ -1097,22 +1097,29 @@ class CerberusMail {
 		$url_writer = DevblocksPlatform::getUrlService();
 		$ticket_url = $url_writer->write(sprintf('c=profiles&w=ticket&mask=%s', $ticket->mask), true);
 		
-		$replyto = $group->getReplyTo($ticket->bucket_id);
+		// Use the default so our 'From:' is always consistent
+		$replyto = DAO_AddressOutgoing::getDefault();
 		
 		$attachment_data = ($include_attachments)
 			? DAO_AttachmentLink::getLinksAndAttachments(CerberusContexts::CONTEXT_MESSAGE, $message->id)
 			: array()
 			;
 		
-		if(empty($content))
+		if(empty($content)) {
+			$sender_name = $sender->getName();
+
 			$content = sprintf("## Relayed from %s\r\n".
 				"## Your reply to this message will be sent to the requesters.\r\n".
 				"## Instructions: http://wiki.cerbweb.com/Email_Relay\r\n".
 				"##\r\n".
+				"## %s%s wrote:\r\n".
 				"%s",
 				$ticket_url,
+				(!empty($sender_name) ? ($sender_name . ' ') : ''),
+				$sender->email,
 				$message->getContent()
 			);
+		}
 		
 		if(is_array($emails))
 		foreach($emails as $to) {
@@ -1129,18 +1136,14 @@ class CerberusMail {
 	
 				$headers = $mail->getHeaders(); /* @var $headers Swift_Mime_Header */
 	
-				$sender_name = $sender->getName();
-				
-				if(!empty($sender_name)) {
-					$mail->setFrom($sender->email, $sender_name);
-				} else {
-					$mail->setFrom($sender->email);
-				}
-			
 				$replyto_personal = $replyto->getReplyPersonal($worker);
+			
 				if(!empty($replyto_personal)) {
+					$mail->setFrom($replyto->email, $replyto_personal);
 					$mail->setReplyTo($replyto->email, $replyto_personal);
+					
 				} else {
+					$mail->setFrom($replyto->email);
 					$mail->setReplyTo($replyto->email);
 				}
 
@@ -1334,6 +1337,23 @@ class CerberusMail {
 						
 						if($file_hash && $file_name)
 							return sprintf("[Image %s]", urldecode($file_name));
+					}
+					
+					return $matches[0];
+				},
+				$content
+			);
+			
+		} catch (Exception $e) {
+			error_log($e->getMessage());
+		}
+		
+		try {
+			$content = preg_replace_callback(
+				sprintf('|(\!\[Image\]\((.*?)\))|'),
+				function($matches) {
+					if(3 == count($matches)) {
+						return sprintf("%s", $matches[2]);
 					}
 					
 					return $matches[0];
