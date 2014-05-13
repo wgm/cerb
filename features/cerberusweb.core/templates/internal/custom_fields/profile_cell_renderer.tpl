@@ -5,7 +5,16 @@
 {elseif $v.type == Model_CustomField::TYPE_DATE}
 	<abbr title="{$v.value|devblocks_date}">{$v.value|devblocks_prettytime}</abbr>
 {elseif $v.type == Model_CustomField::TYPE_SINGLE_LINE}
-	{$v.value|truncate:128}
+	{$v.value|escape|devblocks_hyperlinks nofilter}
+{elseif $v.type == Model_CustomField::TYPE_MULTI_LINE}
+	<span>
+		{$v.value|truncate:128} [<a href="javascript:;" onclick="$(this).parent().next('div').fadeIn().end().hide();">expand</a>]
+	</span>
+	<div style="display:none;">
+		{$v.value|escape|devblocks_hyperlinks|nl2br nofilter}
+		<br>
+		[<a href="javascript:;" onclick="$(this).parent().hide().prev('span').fadeIn();">collapse</a>]
+	</div>
 {elseif $v.type == Model_CustomField::TYPE_URL}
 	<a href="{$v.value}" target="_blank">{$v.value}</a>
 {elseif $v.type == Model_CustomField::TYPE_WORKER}
