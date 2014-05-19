@@ -52,7 +52,7 @@
 		<patch version="6.4.0" revision="1046" file="patches/6.x/6.4.0.php" />
 		<patch version="6.5.0" revision="1059" file="patches/6.x/6.5.0.php" />
 		<patch version="6.6.0" revision="1082" file="patches/6.x/6.6.0.php" />
-		<patch version="6.7.0" revision="1092" file="patches/6.x/6.7.0.php" />
+		<patch version="6.7.0" revision="1093" file="patches/6.x/6.7.0.php" />
 	</patches>
 
 	<!-- Controller Routing -->
@@ -820,6 +820,7 @@
 		<priv id="core.display.message.actions.delete" label="acl.core.display.message.actions.delete" />
 
 		<!-- Mail page -->
+		<priv id="core.mail.save_without_sending" label="acl.core.mail.save_without_sending" />
 		<priv id="core.mail.send" label="acl.core.mail.send" />
 		<priv id="core.mail.draft.delete_all" label="acl.core.mail.draft.delete_all" />
 

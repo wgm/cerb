@@ -223,8 +223,6 @@ class CerberusMail {
 		@$closed = $properties['closed'];
 		@$ticket_reopen = $properties['ticket_reopen'];
 		
-		@$dont_send = $properties['dont_send'];
-		
 		$from_replyto = $group->getReplyTo($bucket_id);
 		$personal = $group->getReplyPersonal($bucket_id, $worker);
 		
@@ -348,7 +346,7 @@ class CerberusMail {
 				}
 			}
 			
-			if(!empty($toList) && empty($dont_send)) {
+			if(!empty($toList) && (!isset($properties['dont_send']) || empty($properties['dont_send']))) {
 				if(!@$mailer->send($email)) {
 					throw new Exception('Mail failed to send: unknown reason');
 				}
@@ -433,6 +431,7 @@ class CerberusMail {
 			DAO_Message::IS_OUTGOING => 1,
 			DAO_Message::WORKER_ID => intval($worker_id),
 			DAO_Message::IS_BROADCAST => $is_broadcast ? 1 : 0,
+			DAO_Message::IS_NOT_SENT => @$properties['dont_send'] ? 1 : 0,
 		);
 		$message_id = DAO_Message::create($fields);
 		
@@ -898,6 +897,7 @@ class CerberusMail {
 				DAO_Message::WORKER_ID => (!empty($worker_id) ? $worker_id : 0),
 				DAO_Message::RESPONSE_TIME => $response_time,
 				DAO_Message::IS_BROADCAST => $is_broadcast ? 1 : 0,
+				DAO_Message::IS_NOT_SENT => @$properties['dont_send'] ? 1 : 0,
 			);
 			$message_id = DAO_Message::create($fields);
 			
@@ -1081,8 +1081,10 @@ class CerberusMail {
 	static function relay($message_id, $emails, $include_attachments = false, $content = null, $actor_context = null, $actor_context_id = null) {
 		$mail_service = DevblocksPlatform::getMailService();
 		$mailer = $mail_service->getMailer(CerberusMail::getMailerDefaults());
+		$settings = DevblocksPlatform::getPluginSettingsService();
 
 		$workers = DAO_Worker::getAll();
+		$relay_spoof_from = $settings->get('cerberusweb.core', CerberusSettings::RELAY_SPOOF_FROM, CerberusSettingsDefaults::RELAY_SPOOF_FROM);
 		
 		if(false == ($message = DAO_Message::get($message_id)))
 			return;
@@ -1096,11 +1098,17 @@ class CerberusMail {
 		if(false == ($sender = $message->getSender()))
 			return;
 
+		$sender_name = $sender->getName();
+		
 		$url_writer = DevblocksPlatform::getUrlService();
 		$ticket_url = $url_writer->write(sprintf('c=profiles&w=ticket&mask=%s', $ticket->mask), true);
-		
-		// Use the default so our 'From:' is always consistent
-		$replyto = DAO_AddressOutgoing::getDefault();
+
+		if($relay_spoof_from) {
+			$replyto = $group->getReplyTo($ticket->bucket_id);
+		} else {
+			// Use the default so our 'From:' is always consistent
+			$replyto = DAO_AddressOutgoing::getDefault();
+		}
 		
 		$attachment_data = ($include_attachments)
 			? DAO_AttachmentLink::getLinksAndAttachments(CerberusContexts::CONTEXT_MESSAGE, $message->id)
@@ -1108,8 +1116,6 @@ class CerberusMail {
 			;
 		
 		if(empty($content)) {
-			$sender_name = $sender->getName();
-
 			$content = sprintf("## Relayed from %s\r\n".
 				"## Your reply to this message will be sent to the requesters.\r\n".
 				"## Instructions: http://wiki.cerbweb.com/Email_Relay\r\n".
@@ -1138,15 +1144,21 @@ class CerberusMail {
 	
 				$headers = $mail->getHeaders(); /* @var $headers Swift_Mime_Header */
 	
-				$replyto_personal = $replyto->getReplyPersonal($worker);
-			
-				if(!empty($replyto_personal)) {
-					$mail->setFrom($replyto->email, $replyto_personal);
-					$mail->setReplyTo($replyto->email, $replyto_personal);
+				if($relay_spoof_from) {
+					$mail->setFrom($sender->email, $sender_name);
+					$mail->setReplyTo($replyto->email);
 					
 				} else {
-					$mail->setFrom($replyto->email);
-					$mail->setReplyTo($replyto->email);
+					$replyto_personal = $replyto->getReplyPersonal($worker);
+					
+					if(!empty($replyto_personal)) {
+						$mail->setFrom($replyto->email, $replyto_personal);
+						$mail->setReplyTo($replyto->email, $replyto_personal);
+						
+					} else {
+						$mail->setFrom($replyto->email);
+						$mail->setReplyTo($replyto->email);
+					}
 				}
 
 				// Subject
