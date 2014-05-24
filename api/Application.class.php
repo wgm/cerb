@@ -46,8 +46,8 @@
  \* - Jeff Standen, Darren Sugita, Dan Hildebrandt
  *	 Webgroup Media LLC - Developers of Cerb
  */
-define("APP_BUILD", 2014051901);
-define("APP_VERSION", '6.7.4');
+define("APP_BUILD", 2014052401);
+define("APP_VERSION", '6.7.5');
 
 define("APP_MAIL_PATH", APP_STORAGE_PATH . '/mail/');
 
@@ -2195,9 +2195,21 @@ class Cerb_ORMHelper extends DevblocksORMHelper {
 
 		$ids = DevblocksPlatform::importVar($ids, 'array:integer');
 		
-		return static::getWhere(sprintf("id IN (%s)",
+		$models = array();
+		
+		$results = static::getWhere(sprintf("id IN (%s)",
 			implode(',', $ids)
 		));
+
+		// Sort $models in the same order as $ids
+		foreach($ids as $id) {
+			if(isset($results[$id]))
+				$models[$id] = $results[$id];
+		}
+		
+		unset($results);
+		
+		return $models;
 	}
 	
 	static protected function paramExistsInSet($key, $params) {

@@ -389,10 +389,10 @@ class DAO_Ticket extends Cerb_ORMHelper {
 			$db->Execute($sql);
 			
 			// Clear old ticket meta
-			
 			$fields = array(
 				DAO_Ticket::IS_CLOSED => 1,
 				DAO_Ticket::IS_DELETED => 1,
+				DAO_Ticket::IS_WAITING => 0,
 				DAO_Ticket::REOPEN_AT => 0,
 				DAO_Ticket::NUM_MESSAGES => 0,
 				DAO_Ticket::FIRST_MESSAGE_ID => 0,
@@ -410,13 +410,34 @@ class DAO_Ticket extends Cerb_ORMHelper {
 			DevblocksPlatform::sortObjects($tickets, '[' . SearchFields_Ticket::TICKET_UPDATED_DATE . ']');
 			$most_recent_updated_ticket = end($tickets);
 
+			// Default our status bits to the most recently updated
+			$merge_dst_is_closed = $most_recent_updated_ticket[SearchFields_Ticket::TICKET_CLOSED];
+			$merge_dst_is_deleted = $most_recent_updated_ticket[SearchFields_Ticket::TICKET_DELETED];
+			$merge_dst_is_waiting = $most_recent_updated_ticket[SearchFields_Ticket::TICKET_WAITING];
+			
+			reset($tickets);
+			
+			// If any ticket in the list is status open, our destination should be open
+			foreach($tickets as $merged_ticket) {
+				if(
+					empty($merged_ticket[SearchFields_Ticket::TICKET_CLOSED])
+					&& empty($merged_ticket[SearchFields_Ticket::TICKET_DELETED])
+					&& empty($merged_ticket[SearchFields_Ticket::TICKET_WAITING])
+				) {
+					$merge_dst_is_closed = 0;
+					$merge_dst_is_deleted = 0;
+					$merge_dst_is_waiting = 0;
+					break;
+				}
+			}
+			
 			// Set our destination ticket to the latest touched details
 			$fields = array(
 				DAO_Ticket::LAST_ACTION_CODE => $most_recent_updated_ticket[SearchFields_Ticket::TICKET_LAST_ACTION_CODE],
 				DAO_Ticket::UPDATED_DATE => $most_recent_updated_ticket[SearchFields_Ticket::TICKET_UPDATED_DATE],
-				DAO_Ticket::IS_CLOSED => $most_recent_updated_ticket[SearchFields_Ticket::TICKET_CLOSED],
-				DAO_Ticket::IS_WAITING => $most_recent_updated_ticket[SearchFields_Ticket::TICKET_WAITING],
-				DAO_Ticket::IS_DELETED => $most_recent_updated_ticket[SearchFields_Ticket::TICKET_DELETED],
+				DAO_Ticket::IS_CLOSED => $merge_dst_is_closed,
+				DAO_Ticket::IS_DELETED => $merge_dst_is_deleted,
+				DAO_Ticket::IS_WAITING => $merge_dst_is_waiting,
 			);
 			DAO_Ticket::update($oldest_id, $fields, false);
 			
@@ -1525,6 +1546,8 @@ class DAO_Ticket extends Cerb_ORMHelper {
 				$oper_sql = array();
 				$status_sql = array();
 				
+				$and_or = ' OR ';
+				
 				switch($param->operator) {
 					default:
 					case DevblocksSearchCriteria::OPER_IN:
@@ -1534,6 +1557,7 @@ class DAO_Ticket extends Cerb_ORMHelper {
 					case DevblocksSearchCriteria::OPER_NIN:
 					case DevblocksSearchCriteria::OPER_NIN_OR_NULL:
 						$oper = 'NOT ';
+						$and_or = ' AND ';
 						break;
 				}
 				
@@ -1557,7 +1581,7 @@ class DAO_Ticket extends Cerb_ORMHelper {
 				if(empty($status_sql))
 					break;
 				
-				$args['where_sql'] .= 'AND (' . implode(' OR ', $status_sql) . ') ';
+				$args['where_sql'] .= 'AND (' . implode($and_or, $status_sql) . ') ';
 				break;
 		}
 	}
