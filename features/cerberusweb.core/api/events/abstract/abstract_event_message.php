@@ -81,7 +81,7 @@ abstract class AbstractEvent_Message extends Extension_DevblocksEvent {
 		
 		$ticket_labels = array();
 		$ticket_values = array();
-		CerberusContexts::getContext(CerberusContexts::CONTEXT_TICKET, $ticket_id, $ticket_labels, $ticket_values, null, true);
+		CerberusContexts::getContext(CerberusContexts::CONTEXT_TICKET, $ticket_id, $ticket_labels, $ticket_values, 'Message:Ticket:', true);
 
 			// Fill some custom values
 			if(!is_null($event_model)) {
@@ -118,7 +118,7 @@ abstract class AbstractEvent_Message extends Extension_DevblocksEvent {
 		 */
 		$group_labels = array();
 		$group_values = array();
-		CerberusContexts::getContext(CerberusContexts::CONTEXT_GROUP, $group_id, $group_labels, $group_values, null, true);
+		CerberusContexts::getContext(CerberusContexts::CONTEXT_GROUP, $group_id, $group_labels, $group_values, 'Message:Ticket:Group:', true);
 				
 			// Merge
 			CerberusContexts::merge(
@@ -183,7 +183,7 @@ abstract class AbstractEvent_Message extends Extension_DevblocksEvent {
 		$vals = array(
 			/*
 			'group_id' => array(
-				'label' => 'Group',
+				'label' => 'Message ticket group',
 				'context' => CerberusContexts::CONTEXT_GROUP,
 			),
 			*/
@@ -206,34 +206,34 @@ abstract class AbstractEvent_Message extends Extension_DevblocksEvent {
 				'is_multiple' => true,
 			),
 			'ticket_id' => array(
-				'label' => 'Ticket',
+				'label' => 'Message ticket',
 				'context' => CerberusContexts::CONTEXT_TICKET,
 			),
 			'ticket_watchers' => array(
-				'label' => 'Ticket watchers',
+				'label' => 'Message ticket watchers',
 				'context' => CerberusContexts::CONTEXT_WORKER,
 				'is_multiple' => true,
 			),
 			'group_watchers' => array(
-				'label' => 'Group watchers',
+				'label' => 'Message ticket group watchers',
 				'context' => CerberusContexts::CONTEXT_WORKER,
 				'is_multiple' => true,
 			),
 			'ticket_org_id' => array(
-				'label' => 'Ticket org',
+				'label' => 'Message ticket org',
 				'context' => CerberusContexts::CONTEXT_ORG,
 			),
 			'ticket_org_watchers' => array(
-				'label' => 'Ticket org watchers',
+				'label' => 'Message ticket org watchers',
 				'context' => CerberusContexts::CONTEXT_WORKER,
 				'is_multiple' => true,
 			),
 			'ticket_owner_id' => array(
-				'label' => 'Ticket owner',
+				'label' => 'Message ticket owner',
 				'context' => CerberusContexts::CONTEXT_WORKER,
 			),
 			'worker_id' => array(
-				'label' => 'Sender worker',
+				'label' => 'Message ender worker',
 				'context' => CerberusContexts::CONTEXT_WORKER,
 			),
 		);
@@ -241,7 +241,7 @@ abstract class AbstractEvent_Message extends Extension_DevblocksEvent {
 		$vars = parent::getValuesContexts($trigger);
 		
 		$vals_to_ctx = array_merge($vals, $vars);
-		asort($vals_to_ctx);
+		DevblocksPlatform::sortObjects($vals_to_ctx, '[label]');
 		
 		return $vals_to_ctx;
 	}
@@ -252,18 +252,18 @@ abstract class AbstractEvent_Message extends Extension_DevblocksEvent {
 		
 		$labels['is_first'] = 'Message is first in conversation';
 		$labels['sender_is_worker'] = 'Message sender is a worker';
-		$labels['ticket_has_owner'] = 'Ticket has owner';
-		$labels['ticket_watcher_count'] = 'Ticket watcher count';
+		$labels['ticket_has_owner'] = 'Message ticket has owner';
+		$labels['ticket_watcher_count'] = 'Message ticket watcher count';
 		
-		$labels['group_id'] = 'Group';
-		$labels['group_and_bucket'] = 'Group and bucket';
+		$labels['group_id'] = 'Message ticket group';
+		$labels['group_and_bucket'] = 'Message ticket group and bucket';
 		
 		$labels['sender_link'] = 'Message sender is linked';
 		$labels['sender_org_link'] = 'Message sender org is linked';
-		$labels['ticket_link'] = 'Ticket is linked';
+		$labels['ticket_link'] = 'Message ticket is linked';
 		
-		$labels['ticket_org_watcher_count'] = 'Ticket org watcher count';
-		$labels['ticket_watcher_count'] = 'Ticket watcher count';
+		$labels['ticket_org_watcher_count'] = 'Message ticket org watcher count';
+		$labels['ticket_watcher_count'] = 'Message ticket watcher count';
 		$labels['sender_org_watcher_count'] = 'Message sender org watcher count';
 		$labels['sender_watcher_count'] = 'Message sender watcher count';
 		
@@ -289,14 +289,14 @@ abstract class AbstractEvent_Message extends Extension_DevblocksEvent {
 		return $conditions;
 	}
 	
-	function renderConditionExtension($token, $trigger, $params=array(), $seq=null) {
+	function renderConditionExtension($token, $as_token, $trigger, $params=array(), $seq=null) {
 		$tpl = DevblocksPlatform::getTemplateService();
 		$tpl->assign('params', $params);
 
 		if(!is_null($seq))
 			$tpl->assign('namePrefix','condition'.$seq);
 		
-		switch($token) {
+		switch($as_token) {
 			case 'ticket_spam_score':
 				$tpl->display('devblocks:cerberusweb.core::events/mail_received_by_group/condition_spam_score.tpl');
 				break;
@@ -349,10 +349,10 @@ abstract class AbstractEvent_Message extends Extension_DevblocksEvent {
 		$tpl->clearAssign('params');
 	}
 	
-	function runConditionExtension($token, $trigger, $params, DevblocksDictionaryDelegate $dict) {
+	function runConditionExtension($token, $as_token, $trigger, $params, DevblocksDictionaryDelegate $dict) {
 		$pass = true;
 		
-		switch($token) {
+		switch($as_token) {
 			case 'ticket_has_owner':
 				$bool = $params['bool'];
 				@$value = $dict->ticket_owner_id;
@@ -497,7 +497,7 @@ abstract class AbstractEvent_Message extends Extension_DevblocksEvent {
 				$from_context = null;
 				$from_context_id = null;
 				
-				switch($token) {
+				switch($as_token) {
 					case 'sender_link':
 						$from_context = CerberusContexts::CONTEXT_ADDRESS;
 						@$from_context_id = $dict->sender_id;
@@ -548,7 +548,7 @@ abstract class AbstractEvent_Message extends Extension_DevblocksEvent {
 				$not = (substr($params['oper'],0,1) == '!');
 				$oper = ltrim($params['oper'],'!');
 				
-				switch($token) {
+				switch($as_token) {
 					case 'sender_org_watcher_count':
 						$value = count($dict->sender_org_watchers);
 						break;

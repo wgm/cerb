@@ -100,11 +100,11 @@ abstract class AbstractEvent_Address extends Extension_DevblocksEvent {
 				'context' => CerberusContexts::CONTEXT_ADDRESS,
 			),
 			'email_org_id' => array(
-				'label' => 'Org',
+				'label' => 'Email org',
 				'context' => CerberusContexts::CONTEXT_ORG,
 			),
 			'email_org_watchers' => array(
-				'label' => 'Org watchers',
+				'label' => 'Email org watchers',
 				'context' => CerberusContexts::CONTEXT_WORKER,
 				'is_multiple' => true,
 			),
@@ -118,7 +118,7 @@ abstract class AbstractEvent_Address extends Extension_DevblocksEvent {
 		$vars = parent::getValuesContexts($trigger);
 		
 		$vals_to_ctx = array_merge($vals, $vars);
-		asort($vals_to_ctx);
+		DevblocksPlatform::sortObjects($vals_to_ctx, '[label]');
 		
 		return $vals_to_ctx;
 	}
@@ -128,8 +128,8 @@ abstract class AbstractEvent_Address extends Extension_DevblocksEvent {
 		$types = $this->getTypes();
 		
 		$labels['email_link'] = 'Email is linked';
-		$labels['email_org_link'] = 'Org is linked';
-		$labels['email_org_watcher_count'] = 'Org watcher count';
+		$labels['email_org_link'] = 'Email org is linked';
+		$labels['email_org_watcher_count'] = 'Email org watcher count';
 		$labels['email_watcher_count'] = 'Email watcher count';
 		
 		$types['email_link'] = null;
@@ -143,14 +143,14 @@ abstract class AbstractEvent_Address extends Extension_DevblocksEvent {
 		return $conditions;
 	}
 	
-	function renderConditionExtension($token, $trigger, $params=array(), $seq=null) {
+	function renderConditionExtension($token, $as_token, $trigger, $params=array(), $seq=null) {
 		$tpl = DevblocksPlatform::getTemplateService();
 		$tpl->assign('params', $params);
 
 		if(!is_null($seq))
 			$tpl->assign('namePrefix','condition'.$seq);
 		
-		switch($token) {
+		switch($as_token) {
 			case 'email_link':
 			case 'email_org_link':
 				$contexts = Extension_DevblocksContext::getAll(false);
@@ -168,10 +168,10 @@ abstract class AbstractEvent_Address extends Extension_DevblocksEvent {
 		$tpl->clearAssign('params');
 	}
 	
-	function runConditionExtension($token, $trigger, $params, DevblocksDictionaryDelegate $dict) {
+	function runConditionExtension($token, $as_token, $trigger, $params, DevblocksDictionaryDelegate $dict) {
 		$pass = true;
 		
-		switch($token) {
+		switch($as_token) {
 			case 'email_link':
 			case 'email_org_link':
 				$not = (substr($params['oper'],0,1) == '!');
@@ -180,7 +180,7 @@ abstract class AbstractEvent_Address extends Extension_DevblocksEvent {
 				$from_context = null;
 				$from_context_id = null;
 
-				switch($token) {
+				switch($as_token) {
 					case 'email_link':
 						$from_context = CerberusContexts::CONTEXT_ADDRESS;
 						@$from_context_id = $dict->email_id;
@@ -224,7 +224,7 @@ abstract class AbstractEvent_Address extends Extension_DevblocksEvent {
 				$not = (substr($params['oper'],0,1) == '!');
 				$oper = ltrim($params['oper'],'!');
 
-				switch($token) {
+				switch($as_token) {
 					case 'email_org_watcher_count':
 						$value = count($dict->email_org_watchers);
 						break;

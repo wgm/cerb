@@ -138,7 +138,7 @@ class Event_CrmOpportunityMacro extends Extension_DevblocksEvent {
 		$vars = parent::getValuesContexts($trigger);
 		
 		$vals_to_ctx = array_merge($vals, $vars);
-		asort($vals_to_ctx);
+		DevblocksPlatform::sortObjects($vals_to_ctx, '[label]');
 		
 		return $vals_to_ctx;
 	}
@@ -148,11 +148,11 @@ class Event_CrmOpportunityMacro extends Extension_DevblocksEvent {
 		$types = $this->getTypes();
 		
 		$labels['opp_link'] = 'Opportunity is linked';
-		$labels['opp_email_link'] = 'Lead is linked';
-		$labels['opp_email_org_link'] = 'Lead org is linked';
+		$labels['opp_email_link'] = 'Opportunity lead is linked';
+		$labels['opp_email_org_link'] = 'Opportunity lead org is linked';
 		
-		$labels['opp_email_org_watcher_count'] = 'Lead org watcher count';
-		$labels['opp_email_watcher_count'] = 'Lead watcher count';
+		$labels['opp_email_org_watcher_count'] = 'Opportunity lead org watcher count';
+		$labels['opp_email_watcher_count'] = 'Opportunity lead watcher count';
 		$labels['opp_watcher_count'] = 'Opportunity watcher count';
 		
 		$types['opp_link'] = null;
@@ -168,14 +168,14 @@ class Event_CrmOpportunityMacro extends Extension_DevblocksEvent {
 		return $conditions;
 	}
 	
-	function renderConditionExtension($token, $trigger, $params=array(), $seq=null) {
+	function renderConditionExtension($token, $as_token, $trigger, $params=array(), $seq=null) {
 		$tpl = DevblocksPlatform::getTemplateService();
 		$tpl->assign('params', $params);
 
 		if(!is_null($seq))
 			$tpl->assign('namePrefix','condition'.$seq);
 		
-		switch($token) {
+		switch($as_token) {
 			case 'opp_link':
 			case 'opp_email_link':
 			case 'opp_email_org_link':
@@ -195,10 +195,10 @@ class Event_CrmOpportunityMacro extends Extension_DevblocksEvent {
 		$tpl->clearAssign('params');
 	}
 	
-	function runConditionExtension($token, $trigger, $params, DevblocksDictionaryDelegate $dict) {
+	function runConditionExtension($token, $as_token, $trigger, $params, DevblocksDictionaryDelegate $dict) {
 		$pass = true;
 		
-		switch($token) {
+		switch($as_token) {
 			case 'opp_link':
 			case 'opp_email_link':
 			case 'opp_email_org_link':
@@ -208,7 +208,7 @@ class Event_CrmOpportunityMacro extends Extension_DevblocksEvent {
 				$from_context = null;
 				$from_context_id = null;
 				
-				switch($token) {
+				switch($as_token) {
 					case 'opp_link':
 						$from_context = CerberusContexts::CONTEXT_OPPORTUNITY;
 						@$from_context_id = $dict->opp_id;
@@ -258,7 +258,7 @@ class Event_CrmOpportunityMacro extends Extension_DevblocksEvent {
 				$not = (substr($params['oper'],0,1) == '!');
 				$oper = ltrim($params['oper'],'!');
 				
-				switch($token) {
+				switch($as_token) {
 					case 'opp_email_org_watcher_count':
 						$value = count($dict->opp_email_org_watchers);
 						break;
@@ -304,7 +304,7 @@ class Event_CrmOpportunityMacro extends Extension_DevblocksEvent {
 				'create_ticket' => array('label' =>'Create a ticket'),
 				'send_email' => array('label' => 'Send email'),
 				'set_links' => array('label' => 'Set links'),
-				'set_status' => array('label' => 'Set status'),
+				'set_status' => array('label' => 'Set opportunity status'),
 			)
 			+ DevblocksEventHelper::getActionCustomFieldsFromLabels($this->getLabels($trigger))
 			;
