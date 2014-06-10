@@ -26,7 +26,7 @@ var markitupMarkdownDefaults = {
 			return markItUp.line+'. ';
 		}},
 		{separator:'---------------', className:'sep' },
-		{name:'Link to an External Image', key:'E', replaceWith:'![[![Alternative text]!]]([![Url:!:http://]!] "[![Title]!]")', className:'img'},
+		{name:'Link to an External Image', replaceWith:'![[![Alternative text]!]]([![Url:!:http://]!] "[![Title]!]")', className:'img'},
 		{name:'Link', key:'L', openWith:'[', closeWith:']([![Url:!:http://]!] "[![Title]!]")', placeHolder:'Your text to link here...', className:'a' },
 		{separator:'---------------', className:'sep'},	
 		{name:'Quotes', openWith:'> ', className:'blockquote'},
@@ -64,7 +64,7 @@ var markitupParsedownDefaults = {
 		{name:'Numeric List', className:'ol', openWith:function(markItUp) {
 			return markItUp.line+'. ';
 		}},
-		{name:'Link to an External Image', key:'E', openWith:'![Image](', closeWith:')', placeHolder:'http://www.example.com/path/to/image.png', className:'img'},
+		{name:'Link to an External Image', openWith:'![Image](', closeWith:')', placeHolder:'http://www.example.com/path/to/image.png', className:'img'},
 		{name:'Link', key:'L', openWith:'[', closeWith:'](http://www.example.com/)', placeHolder:'link text', className:'a' },
 		{name:'Quotes', openWith:'> ', className:'blockquote'},
 		{
@@ -110,7 +110,7 @@ var markitupHTMLDefaults = {
 		{name:'Ol', openWith:'<ol>\n', closeWith:'</ol>\n', className:'ol' },
 		{name:'Li', openWith:'<li>', closeWith:'</li>', className:'li' },
 		{separator:'---------------', className:'sep' },
-		{name:'Link to an External Image', key:'E', replaceWith:'<img src="[![Source:!:http://]!]" alt="[![Alternative text]!]" />', className:'img' },
+		{name:'Link to an External Image', replaceWith:'<img src="[![Source:!:http://]!]" alt="[![Alternative text]!]" />', className:'img' },
 		{name:'Link', key:'L', openWith:'<a href="[![Link:!:http://]!]"(!( title="[![Title]!]")!)>', closeWith:'</a>', placeHolder:'Your text to link...', className:'a' },
 		{separator:'---------------', className:'sep' },
 		{name:'Clean', className:'clean', replaceWith:function(markitup) { return markitup.selection.replace(/<(.*?)>/g, "") } },
@@ -246,130 +246,6 @@ $.fn.cerbDateInputHelper = function(options) {
 };
 
 var cAjaxCalls = function() {
-	// [TODO] We don't really need all this
-	this.showBatchPanel = function(view_id, target) {
-		var viewForm = document.getElementById('viewForm'+view_id);
-		if(null == viewForm) return;
-		var elements = viewForm.elements['ticket_id[]'];
-		if(null == elements) return;
-
-		var len = elements.length;
-		var ids = new Array();
-
-		if(null == len && null != elements.value) {
-			ids[0] = elements.value;
-		} else {
-			for(var x=len-1;x>=0;x--) {
-				if(elements[x].checked) {
-					//frm.appendChild(elements[x]);
-					ids[ids.length] = elements[x].value;
-				}
-			}
-		}
-		
-		var ticket_ids = ids.join(','); // [TODO] Encode?
-		
-		genericAjaxPopup('peek','c=tickets&a=showBatchPanel&view_id=' + view_id + '&ids=' + ticket_ids, { my: 'top', at: 'top' }, false, '650');
-	}
-
-	// [TODO] This isn't necessary with *any* other bulk update panel
-	this.saveBatchPanel = function(view_id) {
-		var divName = 'view'+view_id;
-		var formName = 'viewForm'+view_id;
-		var viewForm = document.getElementById(formName);
-		if(null == viewForm) return;
-
-		var frm = document.getElementById('formBatchUpdate');
-		var elements = viewForm.elements['ticket_id[]'];
-		if(null == elements) return;
-		
-		var len = elements.length;
-		var ids = new Array();
-		
-		if(null == len && null != elements.value) {
-			ids[0] = elements.value;
-		} else {
-			for(var x=len-1;x>=0;x--) {
-				if(elements[x].checked) {
-					ids[ids.length] = elements[x].value;
-				}
-			}
-		}
-		
-		frm.ticket_ids.value = ids.join(',');
-
-		showLoadingPanel();
-
-		genericAjaxPost('formBatchUpdate', '', 'c=tickets&a=doBulkUpdate', function(html) {
-			$('#'+divName).html(html);
-
-			genericAjaxPopupClose('peek');
-			
-			hideLoadingPanel();
-		});
-	}
-
-	// [TODO] This is not necessary
-	this.showAddressBatchPanel = function(view_id,target) {
-		var viewForm = document.getElementById('viewForm'+view_id);
-		if(null == viewForm) return;
-		var elements = viewForm.elements['row_id[]'];
-		if(null == elements) return;
-
-		var len = elements.length;
-		var ids = new Array();
-
-		if(null == len && null != elements.value) {
-			ids[0] = elements.value;
-		} else {
-			for(var x=len-1;x>=0;x--) {
-				if(elements[x].checked) {
-					//frm.appendChild(elements[x]);
-					ids[ids.length] = elements[x].value;
-				}
-			}
-		}
-		
-		var row_ids = ids.join(','); // [TODO] Encode?
-	
-		genericAjaxPopup('bulk','c=contacts&a=showAddressBatchPanel&view_id=' + view_id + '&ids=' + row_ids, { my: 'top', at: 'top' }, false, '650');
-	}
-	
-	// [TODO] This is not necessary
-	this.saveAddressBatchPanel = function(view_id) {
-		var divName = 'view'+view_id;
-		var formName = 'viewForm'+view_id;
-		var viewDiv = document.getElementById(divName);
-		var viewForm = document.getElementById(formName);
-		if(null == viewForm || null == viewDiv) return;
-
-		var frm = document.getElementById('formBatchUpdate');
-
-		var elements = viewForm.elements['row_id[]'];
-		if(null == elements) return;
-		
-		var len = elements.length;
-		var ids = new Array();
-		
-		if(null == len && null != elements.value) {
-			ids[0] = elements.value;
-		} else {
-			for(var x=len-1;x>=0;x--) {
-				if(elements[x].checked) {
-					ids[ids.length] = elements[x].value;
-				}
-			}
-		}
-		
-		frm.address_ids.value = ids.join(',');
-
-		genericAjaxPost('formBatchUpdate', '', 'c=contacts&a=doAddressBatchUpdate', function(html) {
-			$('#'+divName).html(html);
-
-			genericAjaxPopupClose('bulk');
-		});
-	}
-
 	this.viewTicketsAction = function(view_id, action) {
 		var divName = 'view'+view_id;
 		var formName = 'viewForm'+view_id;
