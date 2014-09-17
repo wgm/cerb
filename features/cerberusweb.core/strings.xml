@@ -81,6 +81,12 @@
 		<tu tuid='activities.ticket.moved'>
 			<tuv xml:lang="en_US"><seg>{{actor}} moved ticket {{target}} to {{group}}: {{bucket}}</seg></tuv>
 		</tu>
+		<tu tuid='activities.ticket.split'>
+			<tuv xml:lang="en_US"><seg>{{actor}} split from ticket {{target}} into ticket {{source}}</seg></tuv>
+		</tu>
+		<tu tuid='activities.ticket.split.from'>
+			<tuv xml:lang="en_US"><seg>{{actor}} split into ticket {{target}} from ticket {{source}}</seg></tuv>
+		</tu>
 		<tu tuid='activities.ticket.status'>
 			<tuv xml:lang="en_US"><seg>{{actor}} changed ticket {{target}} to status {{status}}</seg></tuv>
 		</tu>
@@ -300,6 +306,12 @@
 		<tu tuid='common.fieldsets'>
 			<tuv xml:lang="en_US"><seg>Fieldsets</seg></tuv>
 		</tu>
+		<tu tuid='common.file_bundle'>
+			<tuv xml:lang="en_US"><seg>File Bundle</seg></tuv>
+		</tu>
+		<tu tuid='common.file_bundles'>
+			<tuv xml:lang="en_US"><seg>File Bundles</seg></tuv>
+		</tu>
 		<tu tuid='common.filter'>
 			<tuv xml:lang="en_US"><seg>filter</seg></tuv>
 		</tu>
@@ -392,6 +404,9 @@
 		</tu>
 		<tu tuid='common.minutes'>
 			<tuv xml:lang="en_US"><seg>minutes</seg></tuv>
+		</tu>
+		<tu tuid='common.mobile'>
+			<tuv xml:lang="en_US"><seg>mobile</seg></tuv>
 		</tu>
 		<tu tuid='common.month'>
 			<tuv xml:lang="en_US"><seg>month</seg></tuv>
@@ -629,6 +644,12 @@
 		</tu>
 		<tu tuid='common.upload'>
 			<tuv xml:lang="en_US"><seg>upload</seg></tuv>
+		</tu>
+		<tu tuid='common.upload.file'>
+			<tuv xml:lang="en_US"><seg>upload file</seg></tuv>
+		</tu>
+		<tu tuid='common.upload.files'>
+			<tuv xml:lang="en_US"><seg>upload files</seg></tuv>
 		</tu>
 		<tu tuid='common.url'>
 			<tuv xml:lang="en_US"><seg>URL</seg></tuv>
@@ -956,6 +977,9 @@
 		<tu tuid='address.is_banned'>
 			<tuv xml:lang="en_US"><seg>Is Banned</seg></tuv>
 		</tu>
+		<tu tuid='address.is_contact'>
+			<tuv xml:lang="en_US"><seg>Is Contact</seg></tuv>
+		</tu>
 		<tu tuid='address.is_defunct'>
 			<tuv xml:lang="en_US"><seg>Is Defunct</seg></tuv>
 		</tu>
@@ -1128,6 +1152,9 @@ For example: http://www.cerberusweb.com/support/</seg></tuv>
 
 		<!-- Comment -->
 
+		<tu tuid='comment.notify.at_mention'>
+			<tuv xml:lang="en_US"><seg>Use @mentions to notify workers about this comment.</seg></tuv>
+		</tu>
 		<tu tuid='comment.filters.content'>
 			<tuv xml:lang="en_US"><seg>Comment Content</seg></tuv>
 		</tu>
@@ -1975,6 +2002,9 @@ For example: *receipt*</seg></tuv>
 
 		<!-- Worker -->
 		
+		<tu tuid='worker.at_mention_name'>
+			<tuv xml:lang="en_US"><seg>@Mention Name</seg></tuv>
+		</tu>
 		<tu tuid='worker.auth_extension_id'>
 			<tuv xml:lang="en_US"><seg>Authentication</seg></tuv>
 		</tu>
@@ -2115,6 +2145,9 @@ For example: *receipt*</seg></tuv>
 		</tu>
 		<tu tuid='preferences.account.mail.signature.above'>
 			<tuv xml:lang="en_US"><seg>Above the quoted message</seg></tuv>
+		</tu>
+		<tu tuid='preferences.account.mail.signature.above.cut'>
+			<tuv xml:lang="en_US"><seg>Above the quoted message with #cut</seg></tuv>
 		</tu>
 		<tu tuid='preferences.account.mail.signature.below'>
 			<tuv xml:lang="en_US"><seg>Below the quoted message</seg></tuv>

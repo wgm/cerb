@@ -42,6 +42,18 @@ class _DevblocksDatabaseManager {
 		return $this->_db;
 	}
 	
+	function isEmpty() {
+		if(!$this->isConnected())
+			return true;
+
+		$tables = $this->metaTables();
+		
+		if(empty($tables))
+			return true;
+		
+		return false;
+	}
+	
 	function isConnected() {
 		if(!($this->_db instanceof mysqli)) {
 			$this->_db = null;
@@ -59,6 +71,20 @@ class _DevblocksDatabaseManager {
 		foreach($rs as $row) {
 			$table = array_shift($row);
 			$tables[$table] = $table;
+		}
+		
+		return $tables;
+	}
+	
+	function metaTablesDetailed() {
+		$tables = array();
+		
+		$sql = "SHOW TABLE STATUS";
+		$rs = $this->GetArray($sql);
+		
+		foreach($rs as $row) {
+			$table = $row['Name'];
+			$tables[$table] = $row;
 		}
 		
 		return $tables;

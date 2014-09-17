@@ -12,7 +12,7 @@
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://www.cerberusweb.com	  http://www.webgroupmedia.com/
+|	http://www.cerbweb.com	    http://www.webgroupmedia.com/
 ***********************************************************************/
 
 class ChDisplayPage extends CerberusPageExtension {
@@ -281,7 +281,7 @@ class ChDisplayPage extends CerberusPageExtension {
 		
 		$worker = CerberusApplication::getActiveWorker();
 		
-		@$also_notify_worker_ids = DevblocksPlatform::importGPC($_REQUEST['notify_worker_ids'],'array',array());
+		$also_notify_worker_ids = array_keys(CerberusApplication::getWorkersByAtMentionsText($content));
 
 		// Get watchers
 		$watcher_ids = array_keys(CerberusContexts::getWatchers(CerberusContexts::CONTEXT_TICKET, $ticket_id));
@@ -395,36 +395,85 @@ class ChDisplayPage extends CerberusPageExtension {
 		@$group_id = DevblocksPlatform::importGPC($_REQUEST['group_id'],'integer',0);
 		@$bucket_id = DevblocksPlatform::importGPC($_REQUEST['bucket_id'],'integer',0);
 		@$content = DevblocksPlatform::importGPC($_REQUEST['content'],'string','');
+		@$format = DevblocksPlatform::importGPC($_REQUEST['format'],'string','');
 		@$html_template_id = DevblocksPlatform::importGPC($_REQUEST['html_template_id'],'integer',0);
 
+		if(false == ($group = DAO_Group::get($group_id)))
+			return;
+		
 		header("Content-Type: text/html; charset=" . LANG_CHARSET_CODE);
 
-		$output = DevblocksPlatform::parseMarkdown($content, true);
+		$tpl_builder = DevblocksPlatform::getTemplateBuilder();
+		$active_worker = CerberusApplication::getActiveWorker();
 		
-		$html_template = null;
+		// Determine if we have an HTML template
 		
-		// Use an override template if given
-		if($html_template_id)
-			$html_template = DAO_MailHtmlTemplate::get($html_template_id);
+		if(!$html_template_id || false == ($html_template = DAO_MailHtmlTemplate::get($html_template_id))) {
+			if(false == ($html_template = $group->getReplyHtmlTemplate($bucket_id)))
+				$html_template = null;
+		}
 		
-		// Cascade to group/bucket template
-		if(!$html_template && false != ($group = DAO_Group::get($group_id)))
-			$html_template = $group->getReplyHtmlTemplate($bucket_id);
+		// Parse #commands
 		
-		// Cascade to default reply-to
-		if(!$html_template && false != ($replyto = DAO_AddressOutgoing::getDefault()))
-			$html_template = $replyto->getReplyHtmlTemplate();
-
+		$message_properties = array(
+			'group_id' => $group_id,
+			'bucket_id' => $bucket_id,
+			'content' => $content,
+			'content_format' => $format,
+			'html_template_id' => ($html_template) ? $html_template->id : 0,
+		);
+		
+		$hash_commands = array();
+		
+		$this->_parseReplyHashCommands($active_worker, $message_properties, $hash_commands);
+		
+		// Markdown
+		
+		$output = DevblocksPlatform::parseMarkdown($message_properties['content'], true);
+		
 		// Wrap the reply in a template if we have one
+		
 		if($html_template) {
-			$tpl_builder = DevblocksPlatform::getTemplateBuilder();
-			$output = $tpl_builder->build($html_template->content, array('message_body' => $output));
+			$output = $tpl_builder->build(
+				$html_template->content,
+				array(
+					'message_body' => $output,
+				)
+			);
 		}
 			
 		echo sprintf('<html><head><meta http-equiv="content-type" content="text/html; charset=%s"></head><body>',
 			LANG_CHARSET_CODE
 		);
 		echo DevblocksPlatform::purifyHTML($output, true);
+		echo '</body></html>';
+	}
+	
+	function getReplyPreviewAction() {
+		@$group_id = DevblocksPlatform::importGPC($_REQUEST['group_id'],'integer',0);
+		@$bucket_id = DevblocksPlatform::importGPC($_REQUEST['bucket_id'],'integer',0);
+		@$content = DevblocksPlatform::importGPC($_REQUEST['content'],'string','');
+
+		header("Content-Type: text/html; charset=" . LANG_CHARSET_CODE);
+
+		// Parse #commands
+		
+		$active_worker = CerberusApplication::getActiveWorker();
+		
+		$message_properties = array(
+			'group_id' => $group_id,
+			'bucket_id' => $bucket_id,
+			'content' => $content,
+		);
+		
+		$hash_commands = array();
+		
+		$this->_parseReplyHashCommands($active_worker, $message_properties, $hash_commands);
+		
+		echo sprintf('<html><head><meta http-equiv="content-type" content="text/html; charset=%s"></head><body>',
+			LANG_CHARSET_CODE
+		);
+		echo DevblocksPlatform::purifyHTML(nl2br($message_properties['content']), true);
 		echo '</body></html>';
 	}
 	
@@ -582,7 +631,7 @@ class ChDisplayPage extends CerberusPageExtension {
 		
 		$tpl->display('devblocks:cerberusweb.core::display/rpc/reply.tpl');
 	}
-	
+
 	function sendReplyAction() {
 		@$ticket_id = DevblocksPlatform::importGPC($_REQUEST['ticket_id'],'integer');
 		@$ticket_mask = DevblocksPlatform::importGPC($_REQUEST['ticket_mask'],'string');
@@ -596,7 +645,11 @@ class ChDisplayPage extends CerberusPageExtension {
 		@$file_ids = DevblocksPlatform::importGPC($_POST['file_ids'],'array',array());
 		$file_ids = DevblocksPlatform::sanitizeArray($file_ids, 'integer', array('unique', 'nonzero'));
 		
-		$worker = CerberusApplication::getActiveWorker();
+		if(null == ($worker = CerberusApplication::getActiveWorker()))
+			return false;
+		
+		if(null == ($ticket = DAO_Ticket::get($ticket_id)))
+			return false;
 		
 		$properties = array(
 			'draft_id' => $draft_id,
@@ -620,6 +673,10 @@ class ChDisplayPage extends CerberusPageExtension {
 			'link_forward_files' => true,
 		);
 		
+		$hash_commands = array();
+		
+		$this->_parseReplyHashCommands($worker, $properties, $hash_commands);
+		
 		// Custom fields
 		@$field_ids = DevblocksPlatform::importGPC($_POST['field_ids'], 'array', array());
 		$field_values = DAO_CustomFieldValue::parseFormPost(CerberusContexts::CONTEXT_TICKET, $field_ids);
@@ -640,9 +697,13 @@ class ChDisplayPage extends CerberusPageExtension {
 			$properties['dont_send'] = true;
 
 		// Send
-		if(CerberusMail::sendTicketMessage($properties)) {
+		if(false != ($new_message_id = CerberusMail::sendTicketMessage($properties))) {
 			if(!empty($draft_id))
 				DAO_MailQueue::delete($draft_id);
+			
+			// Run hash commands
+			if(!empty($hash_commands))
+				$this->_handleReplyHashCommands($hash_commands, $ticket, $worker);
 		}
 
 		// Automatically add new 'To:' recipients?
@@ -662,6 +723,135 @@ class ChDisplayPage extends CerberusPageExtension {
 		
 		DevblocksPlatform::redirect(new DevblocksHttpResponse(array('profiles','ticket',$ticket_uri)));
 	}
+	
+	private function _parseReplyHashCommands(Model_worker $worker, array &$message_properties, array &$commands) {
+		$lines_in = DevblocksPlatform::parseCrlfString($message_properties['content'], true);
+		$lines_out = array();
+		
+		$is_cut = false;
+		
+		foreach($lines_in as $line) {
+			$handled = false;
+			
+			if(preg_match('/^\#([A-Za-z0-9_]+)(.*)$/', $line, $matches)) {
+				@$command = $matches[1];
+				@$args = ltrim($matches[2]);
+				
+				switch($command) {
+					case 'attach':
+						@$bundle_tag = $args;
+						$handled = true;
+						
+						if(empty($bundle_tag))
+							break;
+						
+						if(false == ($bundle = DAO_FileBundle::getByTag($bundle_tag)))
+							break;
+						
+						$attachments = $bundle->getAttachments();
+						
+						$message_properties['link_forward_files'] = true;
+						
+						if(!isset($message_properties['forward_files']))
+							$message_properties['forward_files'] = array();
+						
+						$message_properties['forward_files'] = array_merge($message_properties['forward_files'], array_keys($attachments));
+						break;
+					
+					case 'cut':
+						$is_cut = true;
+						$handled = true;
+						break;
+						
+					case 'signature':
+						@$group_id = $message_properties['group_id'];
+						@$bucket_id = $message_properties['bucket_id'];
+						@$content_format = $message_properties['content_format'];
+						@$html_template_id = $message_properties['html_template_id'];
+						
+						$group = DAO_Group::get($group_id);
+						
+						switch($content_format) {
+							case 'parsedown':
+								// Determine if we have an HTML template
+								
+								if(!$html_template_id || false == ($html_template = DAO_MailHtmlTemplate::get($html_template_id))) {
+									if(false == ($html_template = $group->getReplyHtmlTemplate($bucket_id)))
+										$html_template = null;
+								}
+								
+								// Determine signature
+								
+								if(!$html_template || false == ($signature = $html_template->getSignature($worker))) {
+									$signature = $group->getReplySignature($bucket_id, $worker);
+								}
+								
+								// Replace signature
+								
+								$line = $signature;
+								break;
+								
+							default:
+								$line = $group->getReplySignature($bucket_id, $worker);
+								break;
+						}
+						break;
+						
+					case 'comment':
+					case 'watch':
+					case 'unwatch':
+						$handled = true;
+						$commands[] = array(
+							'command' => $command,
+							'args' => $args,
+						);
+						break;	
+						
+					default:
+						$handled = false;
+						break;
+				}
+			}
+			
+			if(!$handled && !$is_cut) {
+				$lines_out[] = $line;
+			}
+		}
+		
+		$message_properties['content'] = implode("\n", $lines_out);
+	}
+	
+	private function _handleReplyHashCommands(array $commands, Model_Ticket $ticket, Model_Worker $worker) {
+		foreach($commands as $command_data) {
+			switch($command_data['command']) {
+				case 'comment':
+					@$comment = $command_data['args'];
+					
+					if(!empty($comment)) {
+						$also_notify_worker_ids = array_keys(CerberusApplication::getWorkersByAtMentionsText($comment));
+						
+						$fields = array(
+							DAO_Comment::CONTEXT => CerberusContexts::CONTEXT_TICKET,
+							DAO_Comment::CONTEXT_ID => $ticket->id,
+							DAO_Comment::OWNER_CONTEXT => CerberusContexts::CONTEXT_WORKER,
+							DAO_Comment::OWNER_CONTEXT_ID => $worker->id,
+							DAO_Comment::CREATED => time()+2,
+							DAO_Comment::COMMENT => $comment,
+						);
+						$comment_id = DAO_Comment::create($fields, $also_notify_worker_ids);
+					}
+					break;
+		
+				case 'watch':
+					CerberusContexts::addWatchers(CerberusContexts::CONTEXT_TICKET, $ticket->id, array($worker->id));
+					break;
+		
+				case 'unwatch':
+					CerberusContexts::removeWatchers(CerberusContexts::CONTEXT_TICKET, $ticket->id, array($worker->id));
+					break;
+			}
+		}
+	}	
 	
 	private function _saveDraft() {
 		$active_worker = CerberusApplication::getActiveWorker();
@@ -1171,6 +1361,9 @@ class ChDisplayPage extends CerberusPageExtension {
 
 		$new_ticket_id = DAO_Ticket::create($fields);
 
+		if(null == ($new_ticket = DAO_Ticket::get($new_ticket_id)))
+			return false;
+		
 		// Copy all the original tickets requesters
 		$orig_requesters = DAO_Ticket::getRequestersByTicket($orig_ticket->id);
 		foreach($orig_requesters as $orig_req_addy) {
@@ -1197,6 +1390,42 @@ class ChDisplayPage extends CerberusPageExtension {
 		DAO_Ticket::updateMessageCount($new_ticket_id);
 		DAO_Ticket::updateMessageCount($orig_ticket->id);
 			
+		/*
+		 * Log activity (Ticket Split)
+		 */
+		
+		$entry = array(
+			//{{actor}} split from ticket {{target}} into ticket {{source}}
+			'message' => 'activities.ticket.split',
+			'variables' => array(
+				'target' => sprintf("[%s] %s", $orig_ticket->mask, $orig_ticket->subject),
+				'source' => sprintf("[%s] %s", $new_ticket->mask, $new_ticket->subject),
+				),
+			'urls' => array(
+				'target' => sprintf("ctx://%s:%s", CerberusContexts::CONTEXT_TICKET, $orig_ticket->mask),
+				'source' => sprintf("ctx://%s:%s", CerberusContexts::CONTEXT_TICKET, $new_ticket->mask),
+				)
+		);
+		CerberusContexts::logActivity('ticket.split', CerberusContexts::CONTEXT_TICKET, $orig_ticket->id, $entry);
+		
+		/*
+		 * Log activity (Ticket Split From)
+		 */
+		
+		$entry = array(
+			//{{actor}} split into ticket {{target}} from ticket {{source}}
+			'message' => 'activities.ticket.split.from',
+			'variables' => array(
+				'target' => sprintf("[%s] %s", $new_ticket->mask, $new_ticket->subject),
+				'source' => sprintf("[%s] %s", $orig_ticket->mask, $orig_ticket->subject),
+				),
+			'urls' => array(
+				'target' => sprintf("ctx://%s:%s", CerberusContexts::CONTEXT_TICKET, $new_ticket->mask),
+				'source' => sprintf("ctx://%s:%s", CerberusContexts::CONTEXT_TICKET, $orig_ticket->mask),
+				)
+		);
+		CerberusContexts::logActivity('ticket.split', CerberusContexts::CONTEXT_TICKET, $new_ticket->id, $entry);
+		
 		DevblocksPlatform::redirect(new DevblocksHttpResponse(array('profiles','ticket',$new_ticket_mask)));
 	}
 	

@@ -73,9 +73,8 @@ class Page_ExampleObjects extends CerberusPageExtension {
 
 		// Comments
 		$comments = DAO_Comment::getByContext(Context_ExampleObject::ID, $id);
-		$last_comment = array_shift($comments);
-		unset($comments);
-		$tpl->assign('last_comment', $last_comment);
+		$comments = array_reverse($comments, true);
+		$tpl->assign('comments', $comments);
 		
 		$tpl->display('devblocks:example.object::example_object/peek.tpl');
 	}
@@ -114,7 +113,7 @@ class Page_ExampleObjects extends CerberusPageExtension {
 		
 		// If we're adding a comment
 		if(!empty($comment)) {
-			@$also_notify_worker_ids = DevblocksPlatform::importGPC($_REQUEST['notify_worker_ids'],'array',array());
+			$also_notify_worker_ids = array_keys(CerberusApplication::getWorkersByAtMentionsText($comment));
 			
 			$fields = array(
 				DAO_Comment::CREATED => time(),

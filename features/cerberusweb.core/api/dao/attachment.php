@@ -12,7 +12,7 @@
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://www.cerberusweb.com	  http://www.webgroupmedia.com/
+|	http://www.cerbweb.com	    http://www.webgroupmedia.com/
 ***********************************************************************/
 
 class DAO_Attachment extends DevblocksORMHelper {
@@ -269,12 +269,8 @@ class DAO_Attachment extends DevblocksORMHelper {
 		$results = array();
 		
 		while($row = mysqli_fetch_assoc($rs)) {
-			$result = array();
-			foreach($row as $f => $v) {
-				$result[$f] = $v;
-			}
 			$id = intval($row[SearchFields_Attachment::ID]);
-			$results[$id] = $result;
+			$results[$id] = $row;
 		}
 
 		$total = count($results);
@@ -351,6 +347,10 @@ class Model_Attachment {
 
 	public function getFileContents(&$fp=null) {
 		return Storage_Attachments::get($this, $fp);
+	}
+	
+	public function getLinks() {
+		return DAO_AttachmentLink::getByAttachmentId($this->id);
 	}
 };
 
@@ -1084,9 +1084,9 @@ class DAO_AttachmentLink extends Cerb_ORMHelper {
 	/**
 	 * ...
 	 *
-	 * @param unknown_type $context
-	 * @param unknown_type $context_id
-	 * @param unknown_type $attachment_ids
+	 * @param string $context
+	 * @param integer $context_id
+	 * @param array $attachment_ids
 	 */
 	static function setLinks($context, $context_id, $attachment_ids) {
 		if(!is_array($attachment_ids))
@@ -1103,7 +1103,7 @@ class DAO_AttachmentLink extends Cerb_ORMHelper {
 		// Remove those that are missing
 		if(!empty($deleted_ids))
 		foreach($deleted_ids as $deleted_id)
-			DAO_AttachmentLink::deleteByAttachment($deleted_id);
+			DAO_AttachmentLink::deleteByAttachmentAndContext($deleted_id, $context, $context_id);
 			
 		// Add those that are new
 		if(!empty($new_ids))
@@ -1221,6 +1221,15 @@ class DAO_AttachmentLink extends Cerb_ORMHelper {
 		$db->Execute(sprintf("DELETE FROM attachment_link WHERE context = %s AND context_id IN (%s)",
 			$db->qstr($context),
 			implode(',', $context_ids)
+		));
+	}
+	
+	static function deleteByAttachmentAndContext($attachment_id, $context, $context_id) {
+		$db = DevblocksPlatform::getDatabaseService();
+		$db->Execute(sprintf("DELETE FROM attachment_link WHERE attachment_id = %d AND context = %s AND context_id = %d",
+			$attachment_id,
+			$db->qstr($context),
+			$context_id
 		));
 	}
 	
@@ -1348,12 +1357,8 @@ class DAO_AttachmentLink extends Cerb_ORMHelper {
 		$results = array();
 		
 		while($row = mysqli_fetch_assoc($rs)) {
-			$result = array();
-			foreach($row as $f => $v) {
-				$result[$f] = $v;
-			}
 			$id = $row[SearchFields_AttachmentLink::GUID];
-			$results[$id] = $result;
+			$results[$id] = $row;
 		}
 		
 		$total = count($results);

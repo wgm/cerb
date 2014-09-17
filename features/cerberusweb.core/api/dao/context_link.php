@@ -12,7 +12,7 @@
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://www.cerberusweb.com	  http://www.webgroupmedia.com/
+|	http://www.cerbweb.com	    http://www.webgroupmedia.com/
 ***********************************************************************/
 
 class DAO_ContextLink {
@@ -223,7 +223,7 @@ class DAO_ContextLink {
 			$to_context_ids = array($to_context_ids);
 		
 		// Remove
-		if(is_array($links))
+		if(is_array($links) && isset($links[$from_context_id]))
 		foreach($links[$from_context_id] as $link_id => $link) {
 			if(false === array_search($link_id, $to_context_ids))
 				DAO_ContextLink::deleteLink($from_context, $from_context_id, $to_context, $link_id);

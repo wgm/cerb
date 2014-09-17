@@ -9,7 +9,8 @@
 </form>
 
 <script type="text/javascript">
-	$popup = genericAjaxPopupFind('#chooser{$view->id}');
+$(function() {
+	var $popup = genericAjaxPopupFind('#chooser{$view->id}');
 	
 	$popup.one('popup_open',function(event,ui) {
 		event.stopPropagation();
@@ -79,17 +80,25 @@
 				var $tr = $(this).closest('tr');
 				var $td = $(this).closest('td');
 				var $td_first = $tr.find('> td:first');
-				var attr_id = $td.attr('id');
-				var attr_context = $td.attr('context');
 				
-				var $btn = $('<button type="button" id="'+attr_id+'" context="'+attr_context+'"><span class="cerb-sprite2 sprite-plus-circle"></span></button>');
+				var attr_id = $td.attr('id');
+				var attr_label = $(this).text();
+				var attr_context = $td.attr('context');
+				var attr_context_id = $td.attr('context_id');
+				var attr_has_custom_placeholders = $td.attr('has_custom_placeholders');
+				
+				var $btn = $('<button type="button"><span class="cerb-sprite2 sprite-plus-circle"></span></button>');
+				$btn.attr('id', attr_id);
+				$btn.attr('context', attr_context);
+				$btn.attr('context_id', attr_context_id);
+				$btn.attr('has_custom_placeholders', attr_has_custom_placeholders);
 				
 				$btn.click(function(e) {
 					e.stopPropagation();
 					
-					var $this = $(this);
+					var $btn = $(this);
 
-					$this.find('span.cerb-sprite2')
+					$btn.find('span.cerb-sprite2')
 						.removeClass('sprite-plus-circle')
 						.addClass('sprite-tick-circle-gray')
 						;
@@ -97,10 +106,17 @@
 					$popup=genericAjaxPopupFind('#chooser{$view->id}');
 
 					event=jQuery.Event('snippet_select');
-					event.snippet_id=$this.attr('id');
-					event.context=$this.attr('context');
+					event.snippet_id = attr_id
+					event.context = attr_context;
+					event.context_id = attr_context_id;
+					event.label = attr_label;
+					event.has_custom_placeholders = attr_has_custom_placeholders;
 					
 					$popup.trigger(event);
+					
+					{if $single}
+					$popup.dialog('close');
+					{/if}
 				});
 				
 				$td_first.prepend($btn);
@@ -125,4 +141,5 @@
 		event.stopPropagation();
 		genericAjaxPopupDestroy('{$layer}');
 	});
+});
 </script>

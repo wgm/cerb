@@ -47,7 +47,7 @@
 			<td width="100%" valign="top">
 				{if !empty($address.a_contact_org_id)}
 					<b>{if !empty($address.o_name)}{$address.o_name}{else if !empty({$org_name})}{$org_name}{/if}</b>
-					<a href="javascript:;" onclick="genericAjaxPopup('peek','c=internal&a=showPeekPopup&context={CerberusContexts::CONTEXT_ORG}&context_id={if !empty($address.a_contact_org_id)}{$address.a_contact_org_id}{else}{$org_id}{/if}&view_id={$view->id}',null,false,'600');">{'views.peek'|devblocks_translate}</a>
+					<a href="javascript:;" onclick="genericAjaxPopup('peek_org','c=internal&a=showPeekPopup&context={CerberusContexts::CONTEXT_ORG}&context_id={if !empty($address.a_contact_org_id)}{$address.a_contact_org_id}{else}{$org_id}{/if}&view_id={$view->id}',null,false,'600');">{'views.peek'|devblocks_translate}</a>
 					<a href="javascript:;" onclick="toggleDiv('divAddressOrg');">({'common.edit'|devblocks_translate|lower})</a>
 					<br>
 				{/if}
@@ -59,8 +59,8 @@
 		<tr>
 			<td width="0%" nowrap="nowrap" valign="top" align="right">{'common.options'|devblocks_translate|capitalize}: </td>
 			<td width="100%">
-				<label><input type="checkbox" name="is_banned" value="1" {if $address.a_is_banned}checked="checked"{/if}> {'address.is_banned'|devblocks_translate|capitalize}</label>
-				<label><input type="checkbox" name="is_defunct" value="1" {if $address.a_is_defunct}checked="checked"{/if}> {'address.is_defunct'|devblocks_translate|capitalize}</label>
+				<label><input type="checkbox" name="is_banned" value="1" title="Check this box if new messages from this email address should be rejected." {if $address.a_is_banned}checked="checked"{/if}> {'address.is_banned'|devblocks_translate|capitalize}</label>
+				<label><input type="checkbox" name="is_defunct" value="1" title="Check this box if the email address is no longer active." {if $address.a_is_defunct}checked="checked"{/if}> {'address.is_defunct'|devblocks_translate|capitalize}</label>
 			</td>
 		</tr>
 		
@@ -90,6 +90,14 @@
 
 {include file="devblocks:cerberusweb.core::internal/custom_fieldsets/peek_custom_fieldsets.tpl" context=CerberusContexts::CONTEXT_ADDRESS context_id=$address.a_id}
 
+{* Comment *}
+{include file="devblocks:cerberusweb.core::internal/peek/peek_comments_pager.tpl" comments=$comments}
+
+<fieldset class="peek">
+	<legend>{'common.comment'|devblocks_translate|capitalize}</legend>
+	<textarea name="comment" rows="5" cols="45" style="width:98%;" title="{'comment.notify.at_mention'|devblocks_translate}"></textarea>
+</fieldset>
+
 {if $active_worker->hasPriv('core.addybook.addy.actions.update')}
 	<button type="button" onclick="if($('#formAddressPeek').validate().form()) { genericAjaxPopupPostCloseReloadView(null,'formAddressPeek', '{$view_id}', false, 'address_save'); } "><span class="cerb-sprite2 sprite-tick-circle"></span> {'common.save_changes'|devblocks_translate}</button>
 {else}
@@ -108,13 +116,38 @@
 </form>
 
 <script type="text/javascript">
-	$popup = genericAjaxPopupFind('#formAddressPeek');
+$(function() {
+	var $popup = genericAjaxPopupFind('#formAddressPeek');
+	
 	$popup.one('popup_open',function(event,ui) {
+		var $this = $(this);
+		var $textarea = $this.find('textarea[name=comment]');
+		
 		// Title
-		$(this).dialog('option','title', '{'addy_book.peek.title'|devblocks_translate|escape:'javascript' nofilter}');
+		$this.dialog('option','title', '{'addy_book.peek.title'|devblocks_translate|escape:'javascript' nofilter}');
+		
+		// Tooltips
+		
+		$popup.find(':input[title], textarea[title]').tooltip({
+			position: {
+				my: 'left top',
+				at: 'left+10 bottom+5'
+			}
+		});
+		
+		// @mentions
+		
+		var atwho_workers = {CerberusApplication::getAtMentionsWorkerDictionaryJson() nofilter};
+
+		$textarea.atwho({
+			at: '@',
+			{literal}tpl: '<li data-value="@${at_mention}">${name} <small style="margin-left:10px;">${title}</small></li>',{/literal}
+			data: atwho_workers,
+			limit: 10
+		});
 		
 		// Worker chooser
-		$(this).find('button.chooser_watcher').each(function() {
+		$this.find('button.chooser_watcher').each(function() {
 			ajax.chooser(this,'cerberusweb.contexts.worker','add_watcher_ids', { autocomplete:true });
 		});
 
@@ -124,5 +157,10 @@
 		// Form validation
 		$("#formAddressPeek").validate();
 		$('#formAddressPeek :input:text:first').focus();
-	} );
+		
+		$this.find('button.chooser_notify_worker').each(function() {
+			ajax.chooser(this,'cerberusweb.contexts.worker','notify_worker_ids', { autocomplete:true });
+		});
+	});
+});
 </script>

@@ -12,7 +12,7 @@
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://www.cerberusweb.com	  http://www.webgroupmedia.com/
+|	http://www.cerbweb.com	    http://www.webgroupmedia.com/
 ***********************************************************************/
 
 class Page_Custom extends CerberusPageExtension {
@@ -108,6 +108,7 @@ class Page_Custom extends CerberusPageExtension {
 			// Restrict owners
 			$params = array( '_ownership' => array(
 					DevblocksSearchCriteria::GROUP_OR,
+					SearchFields_WorkspacePage::OWNER_CONTEXT => new DevblocksSearchCriteria(SearchFields_WorkspacePage::OWNER_CONTEXT,DevblocksSearchCriteria::OPER_EQ,CerberusContexts::CONTEXT_APPLICATION),
 					array(
 						DevblocksSearchCriteria::GROUP_AND,
 						SearchFields_WorkspacePage::OWNER_CONTEXT => new DevblocksSearchCriteria(SearchFields_WorkspacePage::OWNER_CONTEXT,DevblocksSearchCriteria::OPER_EQ,CerberusContexts::CONTEXT_WORKER),
@@ -180,9 +181,115 @@ class Page_Custom extends CerberusPageExtension {
 		@$page_type = DevblocksPlatform::importGPC($_REQUEST['page_type'],'string',null);
 		
 		$active_worker = CerberusApplication::getActiveWorker();
+		$page_id = null;
 
+		switch($page_type) {
+			case 'mail':
+				$page_id = $this->_createWizardMailPage();
+				break;
+				
+			case 'kb':
+				$page_id = $this->_createWizardKbPage();
+				break;
+				
+			case 'reports':
+				$page_id = $this->_createWizardReportsPage();
+				break;
+		}
+		
+		// Add to the current worker's menu pref
+		if(!empty($page_id)) {
+			$menu_json = json_decode(DAO_WorkerPref::get($active_worker->id, 'menu_json'), true);
+			$menu_json[] = $page_id;
+			DAO_WorkerPref::set($active_worker->id, 'menu_json', json_encode($menu_json));
+		}
+	}
+	
+	private function _createWizardKbPage() {
+		$active_worker = CerberusApplication::getActiveWorker();
+		
+		if(!DevblocksPlatform::isPluginEnabled('cerberusweb.kb'))
+			return;
+		
+		$view_id = 'pages';
+		$page_name = 'Knowledgebase';
+		
 		$page_id = DAO_WorkspacePage::create(array(
-			DAO_WorkspacePage::NAME => 'Mail',
+			DAO_WorkspacePage::NAME => $page_name,
+			DAO_WorkspacePage::EXTENSION_ID => 'core.workspace.page.workspace',
+			DAO_WorkspacePage::OWNER_CONTEXT => CerberusContexts::CONTEXT_WORKER,
+			DAO_WorkspacePage::OWNER_CONTEXT_ID => $active_worker->id,
+		));
+		
+		$pos = 0;
+		
+		// Knowledgebase browser
+		
+		$tab_id = DAO_WorkspaceTab::create(array(
+			DAO_WorkspaceTab::NAME => 'Topics',
+			DAO_WorkspaceTab::EXTENSION_ID => 'cerberusweb.kb.tab.browse',
+			DAO_WorkspaceTab::POS => $pos++,
+			DAO_WorkspaceTab::WORKSPACE_PAGE_ID => $page_id,
+		));
+		
+		// Marquee
+		
+		if(!empty($page_id) && !empty($view_id)) {
+			$url_writer = DevblocksPlatform::getUrlService();
+			C4_AbstractView::setMarquee($view_id, sprintf("New page created: <a href='%s'><b>%s</b></a>",
+				$url_writer->write(sprintf("c=pages&a=%d-%s",
+					$page_id,
+					DevblocksPlatform::strToPermalink($page_name))
+				),
+				htmlspecialchars($page_name, ENT_QUOTES, LANG_CHARSET_CODE)
+			));
+		}
+		
+		return $page_id;
+	}
+	
+	private function _createWizardReportsPage() {
+		$active_worker = CerberusApplication::getActiveWorker();
+		
+		if(!DevblocksPlatform::isPluginEnabled('cerberusweb.reports'))
+			return;
+		
+		$view_id = 'pages';
+		$page_name = 'Reports';
+		
+		// Reports page
+		
+		$page_id = DAO_WorkspacePage::create(array(
+			DAO_WorkspacePage::NAME => $page_name,
+			DAO_WorkspacePage::EXTENSION_ID => 'reports.workspace.page',
+			DAO_WorkspacePage::OWNER_CONTEXT => CerberusContexts::CONTEXT_WORKER,
+			DAO_WorkspacePage::OWNER_CONTEXT_ID => $active_worker->id,
+		));
+		
+		// Marquee
+		
+		if(!empty($page_id) && !empty($view_id)) {
+			$url_writer = DevblocksPlatform::getUrlService();
+			C4_AbstractView::setMarquee($view_id, sprintf("New page created: <a href='%s'><b>%s</b></a>",
+				$url_writer->write(sprintf("c=pages&a=%d-%s",
+					$page_id,
+					DevblocksPlatform::strToPermalink($page_name))
+				),
+				htmlspecialchars($page_name, ENT_QUOTES, LANG_CHARSET_CODE)
+			));
+		}
+		
+		return $page_id;
+	}
+	
+	private function _createWizardMailPage() {
+		$active_worker = CerberusApplication::getActiveWorker();
+		
+		$view_id = 'pages';
+		$page_name = 'Mail';
+		
+		$page_id = DAO_WorkspacePage::create(array(
+			DAO_WorkspacePage::NAME => $page_name,
 			DAO_WorkspacePage::EXTENSION_ID => 'core.workspace.page.workspace',
 			DAO_WorkspacePage::OWNER_CONTEXT => CerberusContexts::CONTEXT_WORKER,
 			DAO_WorkspacePage::OWNER_CONTEXT_ID => $active_worker->id,
@@ -385,7 +492,22 @@ class Page_Custom extends CerberusPageExtension {
 				DAO_WorkspaceList::LIST_POS => $list_pos++,
 				DAO_WorkspaceList::LIST_VIEW => serialize($list_view),
 				DAO_WorkspaceList::WORKSPACE_TAB_ID => $tab_id,
+			));	
+
+		// Marquee
+			
+		if(!empty($page_id) && !empty($view_id)) {
+			$url_writer = DevblocksPlatform::getUrlService();
+			C4_AbstractView::setMarquee($view_id, sprintf("New page created: <a href='%s'><b>%s</b></a>",
+				$url_writer->write(sprintf("c=pages&a=%d-%s",
+					$page_id,
+					DevblocksPlatform::strToPermalink($page_name))
+				),
+				htmlspecialchars($page_name, ENT_QUOTES, LANG_CHARSET_CODE)
 			));
+		}
+		
+		return $page_id;
 	}
 	
 	function setPageOrderAction() {
@@ -789,31 +911,19 @@ class Page_Custom extends CerberusPageExtension {
 			);
 			
 			// Owner
-			@list($owner_type, $owner_id) = explode('_', DevblocksPlatform::importGPC($_REQUEST['owner'],'string',''));
+			@list($owner_context, $owner_context_id) = explode(':', DevblocksPlatform::importGPC($_REQUEST['owner'],'string',''));
 				
-			switch($owner_type) {
-				// Group
-				case 'g':
-					$owner_context = CerberusContexts::CONTEXT_GROUP;
-					$owner_context_id = $owner_id;
+			switch($owner_context) {
+				case CerberusContexts::CONTEXT_APPLICATION:
+				case CerberusContexts::CONTEXT_ROLE:
+				case CerberusContexts::CONTEXT_GROUP:
+				case CerberusContexts::CONTEXT_WORKER:
 					break;
-					// Role
-				case 'r':
-					$owner_context = CerberusContexts::CONTEXT_ROLE;
-					$owner_context_id = $owner_id;
-					break;
-					// Worker
-				case 'w':
-					$owner_context = CerberusContexts::CONTEXT_WORKER;
-					$owner_context_id = $owner_id;
-					break;
-					// Default
+					
 				default:
 					$owner_context = null;
-					$owner_context_id = null;
-					break;
 			}
-
+			
 			if(!empty($owner_context)) {
 				$fields[DAO_WorkspacePage::OWNER_CONTEXT] = $owner_context;
 				$fields[DAO_WorkspacePage::OWNER_CONTEXT_ID] = $owner_context_id;
@@ -867,25 +977,15 @@ class Page_Custom extends CerberusPageExtension {
 			// Owner
 			// [TODO] This could be cleaner
 			
-			@list($owner_type, $owner_id) = explode('_', $owner);
+			@list($owner_context, $owner_context_id) = explode(':', $owner);
 				
-			switch($owner_type) {
-				// Group
-				case 'g':
-					$owner_context = CerberusContexts::CONTEXT_GROUP;
-					$owner_context_id = $owner_id;
+			switch($owner_context) {
+				case CerberusContexts::CONTEXT_APPLICATION:
+				case CerberusContexts::CONTEXT_ROLE:
+				case CerberusContexts::CONTEXT_GROUP:
+				case CerberusContexts::CONTEXT_WORKER:
 					break;
-					// Role
-				case 'r':
-					$owner_context = CerberusContexts::CONTEXT_ROLE;
-					$owner_context_id = $owner_id;
-					break;
-					// Worker
-				case 'w':
-					$owner_context = CerberusContexts::CONTEXT_WORKER;
-					$owner_context_id = $owner_id;
-					break;
-					// Default
+				
 				default:
 					$owner_context = null;
 					$owner_context_id = null;

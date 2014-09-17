@@ -49,8 +49,9 @@
 	
 	<p>
 		<b>{'common.name'|devblocks_translate|capitalize}:</b><br>
-		<input type="text" name="reply_personal" value="{$object->reply_personal}" placeholder="(leave blank for default)" size="65" style="width:100%;"><br>
+		<input type="text" name="reply_personal" value="{$object->reply_personal}" class="placeholders" placeholder="(leave blank for default)" size="65" style="width:100%;"><br>
 		<button type="button" onclick="genericAjaxPost('frmBucketPeek','divSnippetBucketFromTester','c=internal&a=snippetTest&snippet_context=cerberusweb.contexts.worker&snippet_field=reply_personal');">{'common.test'|devblocks_translate|capitalize}</button>
+		<button type="button" onclick="genericAjaxPopup('help', 'c=internal&a=showSnippetHelpPopup', { my:'left top' , at:'left+20 top+20'}, false, '600');">Help</button>
 		<select name="personal_token">
 			<option value="">-- insert at cursor --</option>
 			{foreach from=$worker_token_labels key=k item=v}
@@ -64,9 +65,10 @@
 <fieldset class="peek">
 	<legend>Bucket signature:</legend>
 	
-	<textarea name="reply_signature" rows="5" cols="76" style="width:100%;" placeholder="(leave blank for default)" wrap="off">{$object->reply_signature}</textarea><br>
+	<textarea name="reply_signature" rows="5" cols="76" style="width:100%;" class="placeholders" placeholder="(leave blank for default)" wrap="off">{$object->reply_signature}</textarea><br>
 	<button type="button" onclick="genericAjaxPost('frmBucketPeek','divSnippetBucketSigTester','c=internal&a=snippetTest&snippet_context=cerberusweb.contexts.worker&snippet_field=reply_signature');">{'common.test'|devblocks_translate|capitalize}</button>
 	<button type="button" onclick="genericAjaxGet('','c=tickets&a=getComposeSignature&raw=1&group_id={$group_id}&bucket_id={$bucket_id}',function(txt) { $('#frmBucketPeek textarea').text(txt); } );">{'common.default'|devblocks_translate|capitalize}</button>
+	<button type="button" onclick="genericAjaxPopup('help', 'c=internal&a=showSnippetHelpPopup', { my:'left top' , at:'left+20 top+20'}, false, '600');">Help</button>
 	<select name="sig_token">
 		<option value="">-- insert at cursor --</option>
 		{foreach from=$worker_token_labels key=k item=v}
@@ -120,7 +122,9 @@
 </form>
 
 <script type="text/javascript">
-	$popup = genericAjaxPopupFetch('peek');
+$(function() {
+	var $popup = genericAjaxPopupFetch('peek');
+	
 	$popup.one('popup_open',function(event,ui) {
 		var $this = $(this);
 		
@@ -155,5 +159,25 @@
 		});
 		
 		$this.find('textarea[name=reply_signature]').elastic();
+		
+		$this.find('.placeholders')
+			.atwho({
+				{literal}at: '{%',{/literal}
+				limit: 20,
+				{literal}tpl: '<li data-value="${name}">${content} <small style="margin-left:10px;">${name}</small></li>',{/literal}
+				data: atwho_twig_commands,
+				suffix: ''
+			})
+			.atwho({
+				{literal}at: '|',{/literal}
+				limit: 20,
+				start_with_space: false,
+				search_key: "content",
+				{literal}tpl: '<li data-value="|${name}">${content} <small style="margin-left:10px;">${name}</small></li>',{/literal}
+				data: atwho_twig_modifiers,
+				suffix: ''
+			})
+			;
 	});
+});
 </script>

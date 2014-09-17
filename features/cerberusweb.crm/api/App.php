@@ -12,7 +12,7 @@
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://www.cerberusweb.com	  http://www.webgroupmedia.com/
+|	http://www.cerbweb.com	    http://www.webgroupmedia.com/
 ***********************************************************************/
 
 class CrmPage extends CerberusPageExtension {
@@ -133,7 +133,7 @@ class CrmPage extends CerberusPageExtension {
 			
 			// If we're adding a comment
 			if(!empty($comment)) {
-				@$also_notify_worker_ids = DevblocksPlatform::importGPC($_REQUEST['notify_worker_ids'],'array',array());
+				$also_notify_worker_ids = array_keys(CerberusApplication::getWorkersByAtMentionsText($comment));
 				
 				$fields = array(
 					DAO_Comment::CREATED => time(),

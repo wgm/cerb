@@ -12,7 +12,7 @@
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://www.cerberusweb.com	  http://www.webgroupmedia.com/
+|	http://www.cerbweb.com	    http://www.webgroupmedia.com/
 ***********************************************************************/
 
 class DAO_ContactPerson extends Cerb_ORMHelper {
@@ -338,12 +338,8 @@ class DAO_ContactPerson extends Cerb_ORMHelper {
 		$results = array();
 		
 		while($row = mysqli_fetch_assoc($rs)) {
-			$result = array();
-			foreach($row as $f => $v) {
-				$result[$f] = $v;
-			}
 			$object_id = intval($row[SearchFields_ContactPerson::ID]);
-			$results[$object_id] = $result;
+			$results[$object_id] = $row;
 		}
 
 		$total = count($results);
@@ -1150,10 +1146,10 @@ class Context_ContactPerson extends Extension_DevblocksContext implements IDevbl
 		$tpl->assign('types', $types);
 		
 		// Comments
+		
 		$comments = DAO_Comment::getByContext(CerberusContexts::CONTEXT_CONTACT_PERSON, $context_id);
-		$last_comment = array_shift($comments);
-		unset($comments);
-		$tpl->assign('last_comment', $last_comment);
+		$comments = array_reverse($comments, true);
+		$tpl->assign('comments', $comments);
 		
 		// View
 		$tpl->assign('view_id', $view_id);

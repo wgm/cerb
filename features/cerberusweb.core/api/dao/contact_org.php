@@ -12,7 +12,7 @@
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://www.cerberusweb.com	  http://www.webgroupmedia.com/
+|	http://www.cerbweb.com	    http://www.webgroupmedia.com/
 ***********************************************************************/
 
 class DAO_ContactOrg extends Cerb_ORMHelper {
@@ -427,12 +427,29 @@ class DAO_ContactOrg extends Cerb_ORMHelper {
 				$query = $search->getQueryFromParam($param);
 				$ids = $search->query($query, array('context_crc32' => sprintf("%u", crc32($from_context))));
 				
-				$from_ids = DAO_Comment::getContextIdsByContextAndIds($from_context, $ids);
-				
-				$args['where_sql'] .= sprintf('AND %s IN (%s) ',
-					$from_index,
-					implode(', ', (!empty($from_ids) ? $from_ids : array(-1)))
-				);
+				if(is_array($ids)) {
+					$from_ids = DAO_Comment::getContextIdsByContextAndIds($from_context, $ids);
+					
+					$args['where_sql'] .= sprintf('AND %s IN (%s) ',
+						$from_index,
+						implode(', ', (!empty($from_ids) ? $from_ids : array(-1)))
+					);
+					
+				} elseif(is_string($ids)) {
+					$db = DevblocksPlatform::getDatabaseService();
+					$temp_table = sprintf("_tmp_%s", uniqid());
+					
+					$db->Execute(sprintf("CREATE TEMPORARY TABLE %s SELECT DISTINCT context_id AS id FROM comment INNER JOIN %s ON (%s.id=comment.id)",
+						$temp_table,
+						$ids,
+						$ids
+					));
+					
+					$args['join_sql'] .= sprintf("INNER JOIN %s ON (%s.id=c.id) ",
+						$temp_table,
+						$temp_table
+					);
+				}
 				break;
 			
 			case SearchFields_ContactOrg::VIRTUAL_CONTEXT_LINK:
@@ -491,12 +508,8 @@ class DAO_ContactOrg extends Cerb_ORMHelper {
 		$results = array();
 		
 		while($row = mysqli_fetch_assoc($rs)) {
-			$result = array();
-			foreach($row as $f => $v) {
-				$result[$f] = $v;
-			}
-			$ticket_id = intval($row[SearchFields_ContactOrg::ID]);
-			$results[$ticket_id] = $result;
+			$object_id = intval($row[SearchFields_ContactOrg::ID]);
+			$results[$object_id] = $row;
 		}
 
 		$total = count($results);
@@ -1253,10 +1266,10 @@ class Context_Org extends Extension_DevblocksContext implements IDevblocksContex
 		$tpl->assign('types', $types);
 		
 		// Comments
+		
 		$comments = DAO_Comment::getByContext(CerberusContexts::CONTEXT_ORG, $context_id);
-		$last_comment = array_shift($comments);
-		unset($comments);
-		$tpl->assign('last_comment', $last_comment);
+		$comments = array_reverse($comments, true);
+		$tpl->assign('comments', $comments);
 		
 		// Counts
 		$counts = array(

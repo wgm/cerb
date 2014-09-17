@@ -61,6 +61,12 @@
 </table>
 
 <script type="text/javascript">
+	// Page title
+	
+	document.title = "{$workspace_tab->name|escape:'javascript' nofilter} - {$page->name|escape:'javascript' nofilter} - {$settings->get('cerberusweb.core','helpdesk_title')|escape:'javascript' nofilter}";
+
+	// Widget loader
+	
 	$.widgetAjaxLoader = function() {
 		this.widget_ids = [];
 		this.is_running = false;

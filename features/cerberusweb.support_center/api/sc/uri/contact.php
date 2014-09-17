@@ -123,7 +123,7 @@ class UmScContactController extends Extension_UmScController {
 		$tpl->assign('replyto_default', $replyto_default);
 		
 		// Contact: Fields
-		$ticket_fields = DAO_CustomField::getByContext(CerberusContexts::CONTEXT_TICKET);
+		$ticket_fields = DAO_CustomField::getByContext(CerberusContexts::CONTEXT_TICKET, true, true);
 		$tpl->assign('ticket_fields', $ticket_fields);
 		
 		// Custom field types
@@ -423,6 +423,22 @@ class UmScContactController extends Extension_UmScController {
 						
 					case Model_CustomField::TYPE_WORKER:
 						@$value = DevblocksPlatform::importGPC($_POST['followup_a_'.$iIdx],'integer',0);
+						break;
+						
+					case Model_CustomField::TYPE_FILE:
+						@$file = $_FILES['followup_a_'.$iIdx];
+						$file_ids = CerberusApplication::saveHttpUploadedFiles($file);
+						
+						if(is_array($file_ids) && !empty($file_ids))
+							$value = array_shift($file_ids);
+						break;
+						
+					case Model_CustomField::TYPE_FILES:
+						@$files = $_FILES['followup_a_'.$iIdx];
+						$file_ids = CerberusApplication::saveHttpUploadedFiles($files);
+						
+						if(is_array($file_ids) && !empty($file_ids))
+							$value = $file_ids;
 						break;
 				}
 				

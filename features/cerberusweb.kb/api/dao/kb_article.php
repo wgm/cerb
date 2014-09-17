@@ -12,7 +12,7 @@
  | By using this software, you acknowledge having read this license
  | and agree to be bound thereby.
  | ______________________________________________________________________
- |	http://www.cerberusweb.com	  http://www.webgroupmedia.com/
+ |	http://www.cerbweb.com	    http://www.webgroupmedia.com/
  ***********************************************************************/
 
 class DAO_KbArticle extends Cerb_ORMHelper {
@@ -358,13 +358,24 @@ class DAO_KbArticle extends Cerb_ORMHelper {
 				$query = $search->getQueryFromParam($param);
 				$ids = $search->query($query, array());
 				
-				if(empty($ids))
-					$ids = array(-1);
+				if(is_array($ids)) {
+					if(empty($ids))
+						$ids = array(-1);
+					
+					$args['where_sql'] .= sprintf('AND %s IN (%s) ',
+						$from_index,
+						implode(', ', $ids)
+					);
+					
+				} elseif(is_string($ids)) {
+					$db = DevblocksPlatform::getDatabaseService();
+					
+					$args['join_sql'] .= sprintf("INNER JOIN %s ON (%s.id=kb.id) ",
+						$ids,
+						$ids
+					);
+				}
 				
-				$args['where_sql'] .= sprintf('AND %s IN (%s) ',
-					$from_index,
-					implode(', ', $ids)
-				);
 				break;
 			
 			case SearchFields_KbArticle::VIRTUAL_CONTEXT_LINK:
@@ -407,12 +418,8 @@ class DAO_KbArticle extends Cerb_ORMHelper {
 		$results = array();
 		
 		while($row = mysqli_fetch_assoc($rs)) {
-			$result = array();
-			foreach($row as $f => $v) {
-				$result[$f] = $v;
-			}
 			$id = intval($row[SearchFields_KbArticle::ID]);
-			$results[$id] = $result;
+			$results[$id] = $row;
 		}
 
 		$total = count($results);
@@ -692,6 +699,34 @@ class Model_KbArticle {
 		unset($trails);
 		
 		return $breadcrumbs;
+	}
+	
+	function extractInternalURLsFromContent() {
+		$url_writer = DevblocksPlatform::getUrlService();
+		$img_baseurl = $url_writer->write('c=files', true, false);
+		$img_baseurl_parts = parse_url($img_baseurl);
+		
+		$results = array();
+		
+		// Extract URLs
+		$matches = array();
+			preg_match_all(
+				sprintf('#\"(https*://%s%s/(.*?))\"#i',
+				preg_quote($img_baseurl_parts['host']),
+				preg_quote($img_baseurl_parts['path'])
+			),
+			$this->content,
+			$matches
+		);
+
+		if(isset($matches[1]))
+		foreach($matches[1] as $idx => $replace_url) {
+			$results[$replace_url] = array(
+				'path' => $matches[2][$idx],
+			);
+		}
+		
+		return $results;
 	}
 };
 

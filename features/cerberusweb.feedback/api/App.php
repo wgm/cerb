@@ -12,7 +12,7 @@
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://www.cerberusweb.com	  http://www.webgroupmedia.com/
+|	http://www.cerbweb.com	    http://www.webgroupmedia.com/
 ***********************************************************************/
 /*
  * IMPORTANT LICENSING NOTE from your friends on the Cerb Development Team
@@ -331,12 +331,8 @@ class DAO_FeedbackEntry extends Cerb_ORMHelper {
 		$results = array();
 		
 		while($row = mysqli_fetch_assoc($rs)) {
-			$result = array();
-			foreach($row as $f => $v) {
-				$result[$f] = $v;
-			}
 			$id = intval($row[SearchFields_FeedbackEntry::ID]);
-			$results[$id] = $result;
+			$results[$id] = $row;
 		}
 
 		$total = count($results);

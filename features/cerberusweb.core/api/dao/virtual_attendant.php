@@ -12,7 +12,7 @@
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://www.cerberusweb.com	  http://www.webgroupmedia.com/
+|	http://www.cerbweb.com	    http://www.webgroupmedia.com/
 ***********************************************************************/
 
 class DAO_VirtualAttendant extends Cerb_ORMHelper {
@@ -432,12 +432,8 @@ class DAO_VirtualAttendant extends Cerb_ORMHelper {
 		$results = array();
 		
 		while($row = mysqli_fetch_assoc($rs)) {
-			$result = array();
-			foreach($row as $f => $v) {
-				$result[$f] = $v;
-			}
 			$object_id = intval($row[SearchFields_VirtualAttendant::ID]);
-			$results[$object_id] = $result;
+			$results[$object_id] = $row;
 		}
 
 		$total = count($results);
@@ -1297,13 +1293,6 @@ class Context_VirtualAttendant extends Extension_DevblocksContext implements IDe
 		$action_extensions = DevblocksPlatform::getExtensions('devblocks.event.action', false);
 		DevblocksPlatform::sortObjects($action_extensions, 'params->[label]');
 		$tpl->assign('action_extensions', $action_extensions);
-		
-		// Comments
-		
-		$comments = DAO_Comment::getByContext(CerberusContexts::CONTEXT_VIRTUAL_ATTENDANT, $context_id);
-		$last_comment = array_shift($comments);
-		unset($comments);
-		$tpl->assign('last_comment', $last_comment);
 		
 		$tpl->display('devblocks:cerberusweb.core::internal/va/peek.tpl');
 	}

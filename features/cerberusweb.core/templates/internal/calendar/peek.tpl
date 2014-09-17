@@ -122,6 +122,17 @@
 	<label><input type="radio" name="params[sync_enabled]" value="1" {if !empty($model->params.sync_enabled)}checked="checked"{/if}> enabled</label>
 	<label><input type="radio" name="params[sync_enabled]" value="0" {if empty($model->params.sync_enabled)}checked="checked"{/if}> disabled</label>
 	<br>
+	
+	<b>Start weeks</b> on 
+	<label><input type="radio" name="params[start_on_mon]" value="0" {if empty($model->params.start_on_mon)}checked="checked"{/if}> Sunday</label>
+	<label><input type="radio" name="params[start_on_mon]" value="1" {if !empty($model->params.start_on_mon)}checked="checked"{/if}> Monday</label>
+	<br>
+
+	<b>Start times</b> are 
+	<label><input type="radio" name="params[hide_start_time]" value="0" {if empty($model->params.hide_start_time)}checked="checked"{/if}> visible</label>
+	<label><input type="radio" name="params[hide_start_time]" value="1" {if !empty($model->params.hide_start_time)}checked="checked"{/if}> hidden</label>
+	<br>
+	
 </fieldset>
 
 <fieldset class="calendar-events peek" style="{if !empty($model->params.manual_disabled)}display:none;{/if}">
@@ -190,7 +201,9 @@
 </form>
 
 <script type="text/javascript">
-	$popup = genericAjaxPopupFetch('peek');
+$(function() {
+	var $popup = genericAjaxPopupFetch('peek');
+	
 	$popup.one('popup_open', function(event,ui) {
 		var $this = $(this);
 		
@@ -246,5 +259,6 @@
 		});
 		
 		$this.find('input:text:first').focus();
-	} );
+	});
+});
 </script>

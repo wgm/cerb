@@ -12,7 +12,7 @@
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://www.cerberusweb.com	  http://www.webgroupmedia.com/
+|	http://www.cerbweb.com	    http://www.webgroupmedia.com/
 ***********************************************************************/
 
 class DAO_Message extends Cerb_ORMHelper {
@@ -357,13 +357,24 @@ class DAO_Message extends Cerb_ORMHelper {
 				$query = $search->getQueryFromParam($param);
 				$ids = $search->query($query, array());
 				
-				if(empty($ids))
-					$ids = array(-1);
+				if(is_array($ids)) {
+					if(empty($ids))
+						$ids = array(-1);
+					
+					$args['where_sql'] .= sprintf('AND %s IN (%s) ',
+						$from_index,
+						implode(', ', $ids)
+					);
+					
+				} elseif(is_string($ids)) {
+					$db = DevblocksPlatform::getDatabaseService();
+					
+					$args['join_sql'] .= sprintf("INNER JOIN %s ON (%s.id=m.id) ",
+						$ids,
+						$ids
+					);
+				}
 				
-				$args['where_sql'] .= sprintf('AND %s IN (%s) ',
-					$from_index,
-					implode(', ', $ids)
-				);
 				break;
 			
 			case SearchFields_Message::VIRTUAL_TICKET_STATUS:
@@ -446,12 +457,8 @@ class DAO_Message extends Cerb_ORMHelper {
 		$results = array();
 		
 		while($row = mysqli_fetch_assoc($rs)) {
-			$result = array();
-			foreach($row as $f => $v) {
-				$result[$f] = $v;
-			}
-			$ticket_id = intval($row[SearchFields_Message::ID]);
-			$results[$ticket_id] = $result;
+			$object_id = intval($row[SearchFields_Message::ID]);
+			$results[$object_id] = $row;
 		}
 
 		$total = count($results);
@@ -613,6 +620,13 @@ class Model_Message {
 	
 	function getLinksAndAttachments() {
 		return DAO_AttachmentLink::getLinksAndAttachments(CerberusContexts::CONTEXT_MESSAGE, $this->id);
+	}
+	
+	/**
+	 * @return Model_Ticket
+	 */
+	function getTicket() {
+		return DAO_Ticket::get($this->ticket_id);
 	}
 };
 

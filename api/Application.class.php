@@ -7,12 +7,12 @@
 |
 | This source code is released under the Devblocks Public License.
 | The latest version of this license can be found here:
-| http://cerberusweb.com/license
+| http://cerbweb.com/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://www.cerberusweb.com	  http://www.webgroupmedia.com/
+|	http://www.cerbweb.com	    http://www.webgroupmedia.com/
 ***********************************************************************/
 /*
  * IMPORTANT LICENSING NOTE from your friends on the Cerb Development Team
@@ -46,8 +46,8 @@
  \* - Jeff Standen, Darren Sugita, Dan Hildebrandt
  *	 Webgroup Media LLC - Developers of Cerb
  */
-define("APP_BUILD", 2014082001);
-define("APP_VERSION", '6.7.10');
+define("APP_BUILD", 2014091601);
+define("APP_VERSION", '6.8.0');
 
 define("APP_MAIL_PATH", APP_STORAGE_PATH . '/mail/');
 
@@ -107,6 +107,56 @@ class CerberusApplication extends DevblocksApplication {
 			? $visit->getWorker()
 			: null
 			;
+	}
+	
+	static function getWorkersByAtMentionsText($text) {
+		$workers = array();
+		
+		if(false !== ($at_mentions = DevblocksPlatform::parseAtMentionString($text))) {
+			$workers = DAO_Worker::getByAtMentions($at_mentions);
+		}
+		
+		return $workers;
+	}
+	
+	static function getFileBundleDictionaryJson() {
+		$file_bundles = DAO_FileBundle::getAll();
+		$active_worker = CerberusApplication::getActiveWorker();
+		
+		$list = array();
+		
+		if(is_array($file_bundles))
+		foreach($file_bundles as $file_bundle) { /* @var $file_bundle Model_FileBundle */
+			// Filter by owner/readable
+			if($active_worker && !$file_bundle->isReadableByActor($active_worker))
+				continue;
+			
+			$list[] = array(
+				'id' => $file_bundle->id,
+				'name' => $file_bundle->name,
+				'tag' => $file_bundle->tag,
+			);
+		}
+		
+		return json_encode($list);
+	}
+	
+	static function getAtMentionsWorkerDictionaryJson() {
+		$workers = DAO_Worker::getAllActive();
+		
+		$list = array();
+		
+		foreach($workers as $worker) {
+			$list[] = array(
+				'id' => $worker->id,
+				'name' => $worker->getName(),
+				'email' => $worker->email,
+				'title' => $worker->title,
+				'at_mention' => $worker->at_mention_name,
+			);
+		}
+		
+		return json_encode($list);
 	}
 	
 	/**
@@ -619,6 +669,63 @@ class CerberusApplication extends DevblocksApplication {
 		}
 		return $ticket_id;
 	}
+
+	/**
+	 * Save form-uploaded files as Cerb attachments, with dupe detection.
+	 *
+	 * @param array $files
+	 * @return array
+	 */
+	static function saveHttpUploadedFiles($files) {
+		$file_ids = array();
+		
+		// Sanitize
+		if(!isset($files['name']) || !isset($files['tmp_name']))
+			return false;
+		
+		// Convert a single file upload into an array
+		if(!is_array($files['name'])) {
+			$files['name'] = array($files['name']);
+			$files['type'] = array($files['type']);
+			$files['tmp_name'] = array($files['tmp_name']);
+			$files['error'] = array($files['error']);
+			$files['size'] = array($files['size']);
+		}
+		
+		if (is_array($files) && !empty($files)) {
+			reset($files);
+			foreach($files['tmp_name'] as $idx => $file) {
+				if(empty($file) || empty($files['name'][$idx]) || !file_exists($file))
+					continue;
+
+				// Dupe detection
+				@$sha1_hash = sha1_file($file, false);
+				
+				if(false == ($file_id = DAO_Attachment::getBySha1Hash($sha1_hash, $files['name'][$idx]))) {
+					$fields = array(
+						DAO_Attachment::DISPLAY_NAME => $files['name'][$idx],
+						DAO_Attachment::MIME_TYPE => $files['type'][$idx],
+						DAO_Attachment::STORAGE_SHA1HASH => $sha1_hash,
+					);
+					$file_id = DAO_Attachment::create($fields);
+					
+					// Content
+					if(null !== ($fp = fopen($file, 'rb'))) {
+						Storage_Attachments::put($file_id, $fp);
+						fclose($fp);
+					}
+				}
+
+				// Save results
+				if($file_id)
+					$file_ids[] = intval($file_id);
+				
+				@unlink($file);
+			}
+		}
+		
+		return $file_ids;
+	}
 };
 
 class CerbException extends DevblocksException {
@@ -658,9 +765,11 @@ class CerberusContexts {
 	const CONTEXT_FEED = 'cerberusweb.contexts.feed';
 	const CONTEXT_FEED_ITEM = 'cerberusweb.contexts.feed.item';
 	const CONTEXT_FEEDBACK = 'cerberusweb.contexts.feedback';
+	const CONTEXT_FILE_BUNDLE = 'cerberusweb.contexts.file_bundle';
 	const CONTEXT_GROUP = 'cerberusweb.contexts.group';
 	const CONTEXT_KB_ARTICLE = 'cerberusweb.contexts.kb_article';
 	const CONTEXT_KB_CATEGORY = 'cerberusweb.contexts.kb_category';
+	const CONTEXT_MAIL_HTML_TEMPLATE = 'cerberusweb.contexts.mail.html_template';
 	const CONTEXT_MESSAGE = 'cerberusweb.contexts.message';
 	const CONTEXT_NOTIFICATION= 'cerberusweb.contexts.notification';
 	const CONTEXT_OPPORTUNITY = 'cerberusweb.contexts.opportunity';
@@ -971,9 +1080,64 @@ class CerberusContexts {
 		return $actor;
 	}
 	
+	public static function getAvailableOwners(Model_Worker $as_worker) {
+		$roles = DAO_WorkerRole::getAll();
+		$workers = DAO_Worker::getAll();
+		$groups = DAO_Group::getAll();
+		
+		$owners = array(
+			array(
+				'label' => 'Application: Cerb',
+				'context' => CerberusContexts::CONTEXT_APPLICATION,
+				'context_id' => 0,
+			),
+		);
+
+		if(is_array($groups))
+		foreach($groups as $k => $group) { /* @var $group Model_Group */
+			if($as_worker->is_superuser || $as_worker->isGroupManager($k)) {
+				$owners[] = array(
+					'label' => 'Group: ' . $group->name,
+					'context' => CerberusContexts::CONTEXT_GROUP,
+					'context_id' => $group->id,
+				);
+			}
+		}
+
+		if(is_array($roles))
+		foreach($roles as $k => $role) { /* @var $role Model_WorkerRole */
+			if($as_worker->is_superuser) {
+				$owners[] = array(
+					'label' => 'Role: ' . $role->name,
+					'context' => CerberusContexts::CONTEXT_ROLE,
+					'context_id' => $role->id,
+				);
+			}
+		}
+		
+		if($as_worker->is_superuser)
+		if(is_array($workers))
+		foreach($workers as $worker) { /* @var $worker Model_Worker */
+			if(!$worker->is_disabled)
+				$owners[] = array(
+					'label' => 'Worker: ' . $worker->getName(),
+					'context' => CerberusContexts::CONTEXT_WORKER,
+					'context_id' => $worker->id,
+				);
+		}
+		
+		// Sort
+		DevblocksPlatform::sortObjects($owners, '[label]', true);
+		
+		return $owners;
+	}
+	
 	public static function isReadableByActor($owner_context, $owner_context_id, $actor) {
 		if(false == ($actor = CerberusContexts::polymorphActor($actor)))
 			return false;
+		
+		if($actor instanceof Model_Application)
+			return true;
 		
 		switch($owner_context) {
 			// Everyone can see app-owned content
@@ -1058,30 +1222,13 @@ class CerberusContexts {
 
 	public static function isWriteableByActor($owner_context, $owner_context_id, $actor) {
 		// Polymorph actor from context array
-		if(is_array($actor)) {
-			@list($actor_context, $actor_context_id) = $actor;
-			
-			switch($actor_context) {
-				case CerberusContexts::CONTEXT_ROLE:
-					$actor = DAO_WorkerRole::get($actor_context_id);
-					break;
-				case CerberusContexts::CONTEXT_GROUP:
-					$actor = DAO_Group::get($actor_context_id);
-					break;
-				case CerberusContexts::CONTEXT_WORKER:
-					$actor = DAO_Worker::get($actor_context_id);
-					break;
-				case CerberusContexts::CONTEXT_VIRTUAL_ATTENDANT:
-					$actor = DAO_VirtualAttendant::get($actor_context_id);
-					break;
-			}
-		}
-		
-		if(!is_object($actor))
+		if(false == ($actor = CerberusContexts::polymorphActor($actor)))
 			return false;
 		
+		if($actor instanceof Model_Application)
+			return true;
+		
 		switch($owner_context) {
-			// Everyone can see app-owned content
 			case CerberusContexts::CONTEXT_APPLICATION:
 				switch(get_class($actor)) {
 					case 'Model_WorkerRole': /* @var $actor Model_WorkerRole */
@@ -1423,6 +1570,7 @@ class CerberusContexts {
 				if(empty($actor_context) && !empty(self::$_default_actor_context)) {
 					$actor_context = self::$_default_actor_context;
 					$actor_context_id = self::$_default_actor_context_id;
+					
 					if(null != ($ctx = DevblocksPlatform::getExtension($actor_context, true))
 						&& $ctx instanceof Extension_DevblocksContext) {
 						$meta = $ctx->getMeta($actor_context_id);
@@ -1863,7 +2011,7 @@ class CerberusLicense {
 	}
 	
 	public static function getReleases() {
-		/*																																																																																																																														*/return array('5.0.0'=>1271894400,'5.1.0'=>1281830400,'5.2.0'=>1288569600,'5.3.0'=>1295049600,'5.4.0'=>1303862400,'5.5.0'=>1312416000,'5.6.0'=>1317686400,'5.7.0'=>1326067200,'6.0.0'=>1338163200,'6.1.0'=>1346025600,'6.2.0'=>1353888000,'6.3.0'=>1364169600,'6.4.0'=>1370217600,'6.5.0'=>1379289600,'6.6.0'=>1391126400,'6.7.0'=>1398124800);/*
+		/*																																																																																																																														*/return array('5.0.0'=>1271894400,'5.1.0'=>1281830400,'5.2.0'=>1288569600,'5.3.0'=>1295049600,'5.4.0'=>1303862400,'5.5.0'=>1312416000,'5.6.0'=>1317686400,'5.7.0'=>1326067200,'6.0.0'=>1338163200,'6.1.0'=>1346025600,'6.2.0'=>1353888000,'6.3.0'=>1364169600,'6.4.0'=>1370217600,'6.5.0'=>1379289600,'6.6.0'=>1391126400,'6.7.0'=>1398124800,'6.8.0'=>1410739200);/*
 		 * Major versions by release date in GMT
 		 */
 		return array(
@@ -1883,6 +2031,7 @@ class CerberusLicense {
 			'6.5.0' => gmmktime(0,0,0,9,16,2013),
 			'6.6.0' => gmmktime(0,0,0,1,31,2014),
 			'6.7.0' => gmmktime(0,0,0,4,22,2014),
+			'6.8.0' => gmmktime(0,0,0,9,15,2014),
 		);
 	}
 	

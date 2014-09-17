@@ -6,9 +6,9 @@
 <fieldset class="peek">
 	<legend style="color:rgb(80,80,80);">What kind of page would you like to create?</legend>
 	
-	<div>
+	<div style="margin-bottom:10px;">
 		<label>
-			<input type="radio" name="" value="" checked="checked"> 
+			<input type="radio" name="page_type" value="mail" checked="checked"> 
 			<h2 style="display:inline;">Mail</h2>
 		</label>
 		<div style="margin-left:20px;">
@@ -32,6 +32,43 @@
 			</div>
 		</div>
 	</div>
+	
+	{if DevblocksPlatform::isPluginEnabled('cerberusweb.kb')}
+	<div style="margin-bottom:10px;">
+		<label>
+			<input type="radio" name="page_type" value="kb"> 
+			<h2 style="display:inline;">Knowledgebase</h2>
+		</label>
+		<div style="margin-left:20px;">
+			<div class="tabs">
+				<ul>
+					<li><a href="#reports_tab">Knowledgebase</a></li>
+				</ul>
+				
+				<div id="reports_tab"></div>
+			</div>
+		</div>
+	</div>
+	{/if}
+	
+	{if DevblocksPlatform::isPluginEnabled('cerberusweb.reports')}
+	<div style="margin-bottom:10px;">
+		<label>
+			<input type="radio" name="page_type" value="reports"> 
+			<h2 style="display:inline;">Reports</h2>
+		</label>
+		<div style="margin-left:20px;">
+			<div class="tabs">
+				<ul>
+					<li><a href="#reports_tab">Reports</a></li>
+				</ul>
+				
+				<div id="reports_tab"></div>
+			</div>
+		</div>
+	</div>
+	{/if}
+	
 </fieldset>
 
 <div>
@@ -41,7 +78,9 @@
 </form>
 
 <script type="text/javascript">
-	$popup = genericAjaxPopupFetch('peek');
+$(function() {
+	var $popup = genericAjaxPopupFetch('peek');
+	
 	$popup.one('popup_open',function(event,ui) {
 		$(this).dialog('option','title',"Let's make a page...");
 		$('#frmPageWizard :input:text:first').focus().select();
@@ -50,4 +89,5 @@
 			active:0
 		});
 	});
+});
 </script>

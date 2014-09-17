@@ -12,7 +12,7 @@
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://www.cerberusweb.com	  http://www.webgroupmedia.com/
+|	http://www.cerbweb.com	    http://www.webgroupmedia.com/
 ***********************************************************************/
 
 class ChInternalController extends DevblocksControllerExtension {
@@ -583,6 +583,7 @@ class ChInternalController extends DevblocksControllerExtension {
 		@$context = DevblocksPlatform::importGPC($_REQUEST['context'],'string');
 		@$contexts = DevblocksPlatform::importGPC($_REQUEST['contexts'],'string');
 		@$layer = DevblocksPlatform::importGPC($_REQUEST['layer'],'string');
+		@$single = DevblocksPlatform::importGPC($_REQUEST['single'], 'integer', 0);
 
 		if(null != ($context_extension = DevblocksPlatform::getExtension($context, true))) {
 			$tpl = DevblocksPlatform::getTemplateService();
@@ -601,12 +602,14 @@ class ChInternalController extends DevblocksControllerExtension {
 				foreach($target_contexts as $target_context_pair) {
 					@list($target_context, $target_context_id) = explode(':', $target_context_pair);
 
-					// Load the context dictionary for scope
-					$labels = array();
-					$values = array();
-					CerberusContexts::getContext($target_context, $target_context_id, $labels, $values);
-
-					$dicts[$target_context] = $values;
+					if(!empty($target_context_id)) {
+						// Load the context dictionary for scope
+						$labels = array();
+						$values = array();
+						CerberusContexts::getContext($target_context, $target_context_id, $labels, $values);
+	
+						$dicts[$target_context] = $values;
+					}
 					
 					// Stack filters for the view
 					if(!empty($target_context))
@@ -630,6 +633,7 @@ class ChInternalController extends DevblocksControllerExtension {
 			C4_AbstractViewLoader::setView($view->id, $view);
 			
 			$tpl->assign('view', $view);
+			$tpl->assign('single', $single);
 			
 			$tpl->display('devblocks:cerberusweb.core::context_links/choosers/__snippet.tpl');
 		}
@@ -742,9 +746,14 @@ class ChInternalController extends DevblocksControllerExtension {
 
 	function chooserOpenFileUploadAction() {
 		@$files = $_FILES['file_data'];
+		@$bundle_ids = DevblocksPlatform::importGPC($_REQUEST['bundle_ids'], 'array:integer', array());
+		
 		$url_writer = DevblocksPlatform::getUrlService();
+		
 		$results = array();
 
+		// File uploads
+		
 		if(is_array($files) && isset($files['tmp_name']))
 		foreach(array_keys($files['tmp_name']) as $file_idx) {
 			$file_name = $files['name'][$file_idx];
@@ -786,7 +795,32 @@ class ChInternalController extends DevblocksControllerExtension {
 			
 			@unlink($file_tmp_name);
 		}
+		
+		// Bundles
+		
+		if(is_array($bundle_ids) && !empty($bundle_ids)) {
+			$bundles = DAO_FileBundle::getIds($bundle_ids);
 
+			if(is_array($bundles))
+			foreach($bundles as $bundle) {
+				$attachments = $bundle->getAttachments();
+				
+				if(is_array($attachments))
+				foreach($attachments as $attachment) { /* @var $attachment Model_Attachment */
+					$results[] = array(
+						'id' => $attachment->id,
+						'name' => $attachment->display_name,
+						'type' => $attachment->mime_type,
+						'size' => $attachment->storage_size,
+						'sha1_hash' => $attachment->storage_sha1hash,
+						'url' => $url_writer->write(sprintf("c=files&hash=%s&name=%s", $attachment->storage_sha1hash, urlencode($attachment->display_name)), true),
+					);
+				}
+			}
+		}
+
+		// JSON
+		
 		echo json_encode($results);
 	}
 
@@ -854,7 +888,6 @@ class ChInternalController extends DevblocksControllerExtension {
 				$params = array(
 					array(
 						DevblocksSearchCriteria::GROUP_OR,
-						
 						array(
 							DevblocksSearchCriteria::GROUP_AND,
 							SearchFields_ContextActivityLog::TARGET_CONTEXT => new DevblocksSearchCriteria(SearchFields_ContextActivityLog::TARGET_CONTEXT,'=',$context),
@@ -950,6 +983,32 @@ class ChInternalController extends DevblocksControllerExtension {
 					$list[] = $entry;
 				}
 				break;
+				
+			case CerberusContexts::CONTEXT_FILE_BUNDLE:
+				$bundles = DAO_FileBundle::getAll();
+				
+				$results = array_filter($bundles, function($bundle) use ($active_worker, $term) { /* @var $bundle Model_FileBundle */
+					// Check if the term exists
+					if(false === stristr($bundle->name . ' ' . $bundle->tag, $term))
+						return false;
+					
+					// Check if the record is readable by the actor 
+					if(!CerberusContexts::isReadableByActor($bundle->owner_context, $bundle->owner_context_id, $active_worker))
+						return false;
+					
+					return true;
+				});
+				
+				// [TODO] Rank results?
+				
+				foreach($results as $bundle) { /* @var $bundle Model_FileBundle */
+					$entry = new stdClass();
+					$entry->label = $bundle->name;
+					$entry->value = intval($bundle->id);
+					$list[] = $entry;
+				}
+				
+				break;
 
 			case CerberusContexts::CONTEXT_GROUP:
 				list($results, $null) = DAO_Group::search(
@@ -1002,6 +1061,7 @@ class ChInternalController extends DevblocksControllerExtension {
 				// Restrict owners
 				$param_ownership = array(
 					DevblocksSearchCriteria::GROUP_OR,
+					SearchFields_Snippet::OWNER_CONTEXT => new DevblocksSearchCriteria(SearchFields_Snippet::OWNER_CONTEXT,DevblocksSearchCriteria::OPER_EQ,CerberusContexts::CONTEXT_APPLICATION),
 					array(
 						DevblocksSearchCriteria::GROUP_AND,
 						SearchFields_Snippet::OWNER_CONTEXT => new DevblocksSearchCriteria(SearchFields_Snippet::OWNER_CONTEXT,DevblocksSearchCriteria::OPER_EQ,CerberusContexts::CONTEXT_WORKER),
@@ -1063,6 +1123,18 @@ class ChInternalController extends DevblocksControllerExtension {
 				}
 				break;
 
+			case CerberusContexts::CONTEXT_TICKET:
+				$results = DAO_Ticket::autocomplete($term);
+
+				if(is_array($results))
+				foreach($results as $ticket_id => $ticket){
+					$entry = new stdClass();
+					$entry->label = sprintf("[#%s] %s", $ticket->mask, $ticket->subject);
+					$entry->value = sprintf("%d", $ticket_id);
+					$list[] = $entry;
+				}
+				break;
+				
 			case CerberusContexts::CONTEXT_WORKER:
 				$results = DAO_Worker::autocomplete($term);
 
@@ -1186,6 +1258,11 @@ class ChInternalController extends DevblocksControllerExtension {
 	}
 	
 	// Snippets
+	
+	function showSnippetHelpPopupAction() {
+		$tpl = DevblocksPlatform::getTemplateService();
+		$tpl->display('devblocks:cerberusweb.core::internal/snippets/help_popup.tpl');
+	}
 
 	function showTabSnippetsAction() {
 		@$point = DevblocksPlatform::importGPC($_REQUEST['point'],'string','');
@@ -1255,6 +1332,7 @@ class ChInternalController extends DevblocksControllerExtension {
 		$tpl->assign('contexts', $contexts);
 
 		// Custom fields
+		
 		$custom_fields = DAO_CustomField::getByContext(CerberusContexts::CONTEXT_SNIPPET, false);
 		$tpl->assign('custom_fields', $custom_fields);
 
@@ -1267,7 +1345,8 @@ class ChInternalController extends DevblocksControllerExtension {
 		$types = Model_CustomField::getTypes();
 		$tpl->assign('types', $types);
 		
-		// Owners
+		// Ownership
+		
 		$roles = DAO_WorkerRole::getAll();
 		$tpl->assign('roles', $roles);
 		
@@ -1290,6 +1369,8 @@ class ChInternalController extends DevblocksControllerExtension {
 				$owner_roles[$k] = $v;
 		}
 		$tpl->assign('owner_roles', $owner_roles);
+		
+		// Template
 		
 		if($snippet->isWriteableByWorker($active_worker)) {
 			$tpl->display('devblocks:cerberusweb.core::internal/snippets/peek.tpl');
@@ -1342,38 +1423,63 @@ class ChInternalController extends DevblocksControllerExtension {
 			}
 			
 		} else { // Create || Update
-			@list($owner_type, $owner_id) = explode('_', DevblocksPlatform::importGPC($_REQUEST['owner'],'string',''));
+			@list($owner_context, $owner_context_id) = explode(':', DevblocksPlatform::importGPC($_REQUEST['owner'],'string',''));
 		
-			switch($owner_type) {
-				// Role
-				case 'r':
-					$owner_context = CerberusContexts::CONTEXT_ROLE;
-					$owner_context_id = $owner_id;
+			switch($owner_context) {
+				case CerberusContexts::CONTEXT_APPLICATION:
+				case CerberusContexts::CONTEXT_ROLE:
+				case CerberusContexts::CONTEXT_GROUP:
+				case CerberusContexts::CONTEXT_WORKER:
 					break;
-				// Group
-				case 'g':
-					$owner_context = CerberusContexts::CONTEXT_GROUP;
-					$owner_context_id = $owner_id;
-					break;
-				// Worker
-				case 'w':
-					$owner_context = CerberusContexts::CONTEXT_WORKER;
-					$owner_context_id = $owner_id;
-					break;
-				// Default
+					
 				default:
 					$owner_context = null;
 					$owner_context_id = null;
 					break;
 			}
 			
-			if(empty($owner_context) || empty($owner_context_id)) {
+			if(empty($owner_context)) {
 				$owner_context = CerberusContexts::CONTEXT_WORKER;
 				$owner_context_id = $active_worker->id;
 			}
 			
+			// Owner
+			
 			$fields[DAO_Snippet::OWNER_CONTEXT] = $owner_context;
 			$fields[DAO_Snippet::OWNER_CONTEXT_ID] = $owner_context_id;
+			
+			// Custom placeholders
+			
+			$placeholders = array();
+			@$placeholder_keys = DevblocksPlatform::importGPC($_REQUEST['placeholder_keys'],'array',array());
+			
+			if(is_array($placeholder_keys) && !empty($placeholder_keys)) {
+				@$placeholder_types = DevblocksPlatform::importGPC($_REQUEST['placeholder_types'],'array',array());
+				@$placeholder_labels = DevblocksPlatform::importGPC($_REQUEST['placeholder_labels'],'array',array());
+				@$placeholder_defaults = DevblocksPlatform::importGPC($_REQUEST['placeholder_defaults'],'array',array());
+				@$placeholder_deletes = DevblocksPlatform::importGPC($_REQUEST['placeholder_deletes'],'array',array());
+				
+				foreach($placeholder_keys as $placeholder_idx => $placeholder_key) {
+					@$placeholder_type = $placeholder_types[$placeholder_idx];
+					@$placeholder_label = $placeholder_labels[$placeholder_idx];
+					@$placeholder_default = $placeholder_defaults[$placeholder_idx];
+					@$placeholder_delete = $placeholder_deletes[$placeholder_idx];
+					
+					if(empty($placeholder_key) || !empty($placeholder_delete))
+						continue;
+					
+					$placeholders[$placeholder_key] = array(
+						'type' => $placeholder_type,
+						'key' => $placeholder_key,
+						'label' => $placeholder_label,
+						'default' => $placeholder_default,
+					);
+				}
+				
+				$fields[DAO_Snippet::CUSTOM_PLACEHOLDERS_JSON] = json_encode($placeholders);
+			}
+			
+			// Create / Update
 			
 			if(empty($id)) {
 				if($active_worker->hasPriv('core.snippets.actions.create')) {
@@ -1400,6 +1506,7 @@ class ChInternalController extends DevblocksControllerExtension {
 					}
 				}
 			}
+
 		}
 		
 		
@@ -1414,14 +1521,18 @@ class ChInternalController extends DevblocksControllerExtension {
 
 		$tpl_builder = DevblocksPlatform::getTemplateBuilder();
 		$active_worker = CerberusApplication::getActiveWorker();
+		
+		$token_labels = array();
+		$token_values = array();
 
 		if(null != ($snippet = DAO_Snippet::get($id))) {
 			// Make sure the worker is allowed to view this context+ID
 			if(!empty($snippet->context)) {
 				if(null == ($context = Extension_DevblocksContext::get($snippet->context))) /* @var $context Extension_DevblocksContext */
-					exit;
+					return;
+				
 				if(!$context->authorize($context_id, $active_worker))
-					exit;
+					return;
 			}
 			
 			CerberusContexts::getContext($snippet->context, $context_id, $token_labels, $token_values);
@@ -1436,19 +1547,90 @@ class ChInternalController extends DevblocksControllerExtension {
 		} else {
 			$output = $snippet->content;
 		}
-
-		if(!empty($output))
-			echo rtrim($output,"\r\n"),"\n";
+		
+		header('Content-Type: application/json');
+		
+		echo json_encode(array(
+			'id' => $id,
+			'context_id' => $context_id,
+			'has_custom_placeholders' => !empty($snippet->custom_placeholders),
+			'text' => rtrim($output,"\r\n") . "\n",
+		));
 	}
 	
 	function snippetPlaceholdersAction() {
-		@$text = DevblocksPlatform::importGPC($_REQUEST['text'],'string','');
+		@$id = DevblocksPlatform::importGPC($_REQUEST['id'],'integer',0);
+		@$context_id = DevblocksPlatform::importGPC($_REQUEST['context_id'],'integer',0);
+
+		$active_worker = CerberusApplication::getActiveWorker();
+		
+		if(!$id || false == ($snippet = DAO_Snippet:: get($id)))
+			return;
+		
+		if(!($snippet->isReadableByWorker($active_worker)))
+			return;
+
+		$tpl = DevblocksPlatform::getTemplateService();
+		
+		$tpl->assign('snippet', $snippet);
+		$tpl->assign('context_id', $context_id);
+		
+		$tpl->display('devblocks:cerberusweb.core::internal/snippets/paste_placeholders.tpl');
+	}
+	
+	function snippetPlaceholdersPreviewAction() {
+		@$id = DevblocksPlatform::importGPC($_REQUEST['id'],'integer',0);
+		@$context_id = DevblocksPlatform::importGPC($_REQUEST['context_id'],'integer',0);
+		@$placeholders = DevblocksPlatform::importGPC($_REQUEST['placeholders'],'array',array());
+
+		$active_worker = CerberusApplication::getActiveWorker();
+		
+		if(!$id || false == ($snippet = DAO_Snippet:: get($id)))
+			return;
+		
+		if(!($snippet->isReadableByWorker($active_worker)))
+			return;
+
+		$tpl_builder = DevblocksPlatform::getTemplateBuilder();
+		$custom_placeholders = $snippet->custom_placeholders;
+		
+		$text = $snippet->content;
+		
+		$labels = array();
+		$values = array();
+		
+		if($context_id) {
+			CerberusContexts::getContext($snippet->context, $context_id, $labels, $values, null, true, false);
+		}
+		
+		if(is_array($custom_placeholders))
+		foreach($custom_placeholders as $placeholder_key => $placeholder) {
+			$value = null;
+			
+			if(!isset($placeholders[$placeholder_key]))
+				$placeholders[$placeholder_key] = '{{' . $placeholder_key . '}}';
+			
+			switch($placeholder['type']) {
+				case Model_CustomField::TYPE_CHECKBOX:
+					@$value = $placeholders[$placeholder_key] ? true : false;
+					break;
+					
+				case Model_CustomField::TYPE_SINGLE_LINE:
+				case Model_CustomField::TYPE_MULTI_LINE:
+					@$value = $placeholders[$placeholder_key];
+					break;
+			}
+			
+			$values[$placeholder_key] = $value;
+		}
+		
+		$text = $tpl_builder->build($text, $values);
 
 		$tpl = DevblocksPlatform::getTemplateService();
 		
 		$tpl->assign('text', $text);
 		
-		$tpl->display('devblocks:cerberusweb.core::internal/snippets/paste_placeholders.tpl');
+		$tpl->display('devblocks:cerberusweb.core::internal/snippets/paste_placeholders_preview.tpl');
 	}
 
 	function snippetTestAction() {
@@ -1473,6 +1655,19 @@ class ChInternalController extends DevblocksControllerExtension {
 			$snippet_context_id = $ctx->getRandom();
 		
 		CerberusContexts::getContext($snippet_context, $snippet_context_id, $token_labels, $token_values);
+
+		// Add prompted placeholders to the valid tokens
+		
+		@$placeholder_keys = DevblocksPlatform::importGPC($_REQUEST['placeholder_keys'], 'array', array());
+		@$placeholder_defaults = DevblocksPlatform::importGPC($_REQUEST['placeholder_defaults'], 'array', array());
+		
+		foreach($placeholder_keys as $idx => $v) {
+			@$placeholder_default = $placeholder_defaults[$idx];
+			$token_values[$v] =  (!empty($placeholder_default) ? $placeholder_default : ('{{' . $v . '}}'));
+			$token_labels[$v] =  $token_values[$v];
+		}
+		
+		// Tester
 		
 		$success = false;
 		$output = '';
@@ -1480,11 +1675,13 @@ class ChInternalController extends DevblocksControllerExtension {
 		if(!empty($token_values)) {
 			// Tokenize
 			$tokens = $tpl_builder->tokenize($content);
-			$valid_tokens = $tpl_builder->stripModifiers(array_keys($token_labels));
+			$unknown_tokens = array();
+			
+			//$valid_tokens = $tpl_builder->stripModifiers(array_keys($token_labels));
 			
 			// Test legal values
-			$unknown_tokens = array_diff($tokens, $valid_tokens);
-			$matching_tokens = array_intersect($tokens, $valid_tokens);
+			//$unknown_tokens = array_diff($tokens, $valid_tokens);
+			//$matching_tokens = array_intersect($tokens, $valid_tokens);
 			
 			if(!empty($unknown_tokens)) {
 				$success = false;
@@ -3967,6 +4164,33 @@ class ChInternalController extends DevblocksControllerExtension {
 		$ext->renderEventParams(null);
 	}
 	
+	function showSnippetPlaceholdersAction() {
+		@$name_prefix = DevblocksPlatform::importGPC($_REQUEST['name_prefix'],'string', '');
+		@$id = DevblocksPlatform::importGPC($_REQUEST['id'],'integer', 0);
+
+		$tpl = DevblocksPlatform::getTemplateService();
+		
+		$tpl->assign('namePrefix', $name_prefix);
+		
+		if(null != ($snippet = DAO_Snippet::get($id)))
+			$tpl->assign('snippet', $snippet);
+		
+		$tpl->display('devblocks:cerberusweb.core::events/action_set_placeholder_using_snippet_params.tpl');
+	}
+	
+	// Convert [nested][string] $path to array
+	private function _getValueFromNestedArray($path, array $array) {
+		$keys = explode('][', trim($path, '[]'));
+		
+		$ptr =& $array;
+		
+		while($key = array_shift($keys)) {
+			$ptr =& $ptr[$key];
+		}
+		
+		return $ptr;
+	}
+	
 	function testDecisionEventSnippetsAction() {
 		@$prefix = DevblocksPlatform::importGPC($_REQUEST['prefix'],'string','');
 		@$trigger_id = DevblocksPlatform::importGPC($_REQUEST['trigger_id'],'integer',0);
@@ -3978,13 +4202,14 @@ class ChInternalController extends DevblocksControllerExtension {
 		
 			if(is_array($fields))
 			foreach($fields as $field) {
+				@$append = $this->_getValueFromNestedArray($field, $_REQUEST[$prefix]);
 				@$append = DevblocksPlatform::importGPC($_REQUEST[$prefix][$field],'string','');
 				$content .= !empty($append) ? ('[' . $field . ']: ' . PHP_EOL . $append . PHP_EOL . PHP_EOL) : '';
 			}
 			
 		} else {
 			@$field = DevblocksPlatform::importGPC($_REQUEST['field'],'string','');
-			@$content = DevblocksPlatform::importGPC($_REQUEST[$prefix][$field],'string','');
+			@$content = $this->_getValueFromNestedArray($field, $_REQUEST[$prefix]);
 		}
 		
 		if(null == ($trigger = DAO_TriggerEvent::get($trigger_id)))
@@ -4196,7 +4421,7 @@ class ChInternalController extends DevblocksControllerExtension {
 		if(empty($context) || empty($context_id) || empty($comment))
 			return;
 
-		@$also_notify_worker_ids = DevblocksPlatform::importGPC($_REQUEST['notify_worker_ids'],'array',array());
+		$also_notify_worker_ids = array_keys(CerberusApplication::getWorkersByAtMentionsText($comment));
 		
 		$fields = array(
 			DAO_Comment::CONTEXT => $context,

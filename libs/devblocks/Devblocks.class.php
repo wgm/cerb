@@ -139,6 +139,7 @@ class DevblocksPlatform extends DevblocksEngine {
 				$value = floatval($value);
 				break;
 				
+			case 'int':
 			case 'integer':
 				$value = intval($value);
 				break;
@@ -254,6 +255,16 @@ class DevblocksPlatform extends DevblocksEngine {
 		}
 		
 		return $parts;
+	}
+	
+	static function parseAtMentionString($string) {
+		//$string = "@Hildy Do you have time for this today?  If not, ask @Jeff, or @Darren.";
+		preg_match_all('#(\@[A-Za-z0-9_]+)([^A-Za-z0-9_]|$)#', $string, $matches);
+		
+		if(is_array($matches) && isset($matches[1]))
+			return $matches[1];
+		
+		return false;
 	}
 	
 	static function intVersionToStr($version, $sections=3) {
@@ -1216,8 +1227,8 @@ class DevblocksPlatform extends DevblocksEngine {
 	 * @return boolean
 	 */
 	static function isDatabaseEmpty() {
-		$tables = self::getDatabaseTables();
-		return empty($tables);
+		$db = DevblocksPlatform::getDatabaseService();
+		return $db->isEmpty();
 	}
 	
 	static function getDatabaseTables($nocache=false) {
@@ -1534,7 +1545,8 @@ class DevblocksPlatform extends DevblocksEngine {
 			return $plugins;
 
 		$db = DevblocksPlatform::getDatabaseService();
-		if(is_null($db))
+		
+		if(is_null($db) || !$db->isConnected() || $db->isEmpty())
 			return;
 
 		$plugins = array();

@@ -12,7 +12,7 @@
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://www.cerberusweb.com	  http://www.webgroupmedia.com/
+|	http://www.cerbweb.com	    http://www.webgroupmedia.com/
 ***********************************************************************/
 
 class DAO_Address extends Cerb_ORMHelper {
@@ -441,12 +441,30 @@ class DAO_Address extends Cerb_ORMHelper {
 				$query = $search->getQueryFromParam($param);
 				$ids = $search->query($query, array('context_crc32' => sprintf("%u", crc32($from_context))));
 				
-				$from_ids = DAO_Comment::getContextIdsByContextAndIds($from_context, $ids);
+				if(is_array($ids)) {
+					$from_ids = DAO_Comment::getContextIdsByContextAndIds($from_context, $ids);
+					
+					$args['where_sql'] .= sprintf('AND %s IN (%s) ',
+						$from_index,
+						implode(', ', (!empty($from_ids) ? $from_ids : array(-1)))
+					);
+					
+				} elseif(is_string($ids)) {
+					$db = DevblocksPlatform::getDatabaseService();
+					$temp_table = sprintf("_tmp_%s", uniqid());
+					
+					$db->Execute(sprintf("CREATE TEMPORARY TABLE %s SELECT DISTINCT context_id AS id FROM comment INNER JOIN %s ON (%s.id=comment.id)",
+						$temp_table,
+						$ids,
+						$ids
+					));
+					
+					$args['join_sql'] .= sprintf("INNER JOIN %s ON (%s.id=a.id) ",
+						$temp_table,
+						$temp_table
+					);
+				}
 				
-				$args['where_sql'] .= sprintf('AND %s IN (%s) ',
-					$from_index,
-					implode(', ', (!empty($from_ids) ? $from_ids : array(-1)))
-				);
 				break;
 			
 			case SearchFields_Address::VIRTUAL_CONTEXT_LINK:
@@ -500,12 +518,8 @@ class DAO_Address extends Cerb_ORMHelper {
 		$results = array();
 		
 		while($row = mysqli_fetch_assoc($rs)) {
-			$result = array();
-			foreach($row as $f => $v) {
-				$result[$f] = $v;
-			}
 			$id = intval($row[SearchFields_Address::ID]);
-			$results[$id] = $result;
+			$results[$id] = $row;
 		}
 
 		$total = count($results);
@@ -1250,6 +1264,7 @@ class Context_Address extends Extension_DevblocksContext implements IDevblocksCo
 			'num_spam' => $prefix.$translate->_('address.num_spam'),
 			'num_nonspam' => $prefix.$translate->_('address.num_nonspam'),
 			'is_banned' => $prefix.$translate->_('address.is_banned'),
+			'is_contact' => $prefix.$translate->_('address.is_contact'),
 			'is_defunct' => $prefix.$translate->_('address.is_defunct'),
 			'updated' => $prefix.$translate->_('common.updated'),
 			'record_url' => $prefix.$translate->_('common.url.record'),
@@ -1266,6 +1281,7 @@ class Context_Address extends Extension_DevblocksContext implements IDevblocksCo
 			'num_spam' => Model_CustomField::TYPE_NUMBER,
 			'num_nonspam' => Model_CustomField::TYPE_NUMBER,
 			'is_banned' => Model_CustomField::TYPE_CHECKBOX,
+			'is_contact' => Model_CustomField::TYPE_CHECKBOX,
 			'is_defunct' => Model_CustomField::TYPE_CHECKBOX,
 			'updated' => Model_CustomField::TYPE_DATE,
 			'record_url' => Model_CustomField::TYPE_URL,
@@ -1300,6 +1316,7 @@ class Context_Address extends Extension_DevblocksContext implements IDevblocksCo
 			$token_values['num_spam'] = $address->num_spam;
 			$token_values['num_nonspam'] = $address->num_nonspam;
 			$token_values['is_banned'] = $address->is_banned;
+			$token_values['is_contact'] = !empty($address->contact_person_id);
 			$token_values['is_defunct'] = $address->is_defunct;
 			$token_values['updated'] = $address->updated;
 
@@ -1497,6 +1514,12 @@ class Context_Address extends Extension_DevblocksContext implements IDevblocksCo
 		
 		$types = Model_CustomField::getTypes();
 		$tpl->assign('types', $types);
+		
+		// Comments
+		
+		$comments = DAO_Comment::getByContext(CerberusContexts::CONTEXT_ADDRESS, $context_id);
+		$comments = array_reverse($comments, true);
+		$tpl->assign('comments', $comments);
 		
 		// Display
 		$tpl->assign('id', $context_id);

@@ -12,7 +12,7 @@
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://www.cerberusweb.com	  http://www.webgroupmedia.com/
+|	http://www.cerbweb.com	    http://www.webgroupmedia.com/
 ***********************************************************************/
 
 class ChContactsPage extends CerberusPageExtension {
@@ -377,12 +377,27 @@ class ChContactsPage extends CerberusPageExtension {
 		$tpl->assign('view', $view);
 		
 		C4_AbstractViewLoader::setView($view->id, $view);
-		
-		$tpl->assign('contacts_page', 'orgs');
+
+		$tpl->assign('org_id', $org);
 		$tpl->assign('search_columns', SearchFields_Address::getFields());
 		
-		$tpl->display('devblocks:cerberusweb.core::internal/views/search_and_view.tpl');
+		$tpl->display('devblocks:cerberusweb.core::profiles/organization/tab_people.tpl');
 		exit;
+	}
+	
+	function saveOrgAddPeoplePopupAction() {
+		@$org_id = DevblocksPlatform::importGPC($_REQUEST['org_id'], 'integer');
+		@$address_ids = DevblocksPlatform::importGPC($_REQUEST['address_ids'], 'array:integer');
+		
+		if(empty($org_id) || empty($address_ids))
+			return;
+		
+		if(false == ($org = DAO_ContactOrg::get($org_id)))
+			return;
+		
+		DAO_Address::update($address_ids, array(
+			DAO_Address::CONTACT_ORG_ID => $org_id,
+		));
 	}
 	
 	function showTabPeopleAddressesAction() {
@@ -488,8 +503,17 @@ class ChContactsPage extends CerberusPageExtension {
 	
 		@$view->name = $translate->_('ticket.requesters') . ": " . intval(count($ids)) . ' contact(s)';
 		
-		$view->addParamsRequired(array(
+		$org_filters = array(
+			DevblocksSearchCriteria::GROUP_OR,
 			SearchFields_Ticket::REQUESTER_ID => new DevblocksSearchCriteria(SearchFields_Ticket::REQUESTER_ID,'in',$ids),
+		);
+		
+		if(!empty($org_id)) {
+			$org_filters[SearchFields_Ticket::TICKET_ORG_ID] = new DevblocksSearchCriteria(SearchFields_Ticket::TICKET_ORG_ID,'=',$org_id);
+		}
+		
+		$view->addParamsRequired(array(
+			$org_filters,
 			SearchFields_Ticket::TICKET_DELETED => new DevblocksSearchCriteria(SearchFields_Ticket::TICKET_DELETED,DevblocksSearchCriteria::OPER_EQ,0)
 		), true);
 		$tpl->assign('view', $view);
@@ -1025,6 +1049,24 @@ class ChContactsPage extends CerberusPageExtension {
 			@$field_ids = DevblocksPlatform::importGPC($_POST['field_ids'], 'array', array());
 			DAO_CustomFieldValue::handleFormPost(CerberusContexts::CONTEXT_ADDRESS, $id, $field_ids);
 			
+			// Comment
+			
+			@$comment = DevblocksPlatform::importGPC($_REQUEST['comment'],'string','');
+			
+			if(!empty($comment) && !empty($id)) {
+				$also_notify_worker_ids = array_keys(CerberusApplication::getWorkersByAtMentionsText($comment));
+			
+				$fields = array(
+						DAO_Comment::CONTEXT => CerberusContexts::CONTEXT_ADDRESS,
+						DAO_Comment::CONTEXT_ID => $id,
+						DAO_Comment::OWNER_CONTEXT => CerberusContexts::CONTEXT_WORKER,
+						DAO_Comment::OWNER_CONTEXT_ID => $active_worker->id,
+						DAO_Comment::CREATED => time(),
+						DAO_Comment::COMMENT => $comment,
+				);
+				$comment_id = DAO_Comment::create($fields, $also_notify_worker_ids);
+			}
+			
 			/*
 			 * Notify anything that wants to know when Address Peek saves.
 			 */
@@ -1104,7 +1146,7 @@ class ChContactsPage extends CerberusPageExtension {
 				DAO_CustomFieldValue::handleFormPost(CerberusContexts::CONTEXT_ORG, $id, $field_ids);
 				
 				if(!empty($comment)) {
-					@$also_notify_worker_ids = DevblocksPlatform::importGPC($_REQUEST['notify_worker_ids'],'array',array());
+					$also_notify_worker_ids = array_keys(CerberusApplication::getWorkersByAtMentionsText($comment));
 					
 					$fields = array(
 						DAO_Comment::CREATED => time(),
@@ -1604,7 +1646,7 @@ class ChContactsPage extends CerberusPageExtension {
 				DAO_CustomFieldValue::handleFormPost(CerberusContexts::CONTEXT_CONTACT_PERSON, $id, $field_ids);
 				
 				if(!empty($comment)) {
-					@$also_notify_worker_ids = DevblocksPlatform::importGPC($_REQUEST['notify_worker_ids'],'array',array());
+					$also_notify_worker_ids = array_keys(CerberusApplication::getWorkersByAtMentionsText($comment));
 					
 					$fields = array(
 						DAO_Comment::CREATED => time(),

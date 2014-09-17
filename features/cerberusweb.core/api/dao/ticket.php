@@ -12,7 +12,7 @@
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://www.cerberusweb.com	  http://www.webgroupmedia.com/
+|	http://www.cerbweb.com	    http://www.webgroupmedia.com/
 ***********************************************************************/
 
 class DAO_Ticket extends Cerb_ORMHelper {
@@ -1497,12 +1497,30 @@ class DAO_Ticket extends Cerb_ORMHelper {
 				$query = $search->getQueryFromParam($param);
 				$ids = $search->query($query, array('context_crc32' => sprintf("%u", crc32($from_context))));
 				
-				$from_ids = DAO_Comment::getContextIdsByContextAndIds($from_context, $ids);
+				if(is_array($ids)) {
+					$from_ids = DAO_Comment::getContextIdsByContextAndIds($from_context, $ids);
+					
+					$args['where_sql'] .= sprintf('AND %s IN (%s) ',
+						$from_index,
+						implode(', ', (!empty($from_ids) ? $from_ids : array(-1)))
+					);
+					
+				} elseif(is_string($ids)) {
+					$db = DevblocksPlatform::getDatabaseService();
+					$temp_table = sprintf("_tmp_%s", uniqid());
+					
+					$db->Execute(sprintf("CREATE TEMPORARY TABLE %s SELECT DISTINCT context_id AS id FROM comment INNER JOIN %s ON (%s.id=comment.id)",
+						$temp_table,
+						$ids,
+						$ids
+					));
+					
+					$args['join_sql'] .= sprintf("INNER JOIN %s ON (%s.id=t.id) ",
+						$temp_table,
+						$temp_table
+					);
+				}
 				
-				$args['where_sql'] .= sprintf('AND %s IN (%s) ',
-					$from_index,
-					implode(', ', (!empty($from_ids) ? $from_ids : array(-1)))
-				);
 				break;
 				
 			case SearchFields_Ticket::FULLTEXT_MESSAGE_CONTENT:
@@ -1510,12 +1528,21 @@ class DAO_Ticket extends Cerb_ORMHelper {
 				$query = $search->getQueryFromParam($param);
 				$ids = $search->query($query, array());
 				
-				if(empty($ids))
-					$ids = array(-1);
+				if(is_array($ids)) {
+					if(empty($ids))
+						$ids = array(-1);
+					
+					$args['where_sql'] .= sprintf('AND msg.id IN (%s) ',
+						implode(', ', $ids)
+					);
+					
+				} elseif(is_string($ids)) {
+					$args['join_sql'] .= sprintf("INNER JOIN %s ON (%s.id=msg.id) ",
+						$ids,
+						$ids
+					);
+				}
 				
-				$args['where_sql'] .= sprintf('AND msg.id IN (%s) ',
-					implode(', ', $ids)
-				);
 				break;
 				
 			case SearchFields_Ticket::FULLTEXT_NOTE_CONTENT:
@@ -1523,12 +1550,30 @@ class DAO_Ticket extends Cerb_ORMHelper {
 				$query = $search->getQueryFromParam($param);
 				$ids = $search->query($query, array('context_crc32' => sprintf("%u", crc32(CerberusContexts::CONTEXT_MESSAGE))), 250);
 				
-				$from_ids = DAO_Comment::getContextIdsByContextAndIds(CerberusContexts::CONTEXT_MESSAGE, $ids);
-				
-				// [TODO] This approach doesn't stack with comment searching, because they're "id in (1,2,3) AND id IN (4,5,6)"
-				$args['where_sql'] .= sprintf('AND msg.id IN (%s) ',
-					implode(', ', (!empty($from_ids) ? $from_ids : array(-1)))
-				);
+				if(is_array($ids)) {
+					$from_ids = DAO_Comment::getContextIdsByContextAndIds(CerberusContexts::CONTEXT_MESSAGE, $ids);
+					
+					// [TODO] This approach doesn't stack with comment searching, because they're "id in (1,2,3) AND id IN (4,5,6)"
+					$args['where_sql'] .= sprintf('AND msg.id IN (%s) ',
+						implode(', ', (!empty($from_ids) ? $from_ids : array(-1)))
+					);
+					
+				} elseif(is_string($ids)) {
+					$db = DevblocksPlatform::getDatabaseService();
+					$temp_table = sprintf("_tmp_%s", uniqid());
+					
+					$db->Execute(sprintf("CREATE TEMPORARY TABLE %s SELECT DISTINCT context_id AS id FROM comment INNER JOIN %s ON (%s.id=comment.id)",
+						$temp_table,
+						$ids,
+						$ids
+					));
+					
+					$args['join_sql'] .= sprintf("INNER JOIN %s ON (%s.id=msg.id) ",
+						$temp_table,
+						$temp_table
+					);
+					
+				}
 				break;
 			
 			case SearchFields_Ticket::VIRTUAL_CONTEXT_LINK:
@@ -1623,6 +1668,34 @@ class DAO_Ticket extends Cerb_ORMHelper {
 		}
 	}
 	
+	// [TODO] Utilize Sphinx when it exists?
+	static function autocomplete($term) {
+		$db = DevblocksPlatform::getDatabaseService();
+		$objects = array();
+		
+		$results = $db->GetArray(sprintf("SELECT id ".
+			"FROM ticket ".
+			"WHERE ticket.is_deleted = 0 ".
+			"AND (".
+			"mask LIKE %s ".
+			"OR subject LIKE %s ".
+			") ".
+			"ORDER BY id DESC ".
+			"LIMIT 25 ",
+			$db->qstr($term.'%'),
+			$db->qstr($term.'%')
+		));
+		
+		if(is_array($results))
+		foreach($results as $row) {
+			$objects[$row['id']] = null;
+		}
+		
+		$objects = DAO_Ticket::getIds(array_keys($objects));
+		
+		return $objects;
+	}
+
 	static function search($columns, $params, $limit=10, $page=0, $sortBy=null, $sortAsc=null, $withCounts=true) {
 		$db = DevblocksPlatform::getDatabaseService();
 		
@@ -1647,12 +1720,8 @@ class DAO_Ticket extends Cerb_ORMHelper {
 		$results = array();
 		
 		while($row = mysqli_fetch_assoc($rs)) {
-			$result = array();
-			foreach($row as $f => $v) {
-				$result[$f] = $v;
-			}
 			$id = intval($row[SearchFields_Ticket::TICKET_ID]);
-			$results[$id] = $result;
+			$results[$id] = $row;
 		}
 
 		$total = count($results);
@@ -1907,6 +1976,13 @@ class Model_Ticket {
 		}
 		
 		return $this->_org;
+	}
+	
+	/**
+	 * @return Model_Group
+	 */
+	function getGroup() {
+		return DAO_Group::get($this->group_id);
 	}
 };
 
@@ -3623,6 +3699,25 @@ class Context_Ticket extends Extension_DevblocksContext implements IDevblocksCon
 		}
 		
 		switch($token) {
+			case 'requester_emails':
+				if(!isset($dictionary['requesters'])) {
+					$result = $this->lazyLoadContextValues('requesters', $dictionary);
+					$emails = array();
+					
+					if(isset($result['requesters'])) {
+						$values['requesters'] = $result['requesters'];
+						
+						
+						if(is_array($result['requesters']))
+						foreach($result['requesters'] as $req) {
+							$emails[] = $req['email'];
+						}
+						
+						$values['requester_emails'] = implode(', ', $emails);
+					}
+				}
+				break;
+				
 			case 'requesters':
 				$values['requesters'] = array();
 				$reqs = DAO_Ticket::getRequestersByTicket($context_id);
@@ -3968,11 +4063,11 @@ class Context_Ticket extends Extension_DevblocksContext implements IDevblocksCon
 			$tpl->assign('custom_field_values', $custom_field_values[$ticket->id]);
 		
 		// Comments
+		
 		$comments = DAO_Comment::getByContext(CerberusContexts::CONTEXT_TICKET, $ticket->id);
-		$last_comment = array_shift($comments);
-		unset($comments);
-		$tpl->assign('last_comment', $last_comment);
-			
+		$comments = array_reverse($comments, true);
+		$tpl->assign('comments', $comments);
+		
 		// Display
 		$tpl->display('devblocks:cerberusweb.core::tickets/peek.tpl');
 	}

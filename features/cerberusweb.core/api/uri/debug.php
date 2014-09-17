@@ -12,7 +12,7 @@
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://www.cerberusweb.com	  http://www.webgroupmedia.com/
+|	http://www.cerbweb.com	    http://www.webgroupmedia.com/
 ***********************************************************************/
 
 class ChDebugController extends DevblocksControllerExtension  {
@@ -93,7 +93,7 @@ class ChDebugController extends DevblocksControllerExtension  {
 				@$db = DevblocksPlatform::getDatabaseService();
 				@$settings = DevblocksPlatform::getPluginSettingsService();
 				
-				@$tables = $db->MetaTables('TABLE',false);
+				@$tables = $db->metaTablesDetailed();
 				
 				$report_output = sprintf(
 					"[Cerb] App Version: %s\n".
@@ -112,15 +112,16 @@ class ChDebugController extends DevblocksControllerExtension  {
 					"[PHP] OS: %s\n".
 					"[PHP] SAPI: %s\n".
 					"\n".
-					"[php.ini] safe_mode: %s\n".
 					"[php.ini] max_execution_time: %s\n".
 					"[php.ini] memory_limit: %s\n".
 					"[php.ini] file_uploads: %s\n".
 					"[php.ini] upload_max_filesize: %s\n".
 					"[php.ini] post_max_size: %s\n".
+					"[php.ini] safe_mode: %s\n".
 					"\n".
 					"[PHP:Extension] MySQL: %s\n".
 					"[PHP:Extension] MailParse: %s\n".
+					"[PHP:Extension] cURL: %s\n".
 					"[PHP:Extension] IMAP: %s\n".
 					"[PHP:Extension] Session: %s\n".
 					"[PHP:Extension] PCRE: %s\n".
@@ -133,7 +134,12 @@ class ChDebugController extends DevblocksControllerExtension  {
 					"[PHP:Extension] SPL: %s\n".
 					"[PHP:Extension] ctype: %s\n".
 					"[PHP:Extension] JSON: %s\n".
-					"[PHP:Extension] cURL: %s\n".
+					"[PHP:Extension] tidy: %s\n".
+					"[PHP:Extension] XCache: %s\n".
+					"[PHP:Extension] XDebug: %s\n".
+					"[PHP:Extension] memcache: %s\n".
+					"[PHP:Extension] memcached: %s\n".
+					"[PHP:Extension] redis: %s\n".
 					"\n",
 					APP_VERSION,
 					APP_BUILD,
@@ -148,14 +154,15 @@ class ChDebugController extends DevblocksControllerExtension  {
 					PHP_VERSION,
 					PHP_OS . ' (' . php_uname() . ')',
 					php_sapi_name(),
-					ini_get('safe_mode'),
 					ini_get('max_execution_time'),
 					ini_get('memory_limit'),
 					ini_get('file_uploads'),
 					ini_get('upload_max_filesize'),
 					ini_get('post_max_size'),
+					ini_get('safe_mode'),
 					(extension_loaded("mysql") ? 'YES' : 'NO'),
 					(extension_loaded("mailparse") ? 'YES' : 'NO'),
+					(extension_loaded("curl") ? 'YES' : 'NO'),
 					(extension_loaded("imap") ? 'YES' : 'NO'),
 					(extension_loaded("session") ? 'YES' : 'NO'),
 					(extension_loaded("pcre") ? 'YES' : 'NO'),
@@ -168,7 +175,12 @@ class ChDebugController extends DevblocksControllerExtension  {
 					(extension_loaded("spl") ? 'YES' : 'NO'),
 					(extension_loaded("ctype") ? 'YES' : 'NO'),
 					(extension_loaded("json") ? 'YES' : 'NO'),
-					(extension_loaded("curl") ? 'YES' : 'NO')
+					(extension_loaded("tidy") ? 'YES' : 'NO'),
+					(extension_loaded("xcache") ? 'YES' : 'NO'),
+					(extension_loaded("xdebug") ? 'YES' : 'NO'),
+					(extension_loaded("memcache") ? 'YES' : 'NO'),
+					(extension_loaded("memcached") ? 'YES' : 'NO'),
+					(extension_loaded("redis") ? 'YES' : 'NO')
 				);
 				
 				if(!empty($settings)) {
@@ -194,16 +206,23 @@ class ChDebugController extends DevblocksControllerExtension  {
 						"[Stats] # Tickets: %s\n".
 						"[Stats] # Messages: %s\n".
 						"\n".
-						"[Database] Tables:\n * %s\n".
-						"\n".
-						'%s',
+						"[Database] Tables:\n",
 						intval($db->getOne('SELECT count(id) FROM worker')),
 						intval($db->getOne('SELECT count(id) FROM worker_group')),
 						intval($db->getOne('SELECT count(id) FROM ticket')),
 						intval($db->getOne('SELECT count(id) FROM message')),
-						implode("\n * ",array_values($tables)),
 						''
 					);
+					
+					foreach($tables as $table_name => $table_data) {
+						$report_output .= sprintf(" * %s - %s - %d records\n",
+							$table_name,
+							$table_data['Engine'],
+							$table_data['Rows']
+						);
+					}
+					
+					$report_output .= "\n";
 				}
 				
 				echo sprintf(

@@ -32,6 +32,16 @@
 
 <table cellspacing="0" cellpadding="0" border="0" class="calendar">
 <tr class="heading">
+{* [TODO] Localize *}
+{if $calendar->params.start_on_mon}
+	<th>Mon</th>
+	<th>Tue</th>
+	<th>Wed</th>
+	<th>Thu</th>
+	<th>Fri</th>
+	<th>Sat</th>
+	<th>Sun</th>
+{else}
 	<th>Sun</th>
 	<th>Mon</th>
 	<th>Tue</th>
@@ -39,6 +49,7 @@
 	<th>Thu</th>
 	<th>Fri</th>
 	<th>Sat</th>
+{/if}
 </tr>
 {foreach from=$calendar_properties.calendar_weeks item=week name=weeks}
 <tr class="week">
@@ -55,7 +66,24 @@
 				{if $calendar_events.{$day.timestamp}}
 					{foreach from=$calendar_events.{$day.timestamp} item=event}
 						<div class="event" style="background-color:{$event.color|default:'#C8C8C8'};" link="{$event.link}">
-							<a href="javascript:;" style="color:rgb(0,0,0);" title="{$event.label}">{$event.label}</a>
+							<a href="javascript:;" style="color:rgb(0,0,0);" title="{$event.label}">
+							
+							{$worker_prefs = DAO_WorkerPref::getByWorker($active_worker->id)}
+							{$time_format = $worker_prefs.time_format|default:'D, d M Y h:i a'}
+							{if $time_format = 'D, d M Y h:i a'}{$hour_format = 'g'}{else}{$hour_format = 'H'}{/if}
+							
+							{if !$calendar->params.hide_start_time}
+							<b>
+							{if $event.ts|devblocks_date:'i' == '00'}
+								{$event.ts|devblocks_date:$hour_format}{if $hour_format=='g'}{$event.ts|devblocks_date:'a'|substr:0:1}{/if}
+							{else}
+								{$event.ts|devblocks_date:"{$hour_format}:i"}{if $hour_format=='g'}{$event.ts|devblocks_date:'a'|substr:0:1}{/if}
+							{/if}
+							</b>
+							{/if}
+							
+							{$event.label}
+							</a>
 						</div>
 					{/foreach}
 				{/if}
@@ -67,53 +95,55 @@
 </table>
 
 <script type="text/javascript">
-$frm = $('#frm{$guid}');
-$tab = $frm.closest('div.ui-tabs-panel');
-
-$openEvtPopupEvent = function(e) {
-	e.stopPropagation();
+$(function() {
+	var $frm = $('#frm{$guid}');
+	var $tab = $frm.closest('div.ui-tabs-panel');
 	
-	var $this = $(this);
-	var link = '';
-
-	if($this.is('.create-event')) {
-		$this.closest('div').find('ul.cerb-popupmenu').hide();
-		context = $this.attr('context');
-		link = 'ctx://' + context + ':0';
-	
-	} else if($this.is('div.event')) {
-		link = $this.attr('link');
-	}
-	
-	if(link.substring(0,6) == 'ctx://') {
-		var context_parts = link.substring(6).split(':');
-		var context = context_parts[0];
-		var context_id = context_parts[1];
+	$openEvtPopupEvent = function(e) {
+		e.stopPropagation();
 		
-		$popup = genericAjaxPopup('peek','c=internal&a=showPeekPopup&context=' + context + '&context_id=' + context_id  + '&calendar_id={$calendar->id}',null,false,'600');
+		var $this = $(this);
+		var link = '';
+	
+		if($this.is('.create-event')) {
+			$this.closest('div').find('ul.cerb-popupmenu').hide();
+			var context = $this.attr('context');
+			link = 'ctx://' + context + ':0';
 		
-		$popup.one('popup_saved calendar_event_save calendar_event_delete', function(event) {
-			var month = (event.month) ? event.month : '{$calendar_properties.month}';
-			var year = (event.year) ? event.year : '{$calendar_properties.year}';
+		} else if($this.is('div.event')) {
+			link = $this.attr('link');
+		}
+		
+		if(link.substring(0,6) == 'ctx://') {
+			var context_parts = link.substring(6).split(':');
+			var context = context_parts[0];
+			var context_id = context_parts[1];
 			
-			genericAjaxGet($('#frm{$guid}').closest('div.ui-tabs-panel'), 'c=internal&a=handleSectionAction&section=calendars&action=showCalendarTab&id={$calendar->id}&month=' + month + '&year=' + year);
-			event.stopPropagation();
-		});
-		
-	} else {
-		// [TODO] Regular link
+			var $popup = genericAjaxPopup('peek','c=internal&a=showPeekPopup&context=' + context + '&context_id=' + context_id  + '&calendar_id={$calendar->id}',null,false,'600');
+			
+			$popup.one('popup_saved calendar_event_save calendar_event_delete', function(event) {
+				var month = (event.month) ? event.month : '{$calendar_properties.month}';
+				var year = (event.year) ? event.year : '{$calendar_properties.year}';
+				
+				genericAjaxGet($('#frm{$guid}').closest('div.ui-tabs-panel'), 'c=internal&a=handleSectionAction&section=calendars&action=showCalendarTab&id={$calendar->id}&month=' + month + '&year=' + year);
+				event.stopPropagation();
+			});
+			
+		} else {
+			// [TODO] Regular link
+		}
 	}
-}
-
-{if !empty($create_contexts)}
-$frm.find('ul.cerb-popupmenu > li').click(function(e) {
-	e.stopPropagation();
-	e.preventDefault();
-	$(this).find('a.create-event').click();
+	
+	{if !empty($create_contexts)}
+	$frm.find('ul.cerb-popupmenu > li').click(function(e) {
+		e.stopPropagation();
+		e.preventDefault();
+		$(this).find('a.create-event').click();
+	});
+	
+	$frm.find('button.create-event, a.create-event').click($openEvtPopupEvent);
+	{/if}
+	
+	$tab.find('TABLE.calendar TR.week div.day_contents').find('div.event').click($openEvtPopupEvent);
 });
-
-$frm.find('button.create-event, a.create-event').click($openEvtPopupEvent);
-{/if}
-
-$tab.find('TABLE.calendar TR.week div.day_contents').find('div.event').click($openEvtPopupEvent);
 </script>

@@ -55,24 +55,26 @@
 			<select name="owner">
 				{if !empty($workspace_page)}<option value="">- change -</option>{/if}
 				
-				<option value="w_{$active_worker->id}">me</option>
+				<option value="{CerberusContexts::CONTEXT_WORKER}:{$active_worker->id}">me</option>
+				
+				<option value="{CerberusContexts::CONTEXT_APPLICATION}:0">Application: Cerb</option>
 				
 				{if !empty($owner_groups)}
 				{foreach from=$owner_groups item=group key=group_id}
-					<option value="g_{$group_id}">Group: {$group->name}</option>
+					<option value="{CerberusContexts::CONTEXT_GROUP}:{$group_id}">Group: {$group->name}</option>
 				{/foreach}
 				{/if}
 				
 				{if !empty($owner_roles)}
 				{foreach from=$owner_roles item=role key=role_id}
-					<option value="r_{$role_id}">Role: {$role->name}</option>
+					<option value="{CerberusContexts::CONTEXT_ROLE}:{$role_id}">Role: {$role->name}</option>
 				{/foreach}
 				{/if}
 				
 				{if $active_worker->is_superuser}
 				{foreach from=$workers item=worker key=worker_id}
 					{if empty($worker->is_disabled)}
-					<option value="w_{$worker_id}">Worker: {$worker->getName()}</option>
+					<option value="{CerberusContexts::CONTEXT_WORKER}:{$worker_id}">Worker: {$worker->getName()}</option>
 					{/if}
 				{/foreach}
 				{/if}
@@ -88,7 +90,7 @@
 		This will also delete all of the page's tabs and worklists.
 	</p>
 	
-	<button type="button" class="red" onclick="$('#frmEditWorkspacePage').find('input:hidden[name=do_delete]').val('1');genericAjaxPopupPostCloseReloadView(null,'frmEditWorkspacePage','',false,'workspace_delete');">{'common.yes'|devblocks_translate|capitalize}</button>
+	<button type="button" class="red" onclick="$('#frmEditWorkspacePage').find('input:hidden[name=do_delete]').val('1');genericAjaxPopupPostCloseReloadView(null,'frmEditWorkspacePage','{$view_id}',false,'workspace_delete');">{'common.yes'|devblocks_translate|capitalize}</button>
 	<button type="button" onclick="$(this).closest('fieldset').fadeOut().siblings('div.toolbar').fadeIn();">{'common.no'|devblocks_translate|capitalize}</button>
 </fieldset>
 
@@ -127,26 +129,26 @@
 			<b>{'common.owner'|devblocks_translate|capitalize}:</b>
 			<br>
 			<select name="owner">
-				{if !empty($workspace_page)}<option value="">- change -</option>{/if}
+				<option value="{CerberusContexts::CONTEXT_WORKER}:{$active_worker->id}">me</option>
 				
-				<option value="w_{$active_worker->id}">me</option>
+				<option value="{CerberusContexts::CONTEXT_APPLICATION}:0">Application: Cerb</option>
 				
 				{if !empty($owner_groups)}
 				{foreach from=$owner_groups item=group key=group_id}
-					<option value="g_{$group_id}">Group: {$group->name}</option>
+					<option value="{CerberusContexts::CONTEXT_GROUP}:{$group_id}">Group: {$group->name}</option>
 				{/foreach}
 				{/if}
 				
 				{if !empty($owner_roles)}
 				{foreach from=$owner_roles item=role key=role_id}
-					<option value="r_{$role_id}">Role: {$role->name}</option>
+					<option value="{CerberusContexts::CONTEXT_ROLE}:{$role_id}">Role: {$role->name}</option>
 				{/foreach}
 				{/if}
 				
 				{if $active_worker->is_superuser}
 				{foreach from=$workers item=worker key=worker_id}
 					{if empty($worker->is_disabled)}
-					<option value="w_{$worker_id}">Worker: {$worker->getName()}</option>
+					<option value="{CerberusContexts::CONTEXT_WORKER}:{$worker_id}">Worker: {$worker->getName()}</option>
 					{/if}
 				{/foreach}
 				{/if}
@@ -187,10 +189,10 @@
 					$frm_import.find('div.config').hide().html(json.config_html).fadeIn();
 					
 				} else {
-					genericAjaxPopupDestroy('peek');
-					
 					if(json.page_url) {
 						document.location.href = json.page_url;
+					} else {
+						genericAjaxPopupPostCloseReloadView(null,'frmEditWorkspacePage','{$view_id}', false, 'workspace_import');
 					}
 				}
 				

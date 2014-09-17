@@ -53,8 +53,9 @@
 {/if}
 
 <div id="divDecisionOutcomeToolbar{$id}" style="display:none;">
-	<button type="button" class="cerb-popupmenu-trigger" onclick="">Insert &#x25be;</button>
+	<button type="button" class="cerb-popupmenu-trigger" onclick="">Insert placeholder &#x25be;</button>
 	<button type="button" class="tester">{'common.test'|devblocks_translate|capitalize}</button>
+	<button type="button" onclick="genericAjaxPopup('help', 'c=internal&a=showSnippetHelpPopup', { my:'left top' , at:'left+20 top+20'}, false, '600');">Help</button>
 	<div class="tester"></div>
 	<ul class="cerb-popupmenu" style="max-height:200px;overflow-y:auto;">
 		<li style="background:none;">
@@ -121,7 +122,9 @@
 <div id="{$status_div}" style="display:none;"></div>
 
 <script type="text/javascript">
+$(function() {
 	var $popup = genericAjaxPopupFetch('node_outcome{$id}');
+	
 	$popup.one('popup_open', function(event,ui) {
 		$(this).dialog('option','title',"{if empty($id)}New {/if}Outcome");
 		$(this).find('input:text').first().focus();
@@ -200,7 +203,7 @@
 			if(null == $field)
 				return;
 			
-			var regexpName = /^(.*?)\[(.*?)\]$/;
+			var regexpName = /^(.*?)(\[.*?\])$/;
 			var hits = regexpName.exec($field.attr('name'));
 			
 			if(null == hits || hits.length < 3)
@@ -357,4 +360,6 @@
 		});
 
 	}); // end popup_open
+	
+});
 </script>

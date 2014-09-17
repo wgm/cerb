@@ -24,6 +24,12 @@
 </div>
 
 <script type="text/javascript">
+// Page title
+
+document.title = "{$tab->name|escape:'javascript' nofilter} - {$page->name|escape:'javascript' nofilter} - {$settings->get('cerberusweb.core','helpdesk_title')|escape:'javascript' nofilter}";
+
+// Worklist loader
+
 $.worklistAjaxLoader = function() {
 	this.worklist_ids = [];
 	this.is_running = false;

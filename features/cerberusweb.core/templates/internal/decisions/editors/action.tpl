@@ -41,8 +41,10 @@
 </div>
 
 <div id="divDecisionActionToolbar{$id}" style="display:none;">
-	<button type="button" class="cerb-popupmenu-trigger" onclick="">Insert &#x25be;</button>
+	<button type="button" class="cerb-popupmenu-trigger" onclick="">Insert placeholder &#x25be;</button>
 	<button type="button" class="tester">{'common.test'|devblocks_translate|capitalize}</button>
+	<button type="button" onclick="genericAjaxPopup('help', 'c=internal&a=showSnippetHelpPopup', { my:'left top' , at:'left+20 top+20'}, false, '600');">Help</button>
+	
 	<div class="tester"></div>
 	<ul class="cerb-popupmenu" style="max-height:200px;overflow-y:auto;">
 		<li style="background:none;">
@@ -110,7 +112,9 @@
 <div id="{$status_div}" style="display:none;"></div>
 
 <script type="text/javascript">
-	$popup = genericAjaxPopupFetch('node_action{$id}');
+$(function() {
+	var $popup = genericAjaxPopupFetch('node_action{$id}');
+	
 	$popup.one('popup_open', function(event,ui) {
 		$(this).dialog('option','title',"{if empty($id)}New {/if}Actions");
 		$(this).find('input:text').first().focus();
@@ -140,9 +144,29 @@
 
 		// Placeholders
 		
+		$popup.find(':text.placeholders, textarea.placeholders')
+			.atwho({
+				{literal}at: '{%',{/literal}
+				limit: 20,
+				{literal}tpl: '<li data-value="${name}">${content} <small style="margin-left:10px;">${name}</small></li>',{/literal}
+				data: atwho_twig_commands,
+				suffix: ''
+			})
+			.atwho({
+				{literal}at: '|',{/literal}
+				limit: 20,
+				start_with_space: false,
+				search_key: "content",
+				{literal}tpl: '<li data-value="|${name}">${content} <small style="margin-left:10px;">${name}</small></li>',{/literal}
+				data: atwho_twig_modifiers,
+				suffix: ''
+			})
+			;
+		
 		$popup.delegate(':text.placeholders, textarea.placeholders', 'focus', function(e) {
 			var $toolbar = $('#divDecisionActionToolbar{$id}');
 			var $src = $((null==e.srcElement) ? e.target : e.srcElement);
+			
 			if(0 == $src.nextAll('#divDecisionActionToolbar{$id}').length) {
 				$toolbar.find('div.tester').html('');
 				$toolbar.find('ul.cerb-popupmenu').hide();
@@ -187,7 +211,7 @@
 			if(null == $field)
 				return;
 			
-			var regexpName = /^(.*?)\[(.*?)\]$/;
+			var regexpName = /^(.*?)(\[.*?\])$/;
 			var hits = regexpName.exec($field.attr('name'));
 			
 			if(null == hits || hits.length < 3)
@@ -227,7 +251,7 @@
 		
 		$ph_menu.find('> li > input.filter').keyup(
 			function(e) {
-				term = $(this).val().toLowerCase();
+				var term = $(this).val().toLowerCase();
 				$ph_menu = $(this).closest('ul.cerb-popupmenu');
 				$ph_menu.find('> li a').each(function(e) {
 					if(-1 != $(this).html().toLowerCase().indexOf(term)) {
@@ -260,7 +284,7 @@
 			if(null == $field)
 				return;
 			
-			strtoken = $(this).attr('token');
+			var strtoken = $(this).attr('token');
 			
 			$field.focus().insertAtCursor('{literal}{{{/literal}' + strtoken + '{literal}}}{/literal}');
 		});
@@ -293,7 +317,7 @@
 
 		$act_menu.find('> li > input.filter').keyup(
 			function(e) {
-				term = $(this).val().toLowerCase();
+				var term = $(this).val().toLowerCase();
 				$act_menu = $(this).closest('ul.cerb-popupmenu');
 				$act_menu.find('> li a').each(function(e) {
 					if(-1 != $(this).html().toLowerCase().indexOf(term)) {
@@ -314,25 +338,25 @@
 		});
 	
 		$act_menu.find('> li > a').click(function() {
-			token = $(this).attr('token');
-			$frmDecAdd = $('#frmDecisionActionAdd{$id}');
+			var token = $(this).attr('token');
+			var $frmDecAdd = $('#frmDecisionActionAdd{$id}');
 			$frmDecAdd.find('input[name=action]').val(token);
-			$this = $(this);
+			var $this = $(this);
 			
 			genericAjaxPost('frmDecisionActionAdd{$id}','','c=internal&a=doDecisionAddAction',function(html) {
-				$ul = $('#frmDecisionAction{$id}Action DIV.actions');
+				var $ul = $('#frmDecisionAction{$id}Action DIV.actions');
 				
-				seq = parseInt($frmDecAdd.find('input[name=seq]').val());
+				var seq = parseInt($frmDecAdd.find('input[name=seq]').val());
 				if(null == seq)
 					seq = 0;
 	
-				$container = $('<fieldset id="action' + seq + '"></fieldset>');
+				var $container = $('<fieldset id="action' + seq + '"></fieldset>');
 				$container.prepend('<legend style="cursor:move;"><a href="javascript:;" onclick="$(this).closest(\'fieldset\').find(\'#divDecisionActionToolbar{$id}\').hide().appendTo($(\'#frmDecisionAction{$id}Action\'));$(this).closest(\'fieldset\').remove();"><span class="cerb-sprite2 sprite-minus-circle"></span></a> ' + $this.text() + '</legend>');
 				$container.append('<input type="hidden" name="actions[]" value="' + seq + '">');
 				$container.append('<input type="hidden" name="action'+seq+'[action]" value="' + token + '">');
 				$ul.append($container);
 	
-				$html = $('<div>' + html + '</div>');
+				var $html = $('<div>' + html + '</div>');
 				$container.append($html);
 				
 				$html.find('BUTTON.chooser_group.unbound').each(function() {
@@ -349,6 +373,25 @@
 					$(this).removeClass('unbound');
 				});
 				
+				$html.find(':text.placeholders, textarea.placeholders')
+					.atwho({
+						{literal}at: '{%',{/literal}
+						limit: 20,
+						{literal}tpl: '<li data-value="${name}">${content} <small style="margin-left:10px;">${name}</small></li>',{/literal}
+						data: atwho_twig_commands,
+						suffix: ''
+					})
+					.atwho({
+						{literal}at: '|',{/literal}
+						limit: 20,
+						start_with_space: false,
+						search_key: "content",
+						{literal}tpl: '<li data-value="|${name}">${content} <small style="margin-left:10px;">${name}</small></li>',{/literal}
+						data: atwho_twig_modifiers,
+						suffix: ''
+					})
+					;
+				
 				$act_menu.find('input:text:first').focus().select();
 	
 				$frmDecAdd.find('input[name=seq]').val(1+seq);
@@ -356,4 +399,6 @@
 		});
 		
 	}); // popup_open
+	
+});
 </script>

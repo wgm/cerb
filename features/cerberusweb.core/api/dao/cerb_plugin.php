@@ -12,7 +12,7 @@
  | By using this software, you acknowledge having read this license
  | and agree to be bound thereby.
  | ______________________________________________________________________
- |	http://www.cerberusweb.com	  http://www.webgroupmedia.com/
+ |	http://www.cerbweb.com	    http://www.webgroupmedia.com/
  ***********************************************************************/
 
 class DAO_CerbPlugin extends Cerb_ORMHelper {
@@ -183,12 +183,8 @@ class DAO_CerbPlugin extends Cerb_ORMHelper {
 		$results = array();
 		
 		while($row = mysqli_fetch_assoc($rs)) {
-			$result = array();
-			foreach($row as $f => $v) {
-				$result[$f] = $v;
-			}
 			$object_id = $row[SearchFields_CerbPlugin::ID];
-			$results[$object_id] = $result;
+			$results[$object_id] = $row;
 		}
 
 		$total = count($results);

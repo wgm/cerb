@@ -4,7 +4,7 @@
 	<name>Cerb Core</name>
 	<description>The core functionality of Cerb6.</description>
 	<author>Webgroup Media, LLC.</author>
-	<version>6.7.10</version>
+	<version>6.8.0</version>
 	<link>http://wiki.cerb4.com/wiki/New_Changes</link>
 	
 	<!-- Plugin Dependencies -->
@@ -53,6 +53,7 @@
 		<patch version="6.5.0" revision="1059" file="patches/6.x/6.5.0.php" />
 		<patch version="6.6.0" revision="1082" file="patches/6.x/6.6.0.php" />
 		<patch version="6.7.0" revision="1097" file="patches/6.x/6.7.0.php" />
+		<patch version="6.8.0" revision="1107" file="patches/6.x/6.8.0.php" />
 	</patches>
 
 	<!-- Controller Routing -->
@@ -251,6 +252,14 @@
 		<file path="api/dao/explorer.php">
 			<class name="DAO_ExplorerSet" />
 			<class name="Model_ExplorerSet" />
+		</file>
+		
+		<file path="api/dao/file_bundle.php">
+			<class name="Context_FileBundle" />
+			<class name="DAO_FileBundle" />
+			<class name="Model_FileBundle" />
+			<class name="SearchFields_FileBundle" />
+			<class name="View_FileBundle" />
 		</file>
 		
 		<file path="api/dao/group.php">
@@ -505,6 +514,10 @@
 			<class name="Event_MailMovedToGroup" />
 		</file>
 		
+		<file path="api/events/group/mail_received.php">
+			<class name="Event_MailReceived" />
+		</file>
+		
 		<file path="api/events/group/mail_received_by_group.php">
 			<class name="Event_MailReceivedByGroup" />
 		</file>
@@ -676,6 +689,16 @@
 		<activity point="ticket.owner.unassigned">
 			<param key="label_key" value="Ticket Unassigned" />
 			<param key="string_key" value="activities.ticket.unassigned" />
+			<param key="options" value="" />
+		</activity>
+		<activity point="ticket.split">
+			<param key="label_key" value="Ticket Split" />
+			<param key="string_key" value="activities.ticket.split" />
+			<param key="options" value="" />
+		</activity>
+		<activity point="ticket.split.from">
+			<param key="label_key" value="Ticket Split From" />
+			<param key="string_key" value="activities.ticket.split.from" />
 			<param key="options" value="" />
 		</activity>
 		<activity point="ticket.status.closed">
@@ -948,6 +971,7 @@
 						<!--<data key="create" />-->
 						<!--<data key="find" />-->
 						<!--<data key="snippets" />-->
+						<data key="va_variable" />
 						<data key="workspace" />
 					</value>
 				</param>
@@ -1192,6 +1216,30 @@
 		</extension>
 		
 		<extension point="devblocks.context">
+			<id>cerberusweb.contexts.file_bundle</id>
+			<name>File Bundle</name>
+			<class>
+				<file>api/dao/file_bundle.php</file>
+				<name>Context_FileBundle</name>
+			</class>
+			<params>
+				<param key="alias" value="file_bundle" />
+				<param key="dao_class" value="DAO_FileBundle" />
+				<param key="view_class" value="View_FileBundle" />
+				<param key="options">
+					<value>
+						<data key="create" />
+						<data key="custom_fields" />
+						<data key="find" />
+						<data key="snippets" />
+						<data key="va_variable" />
+						<data key="workspace" />
+					</value>
+				</param>
+			</params>
+		</extension>
+		
+		<extension point="devblocks.context">
 			<id>cerberusweb.contexts.mail.html_template</id>
 			<name>HTML Template</name>
 			<class>
@@ -1254,6 +1302,7 @@
 				<param key="options">
 					<value>
 						<data key="snippets" />
+						<data key="va_variable" />
 						<data key="workspace" />
 					</value>
 				</param>
@@ -1604,8 +1653,24 @@
 		</extension>
 		
 		<extension point="devblocks.event">
+			<id>event.mail.received</id>
+			<name>Message added to a conversation</name>
+			<class>
+				<file>api/events/group/mail_received.php</file>
+				<name>Event_MailReceived</name>
+			</class>
+			<params>
+				<param key="contexts">
+					<value>
+						<data key="cerberusweb.contexts.app" />
+					</value>
+				</param>
+			</params>
+		</extension>
+		
+		<extension point="devblocks.event">
 			<id>event.mail.received.group</id>
-			<name>New message on a group conversation</name>
+			<name>Message added to a group conversation</name>
 			<class>
 				<file>api/events/group/mail_received_by_group.php</file>
 				<name>Event_MailReceivedByGroup</name>
@@ -1932,7 +1997,7 @@
 		
 		<extension point="devblocks.event">
 			<id>event.mail.received.watcher</id>
-			<name>New message on a watched conversation</name>
+			<name>Message added to a watched conversation</name>
 			<class>
 				<file>api/events/worker/mail_received_by_watcher.php</file>
 				<name>Event_MailReceivedByWatcher</name>
@@ -3019,6 +3084,19 @@
 				<params>
 					<param key="page_id" value="core.page.profiles" />
 					<param key="uri" value="contact_person" />
+				</params>
+			</extension>
+			
+			<extension point="cerberusweb.ui.page.section">
+				<id>core.page.profiles.file_bundle</id>
+				<name>File Bundle Section</name>
+				<class>
+					<file>api/uri/profiles/file_bundle.php</file>
+					<name>PageSection_ProfilesFileBundle</name>
+				</class>
+				<params>
+					<param key="page_id" value="core.page.profiles" />
+					<param key="uri" value="file_bundle" />
 				</params>
 			</extension>
 		

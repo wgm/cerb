@@ -27,10 +27,7 @@
 		<tr>
 			<td width="0%" nowrap="nowrap" valign="top" align="right">{'common.password'|devblocks_translate|capitalize}: </td>
 			<td width="100%">
-				<input type="text" name="password" value="" style="width:98%;">
-				{if !empty($contact)}
-				<div><i>(leave blank to remain unchanged)</i></div>
-				{/if}
+				<input type="text" name="password" value="" style="width:98%;" {if !empty($contact)}title="Leave blank to keep the current password unchanged."{/if}>
 			</td>
 		</tr>
 		
@@ -60,6 +57,14 @@
 
 {include file="devblocks:cerberusweb.core::internal/custom_fieldsets/peek_custom_fieldsets.tpl" context=CerberusContexts::CONTEXT_CONTACT_PERSON context_id=$contact->id}
 
+{* Comments *}
+{include file="devblocks:cerberusweb.core::internal/peek/peek_comments_pager.tpl" comments=$comments}
+
+<fieldset class="peek">
+	<legend>{'common.comment'|devblocks_translate|capitalize}</legend>
+	<textarea name="comment" rows="5" cols="45" style="width:98%;" title="{'comment.notify.at_mention'|devblocks_translate}"></textarea>
+</fieldset>
+
 {if $active_worker->hasPriv('core.addybook.person.actions.update')}
 	<button type="button" onclick="if($('#formContactPeek').validate().form()) { genericAjaxPopupPostCloseReloadView(null,'formContactPeek', '{$view_id}', false, 'contact_save'); }"><span class="cerb-sprite2 sprite-tick-circle"></span> {'common.save_changes'|devblocks_translate}</button>
 	{if $active_worker->hasPriv('core.addybook.person.actions.delete') && !empty($contact)}<button type="button" onclick="if(confirm('Are you sure you want to permanently delete this contact person?')) { $('#formContactPeek input[name=do_delete]').val('1'); genericAjaxPopupPostCloseReloadView(null,'formContactPeek','{$view_id}',false,'contact_delete'); } "><span class="cerb-sprite2 sprite-cross-circle"></span> {'common.delete'|devblocks_translate|capitalize}</button>{/if}
@@ -76,21 +81,51 @@
 </form>
 
 <script type="text/javascript">
-	$popup = genericAjaxPopupFetch('peek');
+$(function() {
+	var $popup = genericAjaxPopupFetch('peek');
+	
 	$popup.one('popup_open',function(event,ui) {
+		var $this = $(this);
+		var $textarea = $this.find('textarea[name=comment]');
+		
 		// Title
-		$(this).dialog('option','title', 'Contact');
+		
+		$this.dialog('option','title', 'Contact');
 
 		// Autocomplete
+		
 		ajax.emailAutoComplete('#formContactPeek input[name=email]:text');
 		
 		// Worker chooser
-		$(this).find('button.chooser_watcher').each(function() {
+		
+		$this.find('button.chooser_watcher').each(function() {
 			ajax.chooser(this,'cerberusweb.contexts.worker','add_watcher_ids', { autocomplete:true });
 		});
 		
 		// Form validation
+		
 		$("#formContactPeek").validate();
 		$('#formContactPeek :input:text:first').focus();
-	} );
+		
+		// Tooltips
+		
+		$popup.find(':input[title], textarea[title]').tooltip({
+			position: {
+				my: 'left top',
+				at: 'left+10 bottom+5'
+			}
+		});
+		
+		// @mentions
+		
+		var atwho_workers = {CerberusApplication::getAtMentionsWorkerDictionaryJson() nofilter};
+
+		$textarea.atwho({
+			at: '@',
+			{literal}tpl: '<li data-value="@${at_mention}">${name} <small style="margin-left:10px;">${title}</small></li>',{/literal}
+			data: atwho_workers,
+			limit: 10
+		});
+	});
+});
 </script>

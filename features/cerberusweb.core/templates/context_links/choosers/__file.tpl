@@ -3,25 +3,45 @@
 <input type="hidden" name="a" value="chooserOpenFileUpload">
 
 <fieldset class="peek">
-	<legend>Upload File</legend>
+	<legend>{if $single}{'common.upload.file'|devblocks_translate|capitalize}{else}{'common.upload.files'|devblocks_translate|capitalize}{/if}</legend>
 	<input type="file" name="file_data[]" {if !$single}multiple="multiple"{/if}>
 </fieldset>
 
-<button type="submit"><span class="cerb-sprite2 sprite-tick-circle"></span> {'common.upload'|devblocks_translate|capitalize}</button>
+{if !$single}
+<fieldset class="peek">
+	<legend>Include files from these bundles</legend>
+	<button type="button" class="chooser-file-bundle"><span class="cerb-sprite sprite-view"></span></button>
+</fieldset>
+{/if}
+
+<button type="submit"><span class="cerb-sprite2 sprite-tick-circle" style="vertical-align:middle;"></span> {'common.ok'|devblocks_translate|upper}</button>
 </form>
 
 <iframe name="iframe_file_post" style="visibility:hidden;display:none;width:0px;height:0px;background-color:#ffffff;"></iframe>
 <br>
 
 <script type="text/javascript">
-	$popup = genericAjaxPopupFind('#chooserFileUploadForm');
-	$frm = $popup.find('FORM#chooserFileUploadForm');
+$(function() {
+	var $popup = genericAjaxPopupFind('#chooserFileUploadForm');
+	var $frm = $popup.find('FORM#chooserFileUploadForm');
 	
 	$popup.find('UL.buffer').sortable({ placeholder: 'ui-state-highlight' });
 	
+	// Tabs
+	
+	$popup.find('#fileChooserTabs').tabs();
+	
+	// Bundle chooser
+	
+	$popup.find('button.chooser-file-bundle').each(function() {
+		ajax.chooser(this,'{CerberusContexts::CONTEXT_FILE_BUNDLE}','bundle_ids', { autocomplete:true });
+	});
+	
+	// Form
+	
 	$frm.submit(function(event) {
 		var $frm = $(this);
-		$iframe = $frm.parent().find('IFRAME[name=iframe_file_post]');
+		var $iframe = $frm.parent().find('IFRAME[name=iframe_file_post]');
 		$iframe.one('load', function(event) {
 			var data = $(this).contents().find('body').text();
 			var $json = $.parseJSON(data);
@@ -41,7 +61,7 @@
 			event.labels = $labels;
 			event.values = $values;
 			$popup.trigger(event);
-			
+
 			genericAjaxPopupDestroy('{$layer}');
 		});
 	});
@@ -55,4 +75,6 @@
 		event.stopPropagation();
 		genericAjaxPopupDestroy('{$layer}');
 	});
+	
+});
 </script>
