@@ -179,7 +179,6 @@
 
 
 #signature
-#cut
 {/if}
 
 {'display.reply.forward.banner'|devblocks_translate}
@@ -596,15 +595,6 @@
 				$(this).trigger('delete_quote_from_cursor');
 		});
 		
-		// Tooltips
-		
-		$('#reply{$message->id}').find(':input[title], textarea[title], a[title]').tooltip({
-			position: {
-				my: 'left top',
-				at: 'left+10 bottom+5'
-			}
-		});
-		
 		// Elastic
 
 		{if empty($mail_reply_textbox_size_inelastic)}
@@ -617,7 +607,7 @@
 					$('#reply{$message->id}_buttons a.send').click();
 				}
 			})
-		
+			
 		// Insert suggested on click
 		
 		$('#reply{$message->id}_suggested').find('a.suggested').click(function(e) {
@@ -810,6 +800,22 @@
 				$(this).find('a').trigger('click');
 			})
 		;
+		
+		// Tooltips
+		
+		$('#reply{$message->id}').find(':input[title], a[title]').tooltip({
+			position: {
+				my: 'left top',
+				at: 'left+10 bottom+5'
+			}
+		});
+		
+		$content.tooltip({
+			position: {
+				my: 'right bottom',
+				at: 'right top'
+			}
+		});
 		
 		// Shortcuts
 		
