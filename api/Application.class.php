@@ -46,8 +46,8 @@
  \* - Jeff Standen, Darren Sugita, Dan Hildebrandt
  *	 Webgroup Media LLC - Developers of Cerb
  */
-define("APP_BUILD", 2014101801);
-define("APP_VERSION", '6.8.2');
+define("APP_BUILD", 2014102101);
+define("APP_VERSION", '6.8.3');
 
 define("APP_MAIL_PATH", APP_STORAGE_PATH . '/mail/');
 
@@ -770,6 +770,9 @@ class CerberusContexts {
 	const CONTEXT_KB_ARTICLE = 'cerberusweb.contexts.kb_article';
 	const CONTEXT_KB_CATEGORY = 'cerberusweb.contexts.kb_category';
 	const CONTEXT_MAIL_HTML_TEMPLATE = 'cerberusweb.contexts.mail.html_template';
+	const CONTEXT_MAILING_LIST = 'cerberusweb.contexts.mailing_list';
+	const CONTEXT_MAILING_LIST_BROADCAST = 'cerberusweb.contexts.mailing_list.broadcast';
+	const CONTEXT_MAILING_LIST_MEMBER = 'cerberusweb.contexts.mailing_list.member';
 	const CONTEXT_MESSAGE = 'cerberusweb.contexts.message';
 	const CONTEXT_NOTIFICATION= 'cerberusweb.contexts.notification';
 	const CONTEXT_OPPORTUNITY = 'cerberusweb.contexts.opportunity';
