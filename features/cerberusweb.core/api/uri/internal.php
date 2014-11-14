@@ -1483,7 +1483,8 @@ class ChInternalController extends DevblocksControllerExtension {
 			
 			if(empty($id)) {
 				if($active_worker->hasPriv('core.snippets.actions.create')) {
-					$id = DAO_Snippet::create($fields);
+					if(false == ($id = DAO_Snippet::create($fields)))
+						return false;
 					
 					// Custom field saves
 					@$field_ids = DevblocksPlatform::importGPC($_POST['field_ids'], 'array', array());
@@ -1554,7 +1555,7 @@ class ChInternalController extends DevblocksControllerExtension {
 			'id' => $id,
 			'context_id' => $context_id,
 			'has_custom_placeholders' => !empty($snippet->custom_placeholders),
-			'text' => rtrim($output,"\r\n") . "\n",
+			'text' => rtrim(str_replace("\r","",$output),"\r\n") . "\n",
 		));
 	}
 	
@@ -2221,7 +2222,9 @@ class ChInternalController extends DevblocksControllerExtension {
 				DAO_Attachment::STORAGE_SHA1HASH => $sha1_hash,
 				DAO_Attachment::UPDATED => time(),
 			);
-			$id = DAO_Attachment::create($fields);
+			
+			if(false == ($id = DAO_Attachment::create($fields)))
+				return false;
 			
 			$fp = fopen($cursor['temp_file'], 'r');
 			Storage_Attachments::put($id, $fp);
@@ -3916,6 +3919,9 @@ class ChInternalController extends DevblocksControllerExtension {
 				DAO_DecisionNode::NODE_TYPE => $type,
 				DAO_DecisionNode::PARAMS_JSON => '',
 			));
+			
+			if(false == $id)
+				return false;
 			
 		} elseif(isset($_REQUEST['trigger_id'])) { // Trigger
 			@$trigger_id = DevblocksPlatform::importGPC($_REQUEST['trigger_id'],'integer', 0);
