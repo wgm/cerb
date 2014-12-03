@@ -37,7 +37,9 @@
 		</tr>
 		<tr>
 			<td width="0%" nowrap="nowrap"><b>Nickname:</b></td>
-			<td width="100%"><input type="text" name="nickname" value="{$pop3_account->nickname}" size="45"></td>
+			<td width="100%">
+				<input type="text" name="nickname" value="{$pop3_account->nickname}" size="45">
+			</td>
 		</tr>
 		<tr>
 			<td width="0%" nowrap="nowrap"><b>Protocol:</b></td>
@@ -50,23 +52,46 @@
 		</tr>
 		<tr>
 			<td width="0%" nowrap="nowrap"><b>Host:</b></td>
-			<td width="100%"><input type="text" name="host" value="{$pop3_account->host}" size="45"></td>
+			<td width="100%">
+				<input type="text" name="host" value="{$pop3_account->host}" size="45">
+			</td>
 		</tr>
 		<tr>
 			<td width="0%" nowrap="nowrap"><b>Username:</b></td>
-			<td width="100%"><input type="text" name="username" value="{$pop3_account->username}"></td>
+			<td width="100%">
+				<input type="text" name="username" value="{$pop3_account->username}">
+			</td>
 		</tr>
 		<tr>
 			<td width="0%" nowrap="nowrap"><b>Password:</b></td>
-			<td width="100%"><input type="password" name="password" value="{$pop3_account->password}"></td>
+			<td width="100%">
+				<input type="password" name="password" value="{$pop3_account->password}">
+			</td>
 		</tr>
 		<tr>
 			<td width="0%" nowrap="nowrap"><b>Port:</b></td>
-			<td width="100%"><input type="text" name="port" value="{$pop3_account->port}" size="5"> (leave blank for default)</td>
+			<td width="100%">
+				<input type="text" name="port" value="{$pop3_account->port}" size="5"> (leave blank for default)
+			</td>
 		</tr>
 		<tr>
 			<td width="0%" nowrap="nowrap"><b>Timeout:</b></td>
-			<td width="100%"><input type="text" name="timeout_secs" value="{$pop3_account->timeout_secs|default:30}" size="5"> seconds
+			<td width="100%">
+				<input type="text" name="timeout_secs" value="{$pop3_account->timeout_secs|default:30}" size="5"> seconds
+			</td>
+		</tr>
+		<tr>
+			<td width="0%" nowrap="nowrap"><b>Max Msg Size:</b></td>
+			<td width="100%">
+				<input type="text" name="max_msg_size_kb" value="{$pop3_account->max_msg_size_kb|default:25600}" size="6"> KB
+			</td>
+		</tr>
+		<tr>
+			<td width="0%" nowrap="nowrap"><b>SSL Validation:</b></td>
+			<td width="100%">
+				<label><input type="radio" name="ssl_ignore_validation" value="0" {if empty($pop3_account->ssl_ignore_validation)}checked="checked"{/if}> Enforce</label>
+				<label><input type="radio" name="ssl_ignore_validation" value="1" {if $pop3_account->ssl_ignore_validation}checked="checked"{/if}> Ignore</label>
+			</td>
 		</tr>
 		<tr>
 			<td colspan="2" style="padding-top:10px;">
