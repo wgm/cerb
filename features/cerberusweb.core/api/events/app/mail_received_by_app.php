@@ -774,7 +774,7 @@ class Event_MailReceivedByApp extends Extension_DevblocksEvent {
 			case 'set_header':
 				$tpl_builder = DevblocksPlatform::getTemplateBuilder();
 				
-				$header = $tpl_builder->build($params['header'], $dict);
+				$header = strtolower($tpl_builder->build($params['header'], $dict));
 				$value = $tpl_builder->build($params['value'], $dict);
 				
 				@$parser_model = $dict->_parser_model;
@@ -790,7 +790,11 @@ class Event_MailReceivedByApp extends Extension_DevblocksEvent {
 				} else {
 					$headers[$header] = $value;
 				}
-					
+				
+				// Are we changing any threading headers?
+				if(in_array(strtolower($header), array('subject', 'in-reply-to', 'references')))
+					$dict->pre_actions['headers_dirty'] = true;
+				
 				break;
 				
 			case 'set_sender_is_banned':

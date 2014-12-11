@@ -3851,8 +3851,100 @@ class DevblocksEventHelper {
 		$tpl->display('devblocks:cerberusweb.core::internal/decisions/actions/_relay_email.tpl');
 	}
 	
-	static function simulateActionRelayEmail($params, DevblocksDictionaryDelegate $dict, $context, $context_id, $group_id, $bucket_id, $message_id, $owner_id, $sender_email, $sender_name, $subject) {
+	private static function _getActionRelayEmailListTo($params, DevblocksDictionaryDelegate $dict, $context, $context_id, $owner_id) {
+		$relay_list = isset($params['to']) ? $params['to'] : array();
+		$to_list = array();
+		
+		// Owner
+		if(isset($params['to_owner']) && !empty($params['to_owner'])) {
+			if(!empty($owner_id)) {
+				$relay_list[] = DAO_Worker::get($owner_id);
+			}
+		}
+		
+		// Watchers
+		if(isset($params['to_watchers']) && !empty($params['to_watchers'])) {
+			$watchers = CerberusContexts::getWatchers($context, $context_id);
+			foreach($watchers as $watcher) { /* @var $watcher Model_Worker */
+				if(!in_array($watcher, $relay_list))
+				$relay_list[] = $watcher;
+			}
+		}
+		
+		// Convert relay list to email addresses
+		
+		$trigger = $dict->_trigger; /* @var $trigger Model_TriggerEvent */
+		
+		if(is_array($relay_list))
+		foreach($relay_list as $to) {
+			
+			// Variables
+			if('var_' == substr($to, 0, 4) && isset($trigger->variables[$to])) {
+				switch(@$trigger->variables[$to]['type']) {
+					case 'ctx_' . CerberusContexts::CONTEXT_WORKER:
+						foreach($dict->$to as $also_to) {
+							if($also_to instanceof DevblocksDictionaryDelegate) {
+								if($also_to->_context == CerberusContexts::CONTEXT_WORKER) {
+									if(null != ($worker = DAO_Worker::get($also_to->id)))
+										$to_list[$also_to->address_address] = $worker;
+								}
+							}
+						}
+						break;
+					
+					case Model_CustomField::TYPE_WORKER:
+						@$worker_id = $dict->$to;
+						
+						if(empty($worker_id))
+							continue;
+						
+						if(null == ($worker = DAO_Worker::get($dict->$to)))
+							continue;
+						
+						$to_list[$worker->email] = $worker;
+						break;
+				}
+
+			// Worker models
+			} elseif($to instanceof Model_Worker) {
+				$to_list[] = $to->email;
+				
+			// Email address strings
+			} elseif (is_string($to)) {
+				if(null == ($worker_address = DAO_AddressToWorker::getByAddress($to)))
+					continue;
+					
+				if(null == ($worker = DAO_Worker::get($worker_address->worker_id)))
+					continue;
+				
+				$to_list[$worker_address->address] = $worker;
+			}
+		}
+		
+		return $to_list;
 	}
+	
+	static function simulateActionRelayEmail($params, DevblocksDictionaryDelegate $dict, $context, $context_id, $group_id, $bucket_id, $message_id, $owner_id, $sender_email, $sender_name, $subject) {
+		$tpl_builder = DevblocksPlatform::getTemplateBuilder();
+		
+		$subject = $tpl_builder->build($params['subject'], $dict);
+		$content = $tpl_builder->build($params['content'], $dict);
+		
+		$to_list = self::_getActionRelayEmailListTo($params, $dict, $context, $context_id, $owner_id);
+		
+		$out = sprintf(">>> Relaying email\n".
+			"To: %s\n".
+			"Subject: %s\n".
+			"\n".
+			"%s",
+			(!empty($to_list) ? (implode("; ", array_keys($to_list))) : ''),
+			$subject,
+			$content
+		);
+		
+		return $out;
+	}
+	
 	
 	static function runActionRelayEmail($params, DevblocksDictionaryDelegate $dict, $context, $context_id, $group_id, $bucket_id, $message_id, $owner_id, $sender_email, $sender_name, $subject) {
 		$logger = DevblocksPlatform::getConsoleLog('Attendant');
@@ -3877,8 +3969,6 @@ class DevblocksEventHelper {
 			$replyto = DAO_AddressOutgoing::getDefault();
 		}
 
-		$relay_list = isset($params['to']) ? $params['to'] : array();
-		
 		// Attachments
 		$attachment_data = array();
 		
@@ -3892,45 +3982,14 @@ class DevblocksEventHelper {
 			}
 		}
 		
-		// Owner
-		if(isset($params['to_owner']) && !empty($params['to_owner'])) {
-			if(!empty($owner_id)) {
-				$relay_list[] = DAO_Worker::get($owner_id);
-			}
-		}
+		$to_list = self::_getActionRelayEmailListTo($params, $dict, $context, $context_id, $owner_id);
 		
-		// Watchers
-		if(isset($params['to_watchers']) && !empty($params['to_watchers'])) {
-			$watchers = CerberusContexts::getWatchers($context, $context_id);
-			foreach($watchers as $watcher) { /* @var $watcher Model_Worker */
-				if(!in_array($watcher, $relay_list))
-				$relay_list[] = $watcher;
-			}
-			unset($watchers);
-		}
-		
-		// [TODO] Remove dupes
-		
-		if(is_array($relay_list))
-		foreach($relay_list as $to) {
+		if(is_array($to_list))
+		foreach($to_list as $to => $worker) {
 			try {
-				if($to instanceof Model_Worker) {
-					$worker = $to;
-					$to_address = $worker->email;
-					
-				} else {
-					if(null == ($worker_address = DAO_AddressToWorker::getByAddress($to)))
-						continue;
-						
-					if(null == ($worker = DAO_Worker::get($worker_address->worker_id)))
-						continue;
-					
-					$to_address = $worker_address->address;
-				}
-				
 				$mail = $mail_service->createMessage();
 				
-				$mail->setTo(array($to_address));
+				$mail->setTo(array($to));
 	
 				$headers = $mail->getHeaders(); /* @var $headers Swift_Mime_Header */
 
@@ -3998,7 +4057,7 @@ class DevblocksEventHelper {
 						'variables' => array(
 							'target' => sprintf("[%s] %s", $dict->ticket_mask, $dict->ticket_subject),
 							'worker' => $worker->getName(),
-							'worker_email' => $to_address,
+							'worker_email' => $to,
 							),
 						'urls' => array(
 							'target' => sprintf("ctx://%s:%d", CerberusContexts::CONTEXT_TICKET, $context_id),
