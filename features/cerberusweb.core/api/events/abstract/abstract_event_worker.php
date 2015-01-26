@@ -2,7 +2,7 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2014, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
@@ -136,17 +136,18 @@ abstract class AbstractEvent_Worker extends Extension_DevblocksEvent {
 		switch($as_token) {
 			case 'worker_calendar':
 				@$worker_id = $dict->worker_id;
+				$tpl_builder = DevblocksPlatform::getTemplateBuilder();
 
 				if(empty($worker_id)) {
 					$pass = false;
 					break;
 				}
 				
-				@$from = $params['from'];
-				@$to = $params['to'];
+				@$from = $tpl_builder->build($params['from'], $dict);
+				@$to = $tpl_builder->build($params['to'], $dict);
 				$is_available = !empty($params['is_available']) ? 1 : 0;
 				
-				@$availability_calendar_id = DAO_WorkerPref::get($worker_id, 'availability_calendar_id', 0);
+				@$availability_calendar_id = $dict->worker_calendar_id;
 				
 				if(empty($availability_calendar_id)) {
 					$pass = ($is_available) ? false : true;

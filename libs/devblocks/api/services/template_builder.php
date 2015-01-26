@@ -384,15 +384,24 @@ class _DevblocksTwigExtensions extends Twig_Extension {
 	
 	public function getFunctions() {
 		return array(
-			'regexp_match_all' => new Twig_Function_Method($this, 'function_regexp_match_all'),
+			'array_diff' => new Twig_Function_Method($this, 'function_array_diff'),
+			'dict_set' => new Twig_Function_Method($this, 'function_dict_set'),
 			'json_decode' => new Twig_Function_Method($this, 'function_json_decode'),
 			'jsonpath_set' => new Twig_Function_Method($this, 'function_jsonpath_set'),
+			'regexp_match_all' => new Twig_Function_Method($this, 'function_regexp_match_all'),
 			'xml_decode' => new Twig_Function_Method($this, 'function_xml_decode'),
+			'xml_encode' => new Twig_Function_Method($this, 'function_xml_encode'),
 			'xml_xpath_ns' => new Twig_Function_Method($this, 'function_xml_xpath_ns'),
 			'xml_xpath' => new Twig_Function_Method($this, 'function_xml_xpath'),
 		);
 	}
 	
+	function function_array_diff($arr1, $arr2) {
+		if(!is_array($arr1) || !is_array($arr2))
+			return;
+		
+		return array_diff($arr1, $arr2);
+	}
 	
 	function function_json_decode($str) {
 		return json_decode($str, true);
@@ -430,6 +439,38 @@ class _DevblocksTwigExtensions extends Twig_Extension {
 		return $var;
 	}
 	
+	function function_dict_set($var, $path, $val) {
+		if(empty($var))
+			$var = new stdClass();
+		
+		$parts = explode('.', $path);
+		$ptr =& $var;
+		
+		if(is_array($parts))
+		foreach($parts as $part) {
+			if('[]' == $part) {
+				if(is_array($ptr))
+					$ptr =& $ptr[];
+				
+			} elseif(is_array($ptr)) {
+				if(!isset($ptr[$part]))
+					$ptr[$part] = array();
+
+				$ptr =& $ptr[$part];
+				
+			} elseif(is_object($ptr)) {
+				if(!isset($ptr->$part))
+					$ptr->$part = array();
+				
+				$ptr =& $ptr->$part;
+			}
+		}
+		
+		$ptr = $val;
+		
+		return $var;
+	}
+	
 	function function_regexp_match_all($pattern, $text, $group = 0) {
 		$group = intval($group);
 		
@@ -446,6 +487,13 @@ class _DevblocksTwigExtensions extends Twig_Extension {
 		}
 		
 		return array();
+	}
+	
+	function function_xml_encode($xml) {
+		if(!($xml instanceof SimpleXMLElement))
+			return false;
+		
+		return $xml->asXML();
 	}
 	
 	function function_xml_decode($str, $namespaces=array()) {
@@ -488,8 +536,11 @@ class _DevblocksTwigExtensions extends Twig_Extension {
 			'date_pretty' => new Twig_Filter_Method($this, 'filter_date_pretty'),
 			'json_pretty' => new Twig_Filter_Method($this, 'filter_json_pretty'),
 			'md5' => new Twig_Filter_Method($this, 'filter_md5'),
+			'nlp_parse' => new Twig_Filter_Method($this, 'filter_nlp_parse'),
 			'regexp' => new Twig_Filter_Method($this, 'filter_regexp'),
 			'secs_pretty' => new Twig_Filter_Method($this, 'filter_secs_pretty'),
+			'split_crlf' => new Twig_Filter_Method($this, 'filter_split_crlf'),
+			'split_csv' => new Twig_Filter_Method($this, 'filter_split_csv'),
 			'truncate' => new Twig_Filter_Method($this, 'filter_truncate'),
 		);
 	}
@@ -510,6 +561,24 @@ class _DevblocksTwigExtensions extends Twig_Extension {
 		return md5($string);
 	}
 	
+	function filter_nlp_parse($string, $patterns) {
+		if(!is_array($patterns))
+			$patterns = array($patterns);
+		
+		$nlp = DevblocksPlatform::getNaturalLanguageService();
+		
+		if(is_array($patterns))
+		foreach($patterns as $pattern) {
+			if(!is_string($pattern))
+				continue;
+
+			if(false !== ($json = $nlp->parseTextWithPattern($string, $pattern)))
+				return json_encode($json);
+		}
+		 
+		return null;
+	}
+	
 	function filter_regexp($string, $pattern, $group = 0) {
 		$matches = array();
 		@preg_match($pattern, $string, $matches);
@@ -525,6 +594,14 @@ class _DevblocksTwigExtensions extends Twig_Extension {
 	
 	function filter_secs_pretty($string, $precision=0) {
 		return DevblocksPlatform::strSecsToString($string, $precision);
+	}
+	
+	function filter_split_crlf($string) {
+		return DevblocksPlatform::parseCrlfString($string);
+	}
+	
+	function filter_split_csv($string) {
+		return DevblocksPlatform::parseCsvString($string);
 	}
 	
 	/**

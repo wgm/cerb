@@ -2,7 +2,7 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2014, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
@@ -179,6 +179,13 @@ class DAO_Snippet extends Cerb_ORMHelper {
 	static function maint() {
 		$db = DevblocksPlatform::getDatabaseService();
 		$logger = DevblocksPlatform::getConsoleLog();
+		$tables = DevblocksPlatform::getDatabaseTables();
+		
+		// Search indexes
+		if(isset($tables['fulltext_snippet'])) {
+			$db->Execute("DELETE FROM fulltext_snippet WHERE id NOT IN (SELECT id FROM snippet)");
+			$logger->info('[Maint] Purged ' . $db->Affected_Rows() . ' fulltext_snippet records.');
+		}
 		
 		$db->Execute("DELETE FROM snippet_use_history WHERE worker_id NOT IN (SELECT id FROM worker)");
 		$logger->info('[Maint] Purged ' . $db->Affected_Rows() . ' snippet_use_history records by worker.');
@@ -317,6 +324,29 @@ class DAO_Snippet extends Cerb_ORMHelper {
 		settype($param_key, 'string');
 		
 		switch($param_key) {
+			case SearchFields_Snippet::FULLTEXT_SNIPPET:
+				$search = Extension_DevblocksSearchSchema::get(Search_Snippet::ID);
+				$query = $search->getQueryFromParam($param);
+				
+				if(false === ($ids = $search->query($query, array()))) {
+					$args['where_sql'] .= 'AND 0 ';
+				
+				} elseif(is_array($ids)) {
+					if(empty($ids))
+						$ids = array(-1);
+					
+					$args['where_sql'] .= sprintf('AND snippet.id IN (%s) ',
+						implode(', ', $ids)
+					);
+					
+				} elseif(is_string($ids)) {
+					$args['join_sql'] .= sprintf("INNER JOIN %s ON (%s.id=snippet.id) ",
+						$ids,
+						$ids
+					);
+				}
+				break;
+			
 			case SearchFields_Snippet::VIRTUAL_CONTEXT_LINK:
 				$args['has_multiple_values'] = true;
 				if(is_array($args) && isset($args['join_sql']) && isset($args['where_sql']))
@@ -444,6 +474,10 @@ class SearchFields_Snippet implements IDevblocksSearchFields {
 	const CONTEXT_LINK = 'cl_context_from';
 	const CONTEXT_LINK_ID = 'cl_context_from_id';
 	
+	// Fulltexts
+	const FULLTEXT_SNIPPET = 'ft_snippet';
+	
+	// Virtuals
 	const VIRTUAL_CONTEXT_LINK = '*_context_link';
 	const VIRTUAL_HAS_FIELDSET = '*_has_fieldset';
 	const VIRTUAL_OWNER = '*_owner';
@@ -469,10 +503,16 @@ class SearchFields_Snippet implements IDevblocksSearchFields {
 			self::CONTEXT_LINK => new DevblocksSearchField(self::CONTEXT_LINK, 'context_link', 'from_context', null),
 			self::CONTEXT_LINK_ID => new DevblocksSearchField(self::CONTEXT_LINK_ID, 'context_link', 'from_context_id', null),
 			
+			self::FULLTEXT_SNIPPET => new DevblocksSearchField(self::FULLTEXT_SNIPPET, 'ft', 'snippet', $translate->_('common.search.fulltext'), 'FT'),
+				
 			self::VIRTUAL_CONTEXT_LINK => new DevblocksSearchField(self::VIRTUAL_CONTEXT_LINK, '*', 'context_link', $translate->_('common.links'), null),
 			self::VIRTUAL_HAS_FIELDSET => new DevblocksSearchField(self::VIRTUAL_HAS_FIELDSET, '*', 'has_fieldset', $translate->_('common.fieldset'), null),
 			self::VIRTUAL_OWNER => new DevblocksSearchField(self::VIRTUAL_OWNER, '*', 'owner', $translate->_('common.owner')),
 		);
+		
+		// Fulltext indexes
+		
+		$columns[self::FULLTEXT_SNIPPET]->ft_schema = Search_Snippet::ID;
 		
 		// Custom fields with fieldsets
 		
@@ -487,6 +527,123 @@ class SearchFields_Snippet implements IDevblocksSearchFields {
 		DevblocksPlatform::sortObjects($columns, 'db_label');
 
 		return $columns;
+	}
+};
+
+class Search_Snippet extends Extension_DevblocksSearchSchema {
+	const ID = 'cerb.search.schema.snippet';
+	
+	public function getNamespace() {
+		return 'snippet';
+	}
+	
+	public function getAttributes() {
+		return array();
+	}
+	
+	public function query($query, $attributes=array(), $limit=500) {
+		if(false == ($engine = $this->getEngine()))
+			return false;
+		
+		$ids = $engine->query($this, $query, $attributes, $limit);
+		
+		return $ids;
+	}
+	
+	public function reindex() {
+		$engine = $this->getEngine();
+		$meta = $engine->getIndexMeta($this);
+		
+		// If the index has a delta, start from the current record
+		if($meta['is_indexed_externally']) {
+			// Do nothing (let the remote tool update the DB)
+			
+		// Otherwise, start over
+		} else {
+			$this->setIndexPointer(self::INDEX_POINTER_RESET);
+		}
+	}
+	
+	public function setIndexPointer($pointer) {
+		switch($pointer) {
+			case self::INDEX_POINTER_RESET:
+				$this->setParam('last_indexed_id', 0);
+				$this->setParam('last_indexed_time', 0);
+				break;
+				
+			case self::INDEX_POINTER_CURRENT:
+				$this->setParam('last_indexed_id', 0);
+				$this->setParam('last_indexed_time', time());
+				break;
+		}
+	}
+	
+	public function index($stop_time=null) {
+		$logger = DevblocksPlatform::getConsoleLog();
+		
+		if(false == ($engine = $this->getEngine()))
+			return false;
+		
+		$ns = self::getNamespace();
+		$id = $this->getParam('last_indexed_id', 0);
+		$ptr_time = $this->getParam('last_indexed_time', 0);
+		$ptr_id = $id;
+		$done = false;
+
+		while(!$done && time() < $stop_time) {
+			$where = sprintf('(%1$s = %2$d AND %3$s > %4$d) OR (%1$s > %2$d)',
+				DAO_Snippet::UPDATED_AT,
+				$ptr_time,
+				DAO_Snippet::ID,
+				$id
+			);
+			$snippets = DAO_Snippet::getWhere($where, array(DAO_Snippet::UPDATED_AT, DAO_Snippet::ID), array(true, true), 100);
+
+			if(empty($snippets)) {
+				$done = true;
+				continue;
+			}
+			
+			$last_time = $ptr_time;
+			
+			foreach($snippets as $snippet) { /* @var $snippet Model_Snippet */
+				$id = $snippet->id;
+				$ptr_time = $snippet->updated_at;
+				
+				$ptr_id = ($last_time == $ptr_time) ? $id : 0;
+				
+				$logger->info(sprintf("[Search] Indexing %s %d...",
+					$ns,
+					$id
+				));
+				
+				$doc = array(
+					'title' => $snippet->title,
+					'content' => $snippet->content,						
+				);
+				
+				if(false === ($engine->index($this, $id, $doc)))
+					return false;
+				
+				flush();
+			}
+		}
+		
+		// If we ran out of records, always reset the ID and use the current time
+		if($done) {
+			$ptr_id = 0;
+			$ptr_time = time();
+		}
+		
+		$this->setParam('last_indexed_id', $ptr_id);
+		$this->setParam('last_indexed_time', $ptr_time);
+	}
+	
+	public function delete($ids) {
+		if(false == ($engine = $this->getEngine()))
+			return false;
+		
+		return $engine->delete($this, $ids);
 	}
 };
 
@@ -582,7 +739,7 @@ class Model_Snippet {
 	
 };
 
-class View_Snippet extends C4_AbstractView implements IAbstractView_Subtotals {
+class View_Snippet extends C4_AbstractView implements IAbstractView_Subtotals, IAbstractView_QuickSearch {
 	const DEFAULT_ID = 'snippet';
 
 	function __construct() {
@@ -609,6 +766,7 @@ class View_Snippet extends C4_AbstractView implements IAbstractView_Subtotals {
 			SearchFields_Snippet::CONTENT,
 			SearchFields_Snippet::OWNER_CONTEXT,
 			SearchFields_Snippet::OWNER_CONTEXT_ID,
+			SearchFields_Snippet::FULLTEXT_SNIPPET,
 			SearchFields_Snippet::VIRTUAL_CONTEXT_LINK,
 			SearchFields_Snippet::VIRTUAL_HAS_FIELDSET,
 		));
@@ -721,6 +879,122 @@ class View_Snippet extends C4_AbstractView implements IAbstractView_Subtotals {
 		return $counts;
 	}
 	
+	// [TODO] My uses? owner?
+	
+	function getQuickSearchFields() {
+		$fields = array(
+			'_fulltext' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_FULLTEXT,
+					'options' => array('param_key' => SearchFields_Snippet::FULLTEXT_SNIPPET),
+				),
+			'content' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_TEXT,
+					'options' => array('param_key' => SearchFields_Snippet::CONTENT, 'match' => DevblocksSearchCriteria::OPTION_TEXT_PARTIAL),
+				),
+			'title' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_TEXT,
+					'options' => array('param_key' => SearchFields_Snippet::TITLE, 'match' => DevblocksSearchCriteria::OPTION_TEXT_PARTIAL),
+				),
+			'totalUses' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_NUMBER,
+					'options' => array('param_key' => SearchFields_Snippet::TITLE),
+				),
+			'type' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_VIRTUAL,
+					'options' => array('param_key' => SearchFields_Snippet::CONTEXT),
+					'examples' => array(
+						'plaintext',
+						'ticket',
+						'plaintext,ticket',
+					),
+				),
+			'updated' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_DATE,
+					'options' => array('param_key' => SearchFields_Snippet::UPDATED_AT),
+				),
+		);
+		
+		// Add searchable custom fields
+		
+		$fields = self::_appendFieldsFromQuickSearchContext(CerberusContexts::CONTEXT_SNIPPET, $fields, null);
+		
+		// Engine/schema examples: Fulltext
+		
+		$ft_examples = array();
+		
+		if(false != ($schema = Extension_DevblocksSearchSchema::get(Search_Snippet::ID))) {
+			if(false != ($engine = $schema->getEngine())) {
+				$ft_examples = $engine->getQuickSearchExamples($schema);
+			}
+		}
+		
+		if(!empty($ft_examples))
+			$fields['_fulltext']['examples'] = $ft_examples;
+		
+		// Sort by keys
+		
+		ksort($fields);
+		
+		return $fields;
+	}
+	
+	function getParamsFromQuickSearchFields($fields) {
+		$search_fields = $this->getQuickSearchFields();
+		$params = DevblocksSearchCriteria::getParamsFromQueryFields($fields, $search_fields);
+
+		// Handle virtual fields and overrides
+		if(is_array($fields))
+		foreach($fields as $k => $v) {
+			switch($k) {
+				case 'type':
+					$field_keys = array(
+						'type' => SearchFields_Snippet::CONTEXT,
+					);
+					
+					@$field_key = $field_keys[$k];
+					
+					$oper = DevblocksSearchCriteria::OPER_IN;
+					
+					$patterns = DevblocksPlatform::parseCsvString($v);
+					$contexts = Extension_DevblocksContext::getAll(false);
+					$values = array();
+					
+					if(is_array($patterns))
+					foreach($patterns as $pattern) {
+						if(in_array($pattern, array('plain', 'plaintext'))) {
+							$values[''] = true;
+							continue;
+						}
+						
+						foreach($contexts as $context_id => $context) {
+							if(false !== stripos($context->name, $pattern))
+								$values[$context_id] = true;
+						}
+					}
+					
+					$param = new DevblocksSearchCriteria(
+						$field_key,
+						$oper,
+						array_keys($values)
+					);
+					$params[$field_key] = $param;					
+					break;
+					
+			}
+		}
+		
+		$this->renderPage = 0;
+		$this->addParams($params, true);
+		
+		return $params;
+	}
+	
 	function render() {
 		$this->_sanitize();
 		
@@ -783,6 +1057,10 @@ class View_Snippet extends C4_AbstractView implements IAbstractView_Subtotals {
 				$tpl->assign('contexts', $contexts);
 				
 				$tpl->display('devblocks:cerberusweb.core::internal/views/criteria/__context.tpl');
+				break;
+				
+			case SearchFields_Snippet::FULLTEXT_SNIPPET:
+				$tpl->display('devblocks:cerberusweb.core::internal/views/criteria/__fulltext.tpl');
 				break;
 				
 			case SearchFields_Snippet::VIRTUAL_CONTEXT_LINK:
@@ -891,6 +1169,11 @@ class View_Snippet extends C4_AbstractView implements IAbstractView_Subtotals {
 			case SearchFields_Snippet::CONTEXT:
 				@$in_contexts = DevblocksPlatform::importGPC($_REQUEST['contexts'],'array',array());
 				$criteria = new DevblocksSearchCriteria($field,DevblocksSearchCriteria::OPER_IN,$in_contexts);
+				break;
+				
+			case SearchFields_Snippet::FULLTEXT_SNIPPET:
+				@$scope = DevblocksPlatform::importGPC($_REQUEST['scope'],'string','expert');
+				$criteria = new DevblocksSearchCriteria($field,DevblocksSearchCriteria::OPER_FULLTEXT,array($value,$scope));
 				break;
 				
 			case SearchFields_Snippet::VIRTUAL_CONTEXT_LINK:
@@ -1203,8 +1486,8 @@ class Context_Snippet extends Extension_DevblocksContext {
 		return $view;
 	}
 	
-	function getView($context=null, $context_id=null, $options=array()) {
-		$view_id = str_replace('.','_',$this->id);
+	function getView($context=null, $context_id=null, $options=array(), $view_id=null) {
+		$view_id = !empty($view_id) ? $view_id : str_replace('.','_',$this->id);
 		
 		$defaults = new C4_AbstractViewModel();
 		$defaults->id = $view_id;

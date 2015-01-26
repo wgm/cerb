@@ -2,7 +2,7 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2014, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
@@ -20,18 +20,23 @@ class DAO_Worker extends Cerb_ORMHelper {
 	
 	const CACHE_ALL = 'ch_workers';
 	
-	const ID = 'id';
-	const FIRST_NAME = 'first_name';
-	const LAST_NAME = 'last_name';
-	const TITLE = 'title';
+	const AT_MENTION_NAME = 'at_mention_name';
+	const AUTH_EXTENSION_ID = 'auth_extension_id';
+	const CALENDAR_ID = 'calendar_id';
 	const EMAIL = 'email';
-	const IS_SUPERUSER = 'is_superuser';
+	const FIRST_NAME = 'first_name';
+	const ID = 'id';
 	const IS_DISABLED = 'is_disabled';
+	const IS_SUPERUSER = 'is_superuser';
+	const LANGUAGE = 'language';
 	const LAST_ACTIVITY = 'last_activity';
 	const LAST_ACTIVITY_DATE = 'last_activity_date';
 	const LAST_ACTIVITY_IP = 'last_activity_ip';
-	const AUTH_EXTENSION_ID = 'auth_extension_id';
-	const AT_MENTION_NAME = 'at_mention_name';
+	const LAST_NAME = 'last_name';
+	const TIME_FORMAT = 'time_format';
+	const TIMEZONE = 'timezone';
+	const TITLE = 'title';
+	const UPDATED = 'updated';
 	
 	static function create($fields) {
 		if(empty($fields[DAO_Worker::EMAIL]))
@@ -145,7 +150,7 @@ class DAO_Worker extends Cerb_ORMHelper {
 		
 		list($where_sql, $sort_sql, $limit_sql) = self::_getWhereSQL($where, $sortBy, $sortAsc, $limit);
 		
-		$sql = "SELECT id, first_name, last_name, email, title, is_superuser, is_disabled, last_activity_date, last_activity, last_activity_ip, auth_extension_id, at_mention_name ".
+		$sql = "SELECT id, first_name, last_name, email, title, is_superuser, is_disabled, last_activity_date, last_activity, last_activity_ip, auth_extension_id, at_mention_name, timezone, time_format, language, calendar_id, updated ".
 			"FROM worker ".
 			$where_sql.
 			$sort_sql.
@@ -178,16 +183,21 @@ class DAO_Worker extends Cerb_ORMHelper {
 		
 		while($row = mysqli_fetch_assoc($rs)) {
 			$object = new Model_Worker();
-			$object->id = intval($row['id']);
-			$object->first_name = $row['first_name'];
-			$object->last_name = $row['last_name'];
-			$object->email = $row['email'];
-			$object->title = $row['title'];
-			$object->is_superuser = intval($row['is_superuser']);
-			$object->is_disabled = intval($row['is_disabled']);
-			$object->last_activity_date = intval($row['last_activity_date']);
-			$object->auth_extension_id = $row['auth_extension_id'];
 			$object->at_mention_name = $row['at_mention_name'];
+			$object->auth_extension_id = $row['auth_extension_id'];
+			$object->calendar_id = intval($row['calendar_id']);
+			$object->email = $row['email'];
+			$object->first_name = $row['first_name'];
+			$object->id = intval($row['id']);
+			$object->is_disabled = intval($row['is_disabled']);
+			$object->is_superuser = intval($row['is_superuser']);
+			$object->language = $row['language'];
+			$object->last_name = $row['last_name'];
+			$object->last_activity_date = intval($row['last_activity_date']);
+			$object->time_format = $row['time_format'];
+			$object->timezone = $row['timezone'];
+			$object->title = $row['title'];
+			$object->updated = intval($row['updated']);
 			
 			if(!empty($row['last_activity']))
 				$object->last_activity = unserialize($row['last_activity']);
@@ -260,10 +270,17 @@ class DAO_Worker extends Cerb_ORMHelper {
 		return $results;
 	}
 	
-	// [TODO] Fix 'option_bits'
+	static function updateWhere($fields, $where) {
+		self::_updateWhere('worker', $fields, $where);
+		self::clearCache();
+	}
+	
 	static function update($ids, $fields, $option_bits=0, $check_deltas=true) {
 		if(!is_array($ids))
 			$ids = array($ids);
+		
+		if(!isset($fields[self::UPDATED]) && !($option_bits & DevblocksORMHelper::OPT_UPDATE_NO_EVENTS))
+			$fields[self::UPDATED] = time();
 		
 		// Make a diff for the requested objects in batches
 		
@@ -347,6 +364,7 @@ class DAO_Worker extends Cerb_ORMHelper {
 	static function maint() {
 		$db = DevblocksPlatform::getDatabaseService();
 		$logger = DevblocksPlatform::getConsoleLog();
+		$tables = DevblocksPlatform::getDatabaseTables();
 		
 		$db->Execute("DELETE FROM view_rss WHERE worker_id NOT IN (SELECT id FROM worker)");
 		$logger->info('[Maint] Purged ' . $db->Affected_Rows() . ' view_rss records.');
@@ -359,6 +377,12 @@ class DAO_Worker extends Cerb_ORMHelper {
 		
 		$db->Execute("DELETE FROM worker_to_group WHERE worker_id NOT IN (SELECT id FROM worker)");
 		$logger->info('[Maint] Purged ' . $db->Affected_Rows() . ' worker_to_group records.');
+		
+		// Search indexes
+		if(isset($tables['fulltext_worker'])) {
+			$db->Execute("DELETE FROM fulltext_worker WHERE id NOT IN (SELECT id FROM worker)");
+			$logger->info('[Maint] Purged ' . $db->Affected_Rows() . ' fulltext_worker records.');
+		}
 		
 		// Fire event
 		$eventMgr = DevblocksPlatform::getEventService();
@@ -558,6 +582,11 @@ class DAO_Worker extends Cerb_ORMHelper {
 			"w.last_activity_date as %s, ".
 			"w.auth_extension_id as %s, ".
 			"w.at_mention_name as %s, ".
+			"w.timezone as %s, ".
+			"w.time_format as %s, ".
+			"w.language as %s, ".
+			"w.calendar_id as %s, ".
+			"w.updated as %s, ".
 			"w.is_disabled as %s ",
 				SearchFields_Worker::ID,
 				SearchFields_Worker::FIRST_NAME,
@@ -568,6 +597,11 @@ class DAO_Worker extends Cerb_ORMHelper {
 				SearchFields_Worker::LAST_ACTIVITY_DATE,
 				SearchFields_Worker::AUTH_EXTENSION_ID,
 				SearchFields_Worker::AT_MENTION_NAME,
+				SearchFields_Worker::TIMEZONE,
+				SearchFields_Worker::TIME_FORMAT,
+				SearchFields_Worker::LANGUAGE,
+				SearchFields_Worker::CALENDAR_ID,
+				SearchFields_Worker::UPDATED,
 				SearchFields_Worker::IS_DISABLED
 			);
 			
@@ -627,6 +661,29 @@ class DAO_Worker extends Cerb_ORMHelper {
 		settype($param_key, 'string');
 		
 		switch($param_key) {
+			case SearchFields_Worker::FULLTEXT_WORKER:
+				$search = Extension_DevblocksSearchSchema::get(Search_Worker::ID);
+				$query = $search->getQueryFromParam($param);
+				
+				if(false === ($ids = $search->query($query, array()))) {
+					$args['where_sql'] .= 'AND 0 ';
+				
+				} elseif(is_array($ids)) {
+					if(empty($ids))
+						$ids = array(-1);
+					
+					$args['where_sql'] .= sprintf('AND w.id IN (%s) ',
+						implode(', ', $ids)
+					);
+					
+				} elseif(is_string($ids)) {
+					$args['join_sql'] .= sprintf("INNER JOIN %s ON (%s.id=w.id) ",
+						$ids,
+						$ids
+					);
+				}
+				break;
+			
 			case SearchFields_Worker::VIRTUAL_CONTEXT_LINK:
 				$args['has_multiple_values'] = true;
 				self::_searchComponentsVirtualContextLinks($param, $from_context, $from_index, $args['join_sql'], $args['where_sql']);
@@ -668,15 +725,15 @@ class DAO_Worker extends Cerb_ORMHelper {
 				$results = array();
 				
 				foreach($workers as $worker_id => $worker) {
-					@$availability_calendar_id = DAO_WorkerPref::get($worker->id, 'availability_calendar_id', 0);
+					@$calendar_id = DAO_WorkerPref::get($worker->id, 'calendar_id', 0);
 					
-					if(empty($availability_calendar_id)) {
+					if(empty($calendar_id)) {
 						if(!$is_available)
 							$results[] = $worker_id;
 						continue;
 					}
 					
-					if(false == ($calendar = DAO_Calendar::get($availability_calendar_id))) {
+					if(false == ($calendar = DAO_Calendar::get($calendar_id))) {
 						if(!$is_available)
 							$results[] = $worker_id;
 						continue;
@@ -819,7 +876,14 @@ class SearchFields_Worker implements IDevblocksSearchFields {
 	const LAST_ACTIVITY_DATE = 'w_last_activity_date';
 	const AUTH_EXTENSION_ID = 'w_auth_extension_id';
 	const AT_MENTION_NAME = 'w_at_mention_name';
+	const TIMEZONE = 'w_timezone';
+	const TIME_FORMAT = 'w_time_format';
+	const LANGUAGE = 'w_language';
+	const CALENDAR_ID = 'w_calendar_id';
+	const UPDATED = 'w_updated';
 	const IS_DISABLED = 'w_is_disabled';
+	
+	const FULLTEXT_WORKER = 'ft_worker';
 	
 	const VIRTUAL_CONTEXT_LINK = '*_context_link';
 	const VIRTUAL_GROUPS = '*_groups';
@@ -846,8 +910,15 @@ class SearchFields_Worker implements IDevblocksSearchFields {
 			self::LAST_ACTIVITY_DATE => new DevblocksSearchField(self::LAST_ACTIVITY_DATE, 'w', 'last_activity_date', $translate->_('worker.last_activity_date'), Model_CustomField::TYPE_DATE),
 			self::AUTH_EXTENSION_ID => new DevblocksSearchField(self::AUTH_EXTENSION_ID, 'w', 'auth_extension_id', $translate->_('worker.auth_extension_id'), Model_CustomField::TYPE_SINGLE_LINE),
 			self::AT_MENTION_NAME => new DevblocksSearchField(self::AT_MENTION_NAME, 'w', 'at_mention_name', $translate->_('worker.at_mention_name'), Model_CustomField::TYPE_SINGLE_LINE),
+			self::TIMEZONE => new DevblocksSearchField(self::TIMEZONE, 'w', 'timezone', $translate->_('worker.timezone'), Model_CustomField::TYPE_SINGLE_LINE),
+			self::TIME_FORMAT => new DevblocksSearchField(self::TIME_FORMAT, 'w', 'time_format', $translate->_('worker.time_format'), Model_CustomField::TYPE_SINGLE_LINE),
+			self::LANGUAGE => new DevblocksSearchField(self::LANGUAGE, 'w', 'language', $translate->_('worker.language'), Model_CustomField::TYPE_SINGLE_LINE),
+			self::CALENDAR_ID => new DevblocksSearchField(self::CALENDAR_ID, 'w', 'calendar_id', $translate->_('common.calendar'), null),
+			self::UPDATED => new DevblocksSearchField(self::UPDATED, 'w', 'updated', $translate->_('common.updated'), Model_CustomField::TYPE_DATE),
 			self::IS_DISABLED => new DevblocksSearchField(self::IS_DISABLED, 'w', 'is_disabled', ucwords($translate->_('common.disabled')), Model_CustomField::TYPE_CHECKBOX),
 			
+			self::FULLTEXT_WORKER => new DevblocksSearchField(self::FULLTEXT_WORKER, 'ft', 'content', $translate->_('common.content'), 'FT'),
+				
 			self::CONTEXT_LINK => new DevblocksSearchField(self::CONTEXT_LINK, 'context_link', 'from_context', null),
 			self::CONTEXT_LINK_ID => new DevblocksSearchField(self::CONTEXT_LINK_ID, 'context_link', 'from_context_id', null),
 
@@ -857,6 +928,10 @@ class SearchFields_Worker implements IDevblocksSearchFields {
 			self::VIRTUAL_CALENDAR_AVAILABILITY => new DevblocksSearchField(self::VIRTUAL_CALENDAR_AVAILABILITY, '*', 'calendar_availability', 'Calendar Availability'),
 		);
 
+		// Fulltext indexes
+		
+		$columns[self::FULLTEXT_WORKER]->ft_schema = Search_Worker::ID;
+		
 		// Custom fields with fieldsets
 		
 		$custom_columns = DevblocksSearchField::getCustomSearchFieldsByContexts(
@@ -873,19 +948,144 @@ class SearchFields_Worker implements IDevblocksSearchFields {
 	}
 };
 
+class Search_Worker extends Extension_DevblocksSearchSchema {
+	const ID = 'cerb.search.schema.worker';
+	
+	public function getNamespace() {
+		return 'worker';
+	}
+	
+	public function getAttributes() {
+		return array();
+	}
+	
+	public function query($query, $attributes=array(), $limit=500) {
+		if(false == ($engine = $this->getEngine()))
+			return false;
+		
+		$ids = $engine->query($this, $query, $attributes, $limit);
+		
+		return $ids;
+	}
+	
+	public function reindex() {
+		$engine = $this->getEngine();
+		$meta = $engine->getIndexMeta($this);
+		
+		// If the index has a delta, start from the current record
+		if($meta['is_indexed_externally']) {
+			// Do nothing (let the remote tool update the DB)
+			
+		// Otherwise, start over
+		} else {
+			$this->setIndexPointer(self::INDEX_POINTER_RESET);
+		}
+	}
+	
+	public function setIndexPointer($pointer) {
+		switch($pointer) {
+			case self::INDEX_POINTER_RESET:
+				$this->setParam('last_indexed_id', 0);
+				$this->setParam('last_indexed_time', 0);
+				break;
+				
+			case self::INDEX_POINTER_CURRENT:
+				$this->setParam('last_indexed_id', 0);
+				$this->setParam('last_indexed_time', time());
+				break;
+		}
+	}
+	
+	public function index($stop_time=null) {
+		$logger = DevblocksPlatform::getConsoleLog();
+		
+		if(false == ($engine = $this->getEngine()))
+			return false;
+		
+		$ns = self::getNamespace();
+		$id = $this->getParam('last_indexed_id', 0);
+		$ptr_time = $this->getParam('last_indexed_time', 0);
+		$ptr_id = $id;
+		$done = false;
+
+		while(!$done && time() < $stop_time) {
+			$where = sprintf('(%1$s = %2$d AND %3$s > %4$d) OR (%1$s > %2$d)',
+				DAO_Worker::UPDATED,
+				$ptr_time,
+				DAO_Worker::ID,
+				$id
+			);
+			$workers = DAO_Worker::getWhere($where, array(DAO_Worker::UPDATED, DAO_Worker::ID), array(true, true), 100);
+
+			if(empty($workers)) {
+				$done = true;
+				continue;
+			}
+			
+			$last_time = $ptr_time;
+			
+			foreach($workers as $worker) { /* @var $worker Model_Worker */
+				$id = $worker->id;
+				$ptr_time = $worker->updated;
+				
+				$ptr_id = ($last_time == $ptr_time) ? $id : 0;
+				
+				$logger->info(sprintf("[Search] Indexing %s %d...",
+					$ns,
+					$id
+				));
+				
+				$doc = array(
+					'firstName' => $worker->first_name,
+					'lastName' => $worker->last_name,
+					'email' => $worker->email,
+					'title' => $worker->title,
+					'atMentionName' => $worker->at_mention_name,
+				);
+				
+				if(false === ($engine->index($this, $id, $doc)))
+					return false;
+				
+				flush();
+			}
+		}
+		
+		// If we ran out of records, always reset the ID and use the current time
+		if($done) {
+			$ptr_id = 0;
+			$ptr_time = time();
+		}
+		
+		$this->setParam('last_indexed_id', $ptr_id);
+		$this->setParam('last_indexed_time', $ptr_time);
+	}
+	
+	public function delete($ids) {
+		if(false == ($engine = $this->getEngine()))
+			return false;
+		
+		return $engine->delete($this, $ids);
+	}
+};
+
 class Model_Worker {
-	public $id;
-	public $first_name;
-	public $last_name;
+	public $at_mention_name;
+	public $auth_extension_id;
+	public $calendar_id = 0;
 	public $email;
-	public $title;
+	public $first_name;
+	public $id;
 	public $is_superuser=0;
 	public $is_disabled=0;
+	public $language;
 	public $last_activity;
 	public $last_activity_date;
 	public $last_activity_ip;
-	public $auth_extension_id;
-	public $at_mention_name;
+	public $last_name;
+	public $time_format;
+	public $timezone;
+	public $title;
+	public $updated;
 
 	/**
 	 * @return Model_GroupMember[]
@@ -1010,10 +1210,11 @@ class View_Worker extends C4_AbstractView implements IAbstractView_Subtotals, IA
 			SearchFields_Worker::LAST_NAME,
 			SearchFields_Worker::TITLE,
 			SearchFields_Worker::EMAIL,
-			SearchFields_Worker::LAST_ACTIVITY_DATE,
-			SearchFields_Worker::AUTH_EXTENSION_ID,
 			SearchFields_Worker::IS_SUPERUSER,
 			SearchFields_Worker::AT_MENTION_NAME,
+			SearchFields_Worker::LANGUAGE,
+			SearchFields_Worker::TIMEZONE,
+			SearchFields_Worker::LAST_ACTIVITY_DATE,
 		);
 		
 		$this->addColumnsHidden(array(
@@ -1023,9 +1224,11 @@ class View_Worker extends C4_AbstractView implements IAbstractView_Subtotals, IA
 			SearchFields_Worker::VIRTUAL_CONTEXT_LINK,
 			SearchFields_Worker::VIRTUAL_GROUPS,
 			SearchFields_Worker::VIRTUAL_HAS_FIELDSET,
+			SearchFields_Worker::FULLTEXT_WORKER,
 		));
 		
 		$this->addParamsHidden(array(
+			SearchFields_Worker::CALENDAR_ID,
 			SearchFields_Worker::ID,
 			SearchFields_Worker::LAST_ACTIVITY,
 			SearchFields_Worker::CONTEXT_LINK,
@@ -1070,7 +1273,9 @@ class View_Worker extends C4_AbstractView implements IAbstractView_Subtotals, IA
 				case SearchFields_Worker::FIRST_NAME:
 				case SearchFields_Worker::IS_DISABLED:
 				case SearchFields_Worker::IS_SUPERUSER:
+				case SearchFields_Worker::LANGUAGE:
 				case SearchFields_Worker::LAST_NAME:
+				case SearchFields_Worker::TIMEZONE:
 				case SearchFields_Worker::TITLE:
 					$pass = true;
 					break;
@@ -1104,7 +1309,9 @@ class View_Worker extends C4_AbstractView implements IAbstractView_Subtotals, IA
 		switch($column) {
 			case SearchFields_Worker::AT_MENTION_NAME:
 			case SearchFields_Worker::FIRST_NAME:
+			case SearchFields_Worker::LANGUAGE:
 			case SearchFields_Worker::LAST_NAME:
+			case SearchFields_Worker::TIMEZONE:
 			case SearchFields_Worker::TITLE:
 				$counts = $this->_getSubtotalCountForStringColumn('DAO_Worker', $column);
 				break;
@@ -1134,64 +1341,111 @@ class View_Worker extends C4_AbstractView implements IAbstractView_Subtotals, IA
 		return $counts;
 	}
 	
-	function isQuickSearchField($token) {
-		switch($token) {
-			case SearchFields_Worker::VIRTUAL_GROUPS:
-				return true;
-			break;
+	function getQuickSearchFields() {
+		$fields = array(
+			'_fulltext' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_FULLTEXT,
+					'options' => array('param_key' => SearchFields_Worker::FULLTEXT_WORKER),
+					'options' => array('param_key' => SearchFields_Worker::FULLTEXT_WORKER, 'match' => DevblocksSearchCriteria::OPTION_TEXT_PARTIAL),
+				),
+			'email' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_TEXT,
+					'options' => array('param_key' => SearchFields_Worker::EMAIL, 'match' => DevblocksSearchCriteria::OPTION_TEXT_PREFIX),
+				),
+			'firstName' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_TEXT,
+					'options' => array('param_key' => SearchFields_Worker::FIRST_NAME, 'match' => DevblocksSearchCriteria::OPTION_TEXT_PREFIX),
+				),
+			'isAdmin' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_BOOL,
+					'options' => array('param_key' => SearchFields_Worker::IS_SUPERUSER),
+				),
+			'isDisabled' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_BOOL,
+					'options' => array('param_key' => SearchFields_Worker::IS_DISABLED),
+				),
+			'language' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_TEXT,
+					'options' => array('param_key' => SearchFields_Worker::LANGUAGE, 'match' => DevblocksSearchCriteria::OPTION_TEXT_PREFIX),
+				),
+			'lastActivity' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_DATE,
+					'options' => array('param_key' => SearchFields_Worker::LAST_ACTIVITY_DATE),
+				),
+			'lastName' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_TEXT,
+					'options' => array('param_key' => SearchFields_Worker::LAST_NAME, 'match' => DevblocksSearchCriteria::OPTION_TEXT_PREFIX),
+				),
+			'mentionName' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_TEXT,
+					'options' => array('param_key' => SearchFields_Worker::AT_MENTION_NAME, 'match' => DevblocksSearchCriteria::OPTION_TEXT_PREFIX),
+				),
+			'timezone' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_TEXT,
+					'options' => array('param_key' => SearchFields_Worker::TIMEZONE, 'match' => DevblocksSearchCriteria::OPTION_TEXT_PARTIAL),
+				),
+			'title' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_TEXT,
+					'options' => array('param_key' => SearchFields_Worker::TITLE, 'match' => DevblocksSearchCriteria::OPTION_TEXT_PARTIAL),
+				),
+			'updated' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_DATE,
+					'options' => array('param_key' => SearchFields_Worker::UPDATED),
+				),
+		);
+		
+		// Add searchable custom fields
+		
+		$fields = self::_appendFieldsFromQuickSearchContext(CerberusContexts::CONTEXT_WORKER, $fields, null);
+		
+		// Engine/schema examples: Fulltext
+		
+		$ft_examples = array();
+		
+		if(false != ($schema = Extension_DevblocksSearchSchema::get(Search_Worker::ID))) {
+			if(false != ($engine = $schema->getEngine())) {
+				$ft_examples = $engine->getQuickSearchExamples($schema);
+			}
 		}
 		
-		return false;
-	}
+		if(!empty($ft_examples))
+			$fields['_fulltext']['examples'] = $ft_examples;
+		
+		// Sort by keys
+		
+		ksort($fields);
+		
+		return $fields;
+	}	
 	
-	function quickSearch($token, $query, &$oper, &$value) {
-		switch($token) {
-			case SearchFields_Worker::VIRTUAL_GROUPS:
-				// Placeholders
-				if(false !== strpos($query, '{{')) {
-					$oper = DevblocksSearchCriteria::OPER_IN;
-					$value = DevblocksPlatform::parseCsvString($query);
-					return true;
-				}
-				
-				$search_ids = array();
-				$oper = DevblocksSearchCriteria::OPER_IN;
-				
-				if(preg_match('#([\!\=]+)(.*)#', $query, $matches)) {
-					$oper_hint = trim($matches[1]);
-					$query = trim($matches[2]);
-					
-					switch($oper_hint) {
-						case '!':
-						case '!=':
-							$oper = DevblocksSearchCriteria::OPER_NIN;
-							break;
-					}
-				}
-				
-				$groups = DAO_Group::getAll();
-				$inputs = DevblocksPlatform::parseCsvString($query);
+	function getParamsFromQuickSearchFields($fields) {
+		$search_fields = $this->getQuickSearchFields();
+		$params = DevblocksSearchCriteria::getParamsFromQueryFields($fields, $search_fields);
 
-				if(is_array($inputs))
-				foreach($inputs as $input) {
-					foreach($groups as $group_id => $group) {
-						if(0 == strcasecmp($input, substr($group->name,0,strlen($input))))
-							$search_ids[$group_id] = true;
-					}
-				}
-				
-				if(!empty($search_ids)) {
-					$value = array_keys($search_ids);
-				} else {
-					$value = null;
-				}
-				
-				return true;
-				break;
-				
+		// Handle virtual fields and overrides
+		if(is_array($fields))
+		foreach($fields as $k => $v) {
+			switch($k) {
+				// ...
+			}
 		}
 		
-		return false;
+		$this->renderPage = 0;
+		$this->addParams($params, true);
+		
+		return $params;
 	}
 	
 	function render() {
@@ -1281,7 +1535,10 @@ class View_Worker extends C4_AbstractView implements IAbstractView_Subtotals, IA
 			case SearchFields_Worker::AT_MENTION_NAME:
 			case SearchFields_Worker::EMAIL:
 			case SearchFields_Worker::FIRST_NAME:
+			case SearchFields_Worker::LANGUAGE:
 			case SearchFields_Worker::LAST_NAME:
+			case SearchFields_Worker::TIME_FORMAT:
+			case SearchFields_Worker::TIMEZONE:
 			case SearchFields_Worker::TITLE:
 				$tpl->display('devblocks:cerberusweb.core::internal/views/criteria/__string.tpl');
 				break;
@@ -1292,7 +1549,12 @@ class View_Worker extends C4_AbstractView implements IAbstractView_Subtotals, IA
 				break;
 				
 			case SearchFields_Worker::LAST_ACTIVITY_DATE:
+			case SearchFields_Worker::UPDATED:
 				$tpl->display('devblocks:cerberusweb.core::internal/views/criteria/__date.tpl');
+				break;
+				
+			case SearchFields_Worker::FULLTEXT_WORKER:
+				$tpl->display('devblocks:cerberusweb.core::internal/views/criteria/__fulltext.tpl');
 				break;
 				
 			case SearchFields_Worker::VIRTUAL_CONTEXT_LINK:
@@ -1350,12 +1612,16 @@ class View_Worker extends C4_AbstractView implements IAbstractView_Subtotals, IA
 			case SearchFields_Worker::AT_MENTION_NAME:
 			case SearchFields_Worker::EMAIL:
 			case SearchFields_Worker::FIRST_NAME:
+			case SearchFields_Worker::LANGUAGE:
 			case SearchFields_Worker::LAST_NAME:
+			case SearchFields_Worker::TIME_FORMAT:
+			case SearchFields_Worker::TIMEZONE:
 			case SearchFields_Worker::TITLE:
 				$criteria = $this->_doSetCriteriaString($field, $oper, $value);
 				break;
 				
 			case SearchFields_Worker::LAST_ACTIVITY_DATE:
+			case SearchFields_Worker::UPDATED:
 				$criteria = $this->_doSetCriteriaDate($field, $oper);
 				break;
 				
@@ -1363,6 +1629,11 @@ class View_Worker extends C4_AbstractView implements IAbstractView_Subtotals, IA
 			case SearchFields_Worker::IS_SUPERUSER:
 				@$bool = DevblocksPlatform::importGPC($_REQUEST['bool'],'integer',1);
 				$criteria = new DevblocksSearchCriteria($field,$oper,$bool);
+				break;
+				
+			case SearchFields_Worker::FULLTEXT_WORKER:
+				@$scope = DevblocksPlatform::importGPC($_REQUEST['scope'],'string','expert');
+				$criteria = new DevblocksSearchCriteria($field,DevblocksSearchCriteria::OPER_FULLTEXT,array($value,$scope));
 				break;
 				
 			case SearchFields_Worker::VIRTUAL_CALENDAR_AVAILABILITY:
@@ -1499,7 +1770,7 @@ class DAO_WorkerPref extends DevblocksORMHelper {
 		
 		if(!empty($results))
 		foreach($results as $result)
-			self::delete($result['worker_id'], 'availability_calendar_id');
+			self::delete($result['worker_id'], 'calendar_id');
 		
 		return true;
 	}
@@ -1634,7 +1905,10 @@ class Context_Worker extends Extension_DevblocksContext {
 			'address_org__label',
 			'is_disabled',
 			'is_superuser',
+			'timezone',
+			'language',
 			'last_activity_date',
+			'updated',
 		);
 	}
 	
@@ -1664,9 +1938,13 @@ class Context_Worker extends Extension_DevblocksContext {
 			'id' => $prefix.$translate->_('common.id'),
 			'is_disabled' => $prefix.$translate->_('common.disabled'),
 			'is_superuser' => $prefix.$translate->_('worker.is_superuser'),
+			'language' => $prefix.$translate->_('worker.language'),
 			'last_name' => $prefix.$translate->_('worker.last_name'),
 			'last_activity_date' => $prefix.$translate->_('worker.last_activity_date'),
+			'time_format' => $prefix.$translate->_('worker.time_format'),
+			'timezone' => $prefix.$translate->_('worker.timezone'),
 			'title' => $prefix.$translate->_('worker.title'),
+			'updated' => $prefix.$translate->_('common.updated'),
 			'record_url' => $prefix.$translate->_('common.url.record'),
 		);
 		
@@ -1678,9 +1956,13 @@ class Context_Worker extends Extension_DevblocksContext {
 			'id' => Model_CustomField::TYPE_NUMBER,
 			'is_disabled' => Model_CustomField::TYPE_CHECKBOX,
 			'is_superuser' => Model_CustomField::TYPE_CHECKBOX,
+			'language' => Model_CustomField::TYPE_SINGLE_LINE,
 			'last_name' => Model_CustomField::TYPE_SINGLE_LINE,
 			'last_activity_date' => Model_CustomField::TYPE_DATE,
+			'time_format' => Model_CustomField::TYPE_SINGLE_LINE,
+			'timezone' => Model_CustomField::TYPE_SINGLE_LINE,
 			'title' => Model_CustomField::TYPE_SINGLE_LINE,
+			'updated' => Model_CustomField::TYPE_DATE,
 			'record_url' => Model_CustomField::TYPE_URL,
 		);
 		
@@ -1703,14 +1985,19 @@ class Context_Worker extends Extension_DevblocksContext {
 		if(null != $worker) {
 			$token_values['_loaded'] = true;
 			$token_values['_label'] = $worker->getName();
+			$token_values['calendar_id'] = $worker->calendar_id;
 			$token_values['id'] = $worker->id;
 			$token_values['first_name'] = $worker->first_name;
 			$token_values['full_name'] = $worker->getName();
 			$token_values['is_disabled'] = $worker->is_disabled;
 			$token_values['is_superuser'] = $worker->is_superuser;
+			$token_values['language'] = $worker->language;
 			$token_values['last_name'] = $worker->last_name;
 			$token_values['last_activity_date'] = $worker->last_activity_date;
+			$token_values['time_format'] = $worker->time_format;
+			$token_values['timezone'] = $worker->timezone;
 			$token_values['title'] = $worker->title;
+			$token_values['updated'] = $worker->updated;
 
 			// Custom fields
 			$token_values = $this->_importModelCustomFieldsAsValues($worker, $token_values);
@@ -1728,12 +2015,28 @@ class Context_Worker extends Extension_DevblocksContext {
 		}
 		
 		// Worker email
+		
 		$merge_token_labels = array();
 		$merge_token_values = array();
 		CerberusContexts::getContext(CerberusContexts::CONTEXT_ADDRESS, null, $merge_token_labels, $merge_token_values, null, true);
 
 		CerberusContexts::merge(
 			'address_',
+			$prefix,
+			$merge_token_labels,
+			$merge_token_values,
+			$token_labels,
+			$token_values
+		);
+		
+		// Worker availability calendar
+		
+		$merge_token_labels = array();
+		$merge_token_values = array();
+		CerberusContexts::getContext(CerberusContexts::CONTEXT_CALENDAR, null, $merge_token_labels, $merge_token_values, null, true);
+
+		CerberusContexts::merge(
+			'calendar_',
 			$prefix,
 			$merge_token_labels,
 			$merge_token_values,
@@ -1798,8 +2101,8 @@ class Context_Worker extends Extension_DevblocksContext {
 		return $view;
 	}
 	
-	function getView($context=null, $context_id=null, $options=array()) {
-		$view_id = str_replace('.','_',$this->id);
+	function getView($context=null, $context_id=null, $options=array(), $view_id=null) {
+		$view_id = !empty($view_id) ? $view_id : str_replace('.','_',$this->id);
 		
 		$defaults = new C4_AbstractViewModel();
 		$defaults->id = $view_id;

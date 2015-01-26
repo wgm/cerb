@@ -11,7 +11,7 @@
 		<td nowrap="nowrap"><span class="title">{$view->name}</span></td>
 		<td nowrap="nowrap" align="right">
 			{*{if $active_worker->is_superuser}<a href="javascript:;" title="{'common.add'|devblocks_translate|capitalize}" class="minimal" onclick="genericAjaxPopup('peek','c=internal&a=showPeekPopup&context={$view_context}&context_id=0&view_id={$view->id}',null,false,'500');"><span class="cerb-sprite2 sprite-plus-circle-frame"></span></a>{/if}*}
-			<a href="javascript:;" title="{'common.search'|devblocks_translate|capitalize}" class="minimal" onclick="genericAjaxPopup('search','c=internal&a=viewShowQuickSearchPopup&view_id={$view->id}',this,false,'400');"><span class="cerb-sprite2 sprite-document-search-result"></span></a>
+			<a href="javascript:;" title="{'common.search'|devblocks_translate|capitalize}" class="minimal" onclick="genericAjaxPopup('search','c=internal&a=viewShowQuickSearchPopup&view_id={$view->id}',null,false,'400');"><span class="cerb-sprite2 sprite-document-search-result"></span></a>
 			<a href="javascript:;" title="{'common.customize'|devblocks_translate|capitalize}" class="minimal" onclick="genericAjaxGet('customize{$view->id}','c=internal&a=viewCustomize&id={$view->id}');toggleDiv('customize{$view->id}','block');"><span class="cerb-sprite2 sprite-gear"></span></a>
 			<a href="javascript:;" title="Subtotals" class="subtotals minimal"><span class="cerb-sprite2 sprite-application-sidebar-list"></span></a>
 			<a href="javascript:;" title="{'common.export'|devblocks_translate|capitalize}" class="minimal" onclick="genericAjaxGet('{$view->id}_tips','c=internal&a=viewShowExport&id={$view->id}');toggleDiv('{$view->id}_tips','block');"><span class="cerb-sprite2 sprite-application-export"></span></a>
@@ -79,9 +79,18 @@
 				<td>{if $result.w_is_superuser}{'common.yes'|devblocks_translate|capitalize}{else}{'common.no'|devblocks_translate|capitalize}{/if}</td>
 			{elseif $column=="w_email"}
 				<td><a href="javascript:;" onclick="genericAjaxPopup('peek','c=internal&a=showPeekPopup&context={CerberusContexts::CONTEXT_ADDRESS}&email={$result.w_email|escape:'url'}&view_id={$view->id}',null,false,'500');" title="{$result.w_email}">{$result.w_email|truncate:64:'...':true:true}</a></td>
-			{elseif $column=="w_last_activity_date"}
-				{if !empty($result.w_last_activity_date)}
-				<td title="{$result.w_last_activity_date|devblocks_date}">{$result.w_last_activity_date|devblocks_prettytime}</td>
+			{elseif $column=="w_calendar_id"}
+				<td>
+				{if $result.$column}
+					{$calendar = DAO_Calendar::get($result.$column)}
+					{if $calendar}
+						<a href="javascript:;" onclick="genericAjaxPopup('peek','c=internal&a=showPeekPopup&context={CerberusContexts::CONTEXT_CALENDAR}&context_id={$calendar->id}&view_id={$view->id}',null,false,'500');" title="{$calendar->name}">{$calendar->name|truncate:64:'...':true:true}</a>
+					{/if}
+				{/if}
+				</td>
+			{elseif in_array($column, ['w_last_activity_date', 'w_updated'])}
+				{if !empty($result.$column)}
+				<td title="{$result.$column|devblocks_date}">{$result.$column|devblocks_prettytime}</td>
 				{else}
 				<td>never</td>
 				{/if}
@@ -146,13 +155,13 @@ $frm = $('#viewForm{$view->id}');
 $frm.bind('keyboard_shortcut',function(event) {
 	//console.log("{$view->id} received " + (indirect ? 'indirect' : 'direct') + " keyboard event for: " + event.keypress_event.which);
 	
-	$view_actions = $('#{$view->id}_actions');
+	var $view_actions = $('#{$view->id}_actions');
 	
-	hotkey_activated = true;
+	var hotkey_activated = true;
 
 	switch(event.keypress_event.which) {
 		case 98: // (b) bulk update
-			$btn = $view_actions.find('button.action-bulkupdate');
+			var $btn = $view_actions.find('button.action-bulkupdate');
 		
 			if(event.indirect) {
 				$btn.select().focus();

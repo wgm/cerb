@@ -2,7 +2,7 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2014, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
@@ -187,7 +187,7 @@ class DAO_Message extends Cerb_ORMHelper {
 	static function maint() {
 		$db = DevblocksPlatform::getDatabaseService();
 		$logger = DevblocksPlatform::getConsoleLog();
-		$tables = $db->metaTables();
+		$tables = DevblocksPlatform::getDatabaseTables();
 		
 		// Purge message content (storage)
 		$db->Execute("CREATE TEMPORARY TABLE _tmp_maint_message SELECT id FROM message WHERE ticket_id NOT IN (SELECT id FROM ticket)");
@@ -361,9 +361,11 @@ class DAO_Message extends Cerb_ORMHelper {
 			case SearchFields_Message::MESSAGE_CONTENT:
 				$search = Extension_DevblocksSearchSchema::get(Search_MessageContent::ID);
 				$query = $search->getQueryFromParam($param);
-				$ids = $search->query($query, array());
 				
-				if(is_array($ids)) {
+				if(false === ($ids = $search->query($query, array()))) {
+					$args['where_sql'] .= 'AND 0 ';
+				
+				} elseif(is_array($ids)) {
 					if(empty($ids))
 						$ids = array(-1);
 					
@@ -380,9 +382,177 @@ class DAO_Message extends Cerb_ORMHelper {
 						$ids
 					);
 				}
+				break;
+				
+			case SearchFields_Message::FULLTEXT_NOTE_CONTENT:
+				$search = Extension_DevblocksSearchSchema::get(Search_CommentContent::ID);
+				$query = $search->getQueryFromParam($param);
+				
+				if(false === ($ids = $search->query($query, array('context_crc32' => sprintf("%u", crc32(CerberusContexts::CONTEXT_MESSAGE))), 250))) {
+					$args['where_sql'] .= 'AND 0 ';
+				
+				} elseif(is_array($ids)) {
+					// [TODO] This approach doesn't stack with comment searching, because they're "id in (1,2,3) AND id IN (4,5,6)"
+					$args['where_sql'] .= sprintf('AND %s IN (%s) ',
+						$from_index,
+						implode(', ', $ids)
+					);
+					
+				} elseif(is_string($ids)) {
+					$db = DevblocksPlatform::getDatabaseService();
+					$temp_table = sprintf("_tmp_%s", uniqid());
+					
+					$db->Execute(sprintf("CREATE TEMPORARY TABLE %s SELECT DISTINCT context_id AS id FROM comment INNER JOIN %s ON (%s.id=comment.id)",
+						$temp_table,
+						$ids,
+						$ids
+					));
+					
+					$args['join_sql'] .= sprintf("INNER JOIN %s ON (%s.id=%s) ",
+						$temp_table,
+						$temp_table,
+						$from_index
+					);
+					
+				}
+				break;
+				
+			case SearchFields_Message::VIRTUAL_ATTACHMENT_NAME:
+				$attachment_wheres = array();
+				
+				// Multiple tuples
+				foreach($param->value as $param_value) {
+				
+					switch($param->operator) {
+						default:
+						case DevblocksSearchCriteria::OPER_EQ:
+							$attachment_wheres[] = sprintf("attachment.display_name = %s",
+								Cerb_ORMHelper::qstr($param_value)
+							);
+							break;
+							
+						case DevblocksSearchCriteria::OPER_NEQ:
+							$attachment_wheres[] = sprintf("attachment.display_name != %s",
+								Cerb_ORMHelper::qstr($param_value)
+							);
+							break;
+							
+						case DevblocksSearchCriteria::OPER_LIKE:
+							$attachment_wheres[] = sprintf("attachment.display_name like %s",
+								Cerb_ORMHelper::qstr(str_replace('*','%',$param_value))
+							);
+							break;
+							
+						case DevblocksSearchCriteria::OPER_NOT_LIKE:
+							$attachment_wheres[] = sprintf("attachment.display_name not like %s",
+								Cerb_ORMHelper::qstr(str_replace('*','%',$param_value))
+							);
+							break;
+							
+						case DevblocksSearchCriteria::OPER_IS_NULL:
+							$attachment_wheres[] = sprintf("attachment.display_name is null");
+							break;
+					}
+				}
+				
+				if(!empty($attachment_wheres)) {
+					$args['join_sql'] .= sprintf("INNER JOIN (".
+						"SELECT DISTINCT message.id AS message_id ".
+						"FROM attachment_link ".
+						"INNER JOIN attachment ON (attachment_link.attachment_id = attachment.id) ".
+						"INNER JOIN message ON (attachment_link.context='cerberusweb.contexts.message' and attachment_link.context_id = message.id) ".
+						"WHERE %s ".
+						") virt_attachment_names ON (virt_attachment_names.message_id = m.id) ",
+						implode(' OR ', $attachment_wheres)
+					);
+				}
+				break;
+				
+			case SearchFields_Message::VIRTUAL_HAS_ATTACHMENTS:
+				if(!empty($param->value)) {
+					$args['join_sql'] .= sprintf("INNER JOIN (".
+						"SELECT DISTINCT message.id AS message_id ".
+						"FROM attachment_link ".
+						"INNER JOIN message ON (attachment_link.context='cerberusweb.contexts.message' and attachment_link.context_id = message.id) ".
+						") virt_has_attachments ON (virt_has_attachments.message_id = m.id) "
+					);
+				} else {
+					$args['where_sql'] .= sprintf("AND m.id NOT IN (".
+						"SELECT DISTINCT message.id ".
+						"FROM attachment_link ".
+						"INNER JOIN message ON (attachment_link.context='cerberusweb.contexts.message' and attachment_link.context_id = message.id) ".
+						") "
+					);
+				}
+				break;				
+			
+			case SearchFields_Message::VIRTUAL_MESSAGE_HEADER:
+				$header_wheres = array();
+				
+				// Multiple tuples
+				foreach($param->value as $param_value) {
+				
+					// Sanitize
+					if(!is_array($param_value) || 3 != count($param_value))
+						break;
+					
+					@$header_name = strtolower($param_value[0]);
+					@$header_oper = $param_value[1];
+					@$header_value = $param_value[2];
+					
+					if(empty($header_name))
+						break;
+					
+					switch($header_oper) {
+						default:
+						case DevblocksSearchCriteria::OPER_EQ:
+							$header_wheres[] = sprintf("message_header.header_name = %s AND message_header.header_value = %s",
+								Cerb_ORMHelper::qstr($header_name),
+								Cerb_ORMHelper::qstr($header_value)
+							);
+							break;
+							
+						case DevblocksSearchCriteria::OPER_NEQ:
+							$header_wheres[] = sprintf("message_header.header_name = %s AND message_header.header_value != %s",
+								Cerb_ORMHelper::qstr($header_name),
+								Cerb_ORMHelper::qstr($header_value)
+							);
+							break;
+							
+						case DevblocksSearchCriteria::OPER_LIKE:
+							$header_wheres[] = sprintf("message_header.header_name = %s AND message_header.header_value like %s",
+								Cerb_ORMHelper::qstr($header_name),
+								Cerb_ORMHelper::qstr(str_replace('*','%',$header_value))
+							);
+							break;
+							
+						case DevblocksSearchCriteria::OPER_NOT_LIKE:
+							$header_wheres[] = sprintf("message_header.header_name = %s AND message_header.header_value not like %s",
+								Cerb_ORMHelper::qstr($header_name),
+								Cerb_ORMHelper::qstr(str_replace('*','%',$header_value))
+							);
+							break;
+							
+						case DevblocksSearchCriteria::OPER_IS_NULL:
+							$header_wheres[] = sprintf("message_header.header_name = %s AND message_header.header_value is null",
+								Cerb_ORMHelper::qstr($header_name)
+							);
+							break;
+					}
+				}
+				
+				if(!empty($header_wheres)) {
+					$args['join_sql'] .= sprintf("INNER JOIN (".
+						"SELECT DISTINCT message_header.message_id ".
+							"FROM message_header ".
+							"WHERE %s".
+						") virt_msg_header ON (virt_msg_header.message_id = m.id) ",
+						implode(' OR ', $header_wheres)
+					);
+				}
 				
 				break;
-			
+				
 			case SearchFields_Message::VIRTUAL_TICKET_STATUS:
 				$values = $param->value;
 				if(!is_array($values))
@@ -508,8 +678,9 @@ class SearchFields_Message implements IDevblocksSearchFields {
 	const MESSAGE_HEADER_NAME = 'mh_header_name';
 	const MESSAGE_HEADER_VALUE = 'mh_header_value';
 
-	// Content
+	// Fulltexts
 	const MESSAGE_CONTENT = 'ftmc_content';
+	const FULLTEXT_NOTE_CONTENT = 'ftnc_content';
 	
 	// Address
 	const ADDRESS_EMAIL = 'a_email';
@@ -523,6 +694,9 @@ class SearchFields_Message implements IDevblocksSearchFields {
 	const TICKET_SUBJECT = 't_subject';
 	
 	// Virtuals
+	const VIRTUAL_ATTACHMENT_NAME = '*_attachment_name';
+	const VIRTUAL_HAS_ATTACHMENTS = '*_has_attachments';
+	const VIRTUAL_MESSAGE_HEADER = '*_message_header';
 	const VIRTUAL_TICKET_STATUS = '*_ticket_status';
 
 	/**
@@ -559,14 +733,19 @@ class SearchFields_Message implements IDevblocksSearchFields {
 			SearchFields_Message::TICKET_MASK => new DevblocksSearchField(SearchFields_Message::TICKET_MASK, 't', 'mask', $translate->_('ticket.mask'), Model_CustomField::TYPE_SINGLE_LINE),
 			SearchFields_Message::TICKET_SUBJECT => new DevblocksSearchField(SearchFields_Message::TICKET_SUBJECT, 't', 'subject', $translate->_('ticket.subject'), Model_CustomField::TYPE_SINGLE_LINE),
 			
+			SearchFields_Message::VIRTUAL_ATTACHMENT_NAME => new DevblocksSearchField(SearchFields_Message::VIRTUAL_ATTACHMENT_NAME, '*', 'attachment_name', $translate->_('message.search.attachment_name'), null),
+			SearchFields_Message::VIRTUAL_HAS_ATTACHMENTS => new DevblocksSearchField(SearchFields_Message::VIRTUAL_HAS_ATTACHMENTS, '*', 'has_attachments', $translate->_('message.search.has_attachments'), Model_CustomField::TYPE_CHECKBOX),
+			SearchFields_Message::VIRTUAL_MESSAGE_HEADER => new DevblocksSearchField(SearchFields_Message::VIRTUAL_MESSAGE_HEADER, '*', 'message_header', $translate->_('message.header')),
 			SearchFields_Message::VIRTUAL_TICKET_STATUS => new DevblocksSearchField(SearchFields_Message::VIRTUAL_TICKET_STATUS, '*', 'ticket_status', $translate->_('ticket.status')),
 				
 			SearchFields_Message::MESSAGE_CONTENT => new DevblocksSearchField(SearchFields_Message::MESSAGE_CONTENT, 'ftmc', 'content', $translate->_('common.content'), 'FT'),
+			SearchFields_Message::FULLTEXT_NOTE_CONTENT => new DevblocksSearchField(self::FULLTEXT_NOTE_CONTENT, 'ftnc', 'content', $translate->_('message.note.content'), 'FT'),
 		);
 
 		// Fulltext indexes
 		
 		$columns[self::MESSAGE_CONTENT]->ft_schema = Search_MessageContent::ID;
+		$columns[self::FULLTEXT_NOTE_CONTENT]->ft_schema = Search_CommentContent::ID;
 		
 		// Sort by label (translation-conscious)
 		DevblocksPlatform::sortObjects($columns, 'db_label');
@@ -738,10 +917,15 @@ class Search_MessageContent extends Extension_DevblocksSearchSchema {
 					
 					// Prepend subject
 					if(false !== ($ticket = DAO_Ticket::get($message->ticket_id))) {
-						$content = $ticket->subject . ' ' . $content;
+						$doc = array(
+							'mask' => $ticket->mask,
+							'subject' => $ticket->subject,
+							'content' => $content,
+						);
+						
+						if(false === ($engine->index($this, $id, $doc)))
+							return false;
 					}
-					
-					$engine->index($this, $id, $content);
 				}
 
 				// Record our progress every 25th index
@@ -1244,6 +1428,7 @@ class View_Message extends C4_AbstractView implements IAbstractView_Subtotals, I
 		);
 		
 		$this->addColumnsHidden(array(
+			SearchFields_Message::FULLTEXT_NOTE_CONTENT,
 			SearchFields_Message::ID,
 			SearchFields_Message::MESSAGE_CONTENT,
 			SearchFields_Message::MESSAGE_HEADER_NAME,
@@ -1255,6 +1440,9 @@ class View_Message extends C4_AbstractView implements IAbstractView_Subtotals, I
 			SearchFields_Message::TICKET_IS_CLOSED,
 			SearchFields_Message::TICKET_IS_DELETED,
 			SearchFields_Message::TICKET_IS_WAITING,
+			SearchFields_Message::VIRTUAL_ATTACHMENT_NAME,
+			SearchFields_Message::VIRTUAL_HAS_ATTACHMENTS,
+			SearchFields_Message::VIRTUAL_MESSAGE_HEADER,
 		));
 		
 		$this->addParamsHidden(array(
@@ -1463,104 +1651,401 @@ class View_Message extends C4_AbstractView implements IAbstractView_Subtotals, I
 		return $counts;
 	}
 	
-	function isQuickSearchField($token) {
-		switch($token) {
-			case SearchFields_Message::TICKET_GROUP_ID:
-			case SearchFields_Message::VIRTUAL_TICKET_STATUS:
-				return true;
-			break;
+	function getQuickSearchFields() {
+		$active_worker = CerberusApplication::getActiveWorker();
+		$group_names = DAO_Group::getNames($active_worker);
+		
+		$fields = array(
+			'_fulltext' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_FULLTEXT,
+					'options' => array('param_key' => SearchFields_Message::MESSAGE_CONTENT),
+				),
+			'attachments.exist' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_BOOL,
+					'options' => array('param_key' => SearchFields_Message::VIRTUAL_HAS_ATTACHMENTS),
+				),
+			'attachments.name' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_VIRTUAL,
+					'options' => array('param_key' => SearchFields_Message::VIRTUAL_ATTACHMENT_NAME),
+					'examples' => array(
+						'(*.png OR *.jpg)',
+						'*.html',
+					),
+				),
+			'content' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_FULLTEXT,
+					'options' => array('param_key' => SearchFields_Message::MESSAGE_CONTENT),
+				),
+			'created' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_DATE,
+					'options' => array('param_key' => SearchFields_Message::CREATED_DATE),
+				),
+			'from' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_TEXT,
+					'options' => array('param_key' => SearchFields_Message::ADDRESS_EMAIL, 'match' => DevblocksSearchCriteria::OPTION_TEXT_PREFIX),
+				),
+			'group' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_VIRTUAL,
+					'options' => array('param_key' => SearchFields_Message::TICKET_GROUP_ID),
+					'examples' => array_slice($group_names, 0, 15),
+				),
+			'headers' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_VIRTUAL,
+					'options' => array('param_key' => SearchFields_Message::VIRTUAL_MESSAGE_HEADER),
+					'examples' => array(
+						"(content-type like text/html*)",
+						"(message-id = <...>)",
+						"(x-mailer like cerb* OR x-mailer like salesforce*)",
+					),
+				),
+			'isBroadcast' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_BOOL,
+					'options' => array('param_key' => SearchFields_Message::IS_BROADCAST),
+				),
+			'isNotSent' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_BOOL,
+					'options' => array('param_key' => SearchFields_Message::IS_NOT_SENT),
+				),
+			'isOutgoing' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_BOOL,
+					'options' => array('param_key' => SearchFields_Message::IS_OUTGOING),
+				),
+			'notes' =>
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_FULLTEXT,
+					'options' => array('param_key' => SearchFields_Message::FULLTEXT_NOTE_CONTENT),
+				),
+			'responseTime' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_NUMBER,
+					'options' => array('param_key' => SearchFields_Message::RESPONSE_TIME),
+				),
+			'ticket.id' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_NUMBER,
+					'options' => array('param_key' => SearchFields_Message::TICKET_ID),
+				),
+			'ticket.mask' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_TEXT,
+					'options' => array('param_key' => SearchFields_Message::TICKET_MASK, 'match' => DevblocksSearchCriteria::OPTION_TEXT_PREFIX),
+					'examples' => array(
+						'ABC',
+						'XYZ-12345-678',
+					),
+				),
+			'ticket.status' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_VIRTUAL,
+					'options' => array('param_key' => SearchFields_Message::VIRTUAL_TICKET_STATUS),
+					'examples' => array(
+						'open',
+						'waiting',
+						'closed',
+						'deleted',
+						'open,waiting',
+						'!deleted',
+					),
+				),
+			'ticket.subject' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_TEXT,
+					'options' => array('param_key' => SearchFields_Message::TICKET_SUBJECT, 'match' => DevblocksSearchCriteria::OPTION_TEXT_PARTIAL),
+				),
+			'worker' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_WORKER,
+					'options' => array('param_key' => SearchFields_Message::WORKER_ID),
+				),
+		);
+		
+		// Add searchable custom fields
+		
+		$fields = self::_appendFieldsFromQuickSearchContext(CerberusContexts::CONTEXT_MESSAGE, $fields, null);
+		//$fields = self::_appendFieldsFromQuickSearchContext(CerberusContexts::CONTEXT_ORG, $fields, 'org');
+		//$fields = self::_appendFieldsFromQuickSearchContext(CerberusContexts::CONTEXT_TICKET, $fields, 'ticket');
+		
+		// Engine/schema examples: Fulltext
+		
+		$ft_examples = array();
+		
+		if(false != ($schema = Extension_DevblocksSearchSchema::get(Search_MessageContent::ID))) {
+			if(false != ($engine = $schema->getEngine())) {
+				$ft_examples = $engine->getQuickSearchExamples($schema);
+			}
 		}
 		
-		return false;
-	}
+		if(!empty($ft_examples)) {
+			$fields['_fulltext']['examples'] = $ft_examples;
+			$fields['content']['examples'] = $ft_examples;
+		}
+		
+		// Engine/schema examples: Notes
+		
+		$ft_examples = array();
+		
+		if(false != ($schema = Extension_DevblocksSearchSchema::get(Search_CommentContent::ID))) {
+			if(false != ($engine = $schema->getEngine())) {
+				$ft_examples = $engine->getQuickSearchExamples($schema);
+			}
+		}
+		
+		if(!empty($ft_examples))
+			$fields['notes']['examples'] = $ft_examples;
+		
+		// Sort by keys
+		
+		ksort($fields);
+		
+		return $fields;
+	}	
 	
-	function quickSearch($token, $query, &$oper, &$value) {
-		switch($token) {
-			case SearchFields_Message::TICKET_GROUP_ID:
-				$search_ids = array();
-				$oper = DevblocksSearchCriteria::OPER_IN;
-				
-				if(preg_match('#([\!\=]+)(.*)#', $query, $matches)) {
-					$oper_hint = trim($matches[1]);
-					$query = trim($matches[2]);
-					
-					switch($oper_hint) {
-						case '!':
-						case '!=':
-							$oper = DevblocksSearchCriteria::OPER_NIN;
-							break;
-					}
-				}
-				
-				$groups = DAO_Group::getAll();
-				$inputs = DevblocksPlatform::parseCsvString($query);
+	function getParamsFromQuickSearchFields($fields) {
+		$search_fields = $this->getQuickSearchFields();
+		$params = DevblocksSearchCriteria::getParamsFromQueryFields($fields, $search_fields);
 
-				if(is_array($inputs))
-				foreach($inputs as $input) {
-					foreach($groups as $group_id => $group) {
-						if(0 == strcasecmp($input, substr($group->name,0,strlen($input))))
-							$search_ids[$group_id] = true;
-					}
-				}
-				
-				if(!empty($search_ids)) {
-					$value = array_keys($search_ids);
-				} else {
-					$value = null;
-				}
-				
-				return true;
-				break;
-				
-			case SearchFields_Message::VIRTUAL_TICKET_STATUS:
-				$statuses = array();
-				$oper = DevblocksSearchCriteria::OPER_IN;
-				
-				if(preg_match('#([\!\=]+)(.*)#', $query, $matches)) {
-					$oper_hint = trim($matches[1]);
-					$query = trim($matches[2]);
+		// Handle virtual fields and overrides
+		if(is_array($fields))
+		foreach($fields as $k => $v) {
+			switch($k) {
+				case 'attachments.name':
+					$field_key = SearchFields_Message::VIRTUAL_ATTACHMENT_NAME;
 					
-					switch($oper_hint) {
-						case '!':
-						case '!=':
-							$oper = DevblocksSearchCriteria::OPER_NIN;
-							break;
-					}
-				}
-				
-				$inputs = DevblocksPlatform::parseCsvString($query);
-				
-				if(is_array($inputs))
-				foreach($inputs as $v) {
-					switch(strtolower(substr($v,0,1))) {
-						case 'o':
-							$statuses['open'] = true;
-							break;
-						case 'w':
-							$statuses['waiting'] = true;
-							break;
-						case 'c':
-							$statuses['closed'] = true;
-							break;
-						case 'd':
-							$statuses['deleted'] = true;
-							break;
-					}
-				}
-				
-				if(empty($statuses)) {
-					$value = null;
+					if(empty($v))
+						return false;
 					
-				} else {
-					$value = array_keys($statuses);
-				}
+					if(false !== strpos($v, '*')) {
+						$oper = DevblocksSearchCriteria::OPER_LIKE;
+					} else {
+						$oper = DevblocksSearchCriteria::OPER_EQ;
+					}
+					$value = explode(' OR ', $v);
+					
+					$params[$field_key] = new DevblocksSearchCriteria(
+						$field_key,
+						$oper,
+						$value
+					);
+					break;
+					
+				case 'group':
+					$field_key = SearchFields_Message::TICKET_GROUP_ID;
+					
+					$oper = DevblocksSearchCriteria::OPER_IN;
+					
+					if(preg_match('#^([\!\=]+)(.*)#', $v, $matches)) {
+						$oper_hint = trim($matches[1]);
+						$v = trim($matches[2]);
+						
+						switch($oper_hint) {
+							case '!':
+							case '!=':
+								$oper = DevblocksSearchCriteria::OPER_NIN;
+								break;
+								
+							default:
+								$oper = DevblocksSearchCriteria::OPER_IN;
+								break;
+						}
+					}
+					
+					$groups = DAO_Group::getAll();
+					$patterns = DevblocksPlatform::parseCsvString($v);
+					
+					if(!is_array($patterns))
+						break;
+					
+					$group_ids = array();
+					
+					foreach($patterns as $pattern) {
+						foreach($groups as $group_id => $group) {
+							if(isset($group_ids[$group_id]))
+								continue;
+							
+							if(false !== stristr($group->name, $pattern)) {
+								$group_ids[$group_id] = true;
+							}
+						}
+					}
+					
+					if(!empty($group_ids)) {
+						$params[$field_key] = new DevblocksSearchCriteria(
+							$field_key,
+							$oper,
+							array_keys($group_ids)
+						);
+					}
+					break;
+					
+				case 'headers':
+					$field_key = SearchFields_Message::VIRTUAL_MESSAGE_HEADER;
+					
+					$sets = explode(' OR ', $v);
+					$values = array();
 				
-				return true;
-				break;
+					if(is_array($sets))
+					foreach($sets as $set) {
+						$tuple = explode(' ', $set, 3);
+						
+						@$header_name = $tuple[0];
+						@$header_oper = $tuple[1];
+						@$header_value = $tuple[2];
+						
+						if(empty($header_name) || empty($header_oper))
+							continue;
+						
+						switch($header_oper) {
+							case '=':
+							case 'is':
+								if(0 == strcasecmp('null', $header_value)) {
+									$values[] = array($header_name, DevblocksSearchCriteria::OPER_IS_NULL, null);
+								} else {
+									$values[] = array($header_name, DevblocksSearchCriteria::OPER_EQ, $header_value);
+								}
+								break;
+								
+							case '!=':
+							case 'not':
+								if(0 == strcasecmp('null', $header_value)) {
+									$values[] = array($header_name, DevblocksSearchCriteria::OPER_IS_NOT_NULL, null);
+								} else {
+									$values[] = array($header_name, DevblocksSearchCriteria::OPER_NEQ, $header_value);
+								}
+								break;
+								
+							case 'like':
+								$oper = DevblocksSearchCriteria::OPER_LIKE;
+								$values[] = array($header_name, $oper, $header_value);
+								break;
+								
+							case '!like':
+								$oper = DevblocksSearchCriteria::OPER_NOT_LIKE;
+								$values[] = array($header_name, $oper, $header_value);
+								break;
+								
+							case 'null':
+								$oper = DevblocksSearchCriteria::OPER_IS_NULL;
+								$values[] = array($header_name, $oper, null);
+								break;
+						}
+					}					
+					
+					$params[$field_key] = new DevblocksSearchCriteria(
+						$field_key,
+						null,
+						$values
+					);
+					break;
+
+				case 'responseTime':
+					$field_key = SearchFields_Message::RESPONSE_TIME;
+					
+					$oper = DevblocksSearchCriteria::OPER_EQ;
+					
+					if(preg_match('#^([\!\=\>\<]+)(.*)#', $v, $matches)) {
+						$oper_hint = trim($matches[1]);
+						$v = trim($matches[2]);
+						
+						switch($oper_hint) {
+							case '!=':
+								$oper = DevblocksSearchCriteria::OPER_NEQ;
+								break;
+								
+							case '>':
+								$oper = DevblocksSearchCriteria::OPER_GT;
+								break;
+								
+							case '>=':
+								$oper = DevblocksSearchCriteria::OPER_GTE;
+								break;
+								
+							case '<':
+								$oper = DevblocksSearchCriteria::OPER_LT;
+								break;
+								
+							case '<=':
+								$oper = DevblocksSearchCriteria::OPER_LTE;
+								break;
+								
+							default:
+								$oper = DevblocksSearchCriteria::OPER_EQ;
+								break;
+						}
+					}
+					
+					$params[$field_key] = new DevblocksSearchCriteria(
+						$field_key,
+						$oper,
+						$v
+					);
+					break;					
 				
+				case 'ticket.status':
+					$field_key = SearchFields_Message::VIRTUAL_TICKET_STATUS;
+					
+					$oper = DevblocksSearchCriteria::OPER_IN;
+					
+					if(preg_match('#^([\!\=]+)(.*)#', $v, $matches)) {
+						$oper_hint = trim($matches[1]);
+						$v = trim($matches[2]);
+						
+						switch($oper_hint) {
+							case '!':
+							case '!=':
+								$oper = DevblocksSearchCriteria::OPER_NIN;
+								break;
+								
+							default:
+								$oper = DevblocksSearchCriteria::OPER_IN;
+								break;
+						}
+					}
+					
+					$statuses = DevblocksPlatform::parseCsvString($v);
+					$values = array();
+					
+					// Normalize status labels
+					foreach($statuses as $idx => $status) {
+						switch(substr(strtolower($status), 0, 1)) {
+							case 'o':
+								$values['open'] = true;
+								break;
+							case 'w':
+								$values['waiting'] = true;
+								break;
+							case 'c':
+								$values['closed'] = true;
+								break;
+							case 'd':
+								$values['deleted'] = true;
+								break;
+						}
+					}
+					
+					$params[$field_key] = new DevblocksSearchCriteria(
+						$field_key,
+						$oper,
+						array_keys($values)
+					);
+					break;
+			}
 		}
 		
-		return false;
+		$this->renderPage = 0;
+		$this->addParams($params, true);
+		
+		return $params;
 	}
 	
 	function render() {
@@ -1569,9 +2054,6 @@ class View_Message extends C4_AbstractView implements IAbstractView_Subtotals, I
 		$tpl = DevblocksPlatform::getTemplateService();
 		$tpl->assign('id', $this->id);
 		$tpl->assign('view', $this);
-
-//		$custom_fields = DAO_CustomField::getByContext(CerberusContexts::CONTEXT_WORKER);
-//		$tpl->assign('custom_fields', $custom_fields);
 
 		switch($this->renderTemplate) {
 			default:
@@ -1586,6 +2068,97 @@ class View_Message extends C4_AbstractView implements IAbstractView_Subtotals, I
 		$translate = DevblocksPlatform::getTranslationService();
 		
 		switch($key) {
+			case SearchFields_Message::VIRTUAL_ATTACHMENT_NAME:
+				$strings_or = array();
+
+				switch($param->operator) {
+					case DevblocksSearchCriteria::OPER_EQ:
+					case DevblocksSearchCriteria::OPER_LIKE:
+						$oper = 'is';
+						break;
+					case DevblocksSearchCriteria::OPER_IN_OR_NULL:
+						$oper = 'is blank or';
+						break;
+					case DevblocksSearchCriteria::OPER_NEQ:
+					case DevblocksSearchCriteria::OPER_NOT_LIKE:
+						$oper = 'is not';
+						break;
+					case DevblocksSearchCriteria::OPER_NIN_OR_NULL:
+						$oper = 'is blank or not';
+						break;
+					default:
+						$oper = $param->operator;
+						break;
+				}
+				
+				if(is_array($param->value))
+				foreach($param->value as $param_value) {
+					$strings_or[] = sprintf("<b>%s</b>",
+						$param_value 
+					);
+				}
+				
+				echo sprintf("Attachment name %s %s",
+					$oper,
+					implode(' OR ', $strings_or)
+				);
+				break;
+				
+			case SearchFields_Message::VIRTUAL_HAS_ATTACHMENTS:
+				if($param->value)
+					echo "<b>Has</b> attachments";
+				else
+					echo "<b>Doesn't</b> have attachments";
+				break;
+			
+			case SearchFields_Message::VIRTUAL_MESSAGE_HEADER:
+				$strings = array();
+				
+				if(is_array($param->value))
+				foreach($param->value as $param_value) {
+				
+					if(!is_array($param_value) && 3 != count($param_value))
+						break;
+						
+					@$header_name = strtolower($param_value[0]);
+					@$header_oper = $param_value[1];
+					@$header_value = $param_value[2];
+					
+					if(empty($header_name) || empty($header_oper))
+						break;
+					
+					switch($header_oper) {
+						case DevblocksSearchCriteria::OPER_EQ:
+						case DevblocksSearchCriteria::OPER_LIKE:
+							$oper = 'is';
+							break;
+						case DevblocksSearchCriteria::OPER_IN_OR_NULL:
+							$oper = 'is blank or';
+							break;
+						case DevblocksSearchCriteria::OPER_NEQ:
+						case DevblocksSearchCriteria::OPER_NOT_LIKE:
+							$oper = 'is not';
+							break;
+						case DevblocksSearchCriteria::OPER_NIN_OR_NULL:
+							$oper = 'is blank or not';
+							break;
+						default:
+							$oper = $header_oper;
+							break;
+					}
+					
+					$strings[] = sprintf("(<b>%s</b> %s <b>%s</b>)",
+						$header_name,
+						$header_oper,
+						$header_value 
+					);
+				}
+				
+				echo sprintf("Header %s",
+					implode(' OR ', $strings) 
+				);
+				break;
+				
 			case SearchFields_Message::VIRTUAL_TICKET_STATUS:
 				if(!is_array($param->value))
 					$param->value = array($param->value);
@@ -1637,6 +2210,7 @@ class View_Message extends C4_AbstractView implements IAbstractView_Subtotals, I
 			case SearchFields_Message::ADDRESS_EMAIL:
 			case SearchFields_Message::TICKET_MASK:
 			case SearchFields_Message::TICKET_SUBJECT:
+			case SearchFields_Message::VIRTUAL_ATTACHMENT_NAME:
 				$tpl->display('devblocks:cerberusweb.core::internal/views/criteria/__string.tpl');
 				break;
 				
@@ -1652,6 +2226,7 @@ class View_Message extends C4_AbstractView implements IAbstractView_Subtotals, I
 			case SearchFields_Message::IS_NOT_SENT:
 			case SearchFields_Message::IS_OUTGOING:
 			case SearchFields_Message::TICKET_IS_DELETED:
+			case SearchFields_Message::VIRTUAL_HAS_ATTACHMENTS:
 				$tpl->display('devblocks:cerberusweb.core::internal/views/criteria/__bool.tpl');
 				break;
 				
@@ -1667,8 +2242,13 @@ class View_Message extends C4_AbstractView implements IAbstractView_Subtotals, I
 				$tpl->display('devblocks:cerberusweb.core::internal/views/criteria/__context_worker.tpl');
 				break;
 				
+			case SearchFields_Message::FULLTEXT_NOTE_CONTENT:
 			case SearchFields_Message::MESSAGE_CONTENT:
 				$tpl->display('devblocks:cerberusweb.core::internal/views/criteria/__fulltext.tpl');
+				break;
+				
+			case SearchFields_Message::VIRTUAL_MESSAGE_HEADER:
+				$tpl->display('devblocks:cerberusweb.core::messages/criteria_message_header.tpl');
 				break;
 				
 			case SearchFields_Message::VIRTUAL_TICKET_STATUS:
@@ -1766,6 +2346,7 @@ class View_Message extends C4_AbstractView implements IAbstractView_Subtotals, I
 			case SearchFields_Message::IS_NOT_SENT:
 			case SearchFields_Message::IS_OUTGOING:
 			case SearchFields_Message::TICKET_IS_DELETED:
+			case SearchFields_Message::VIRTUAL_HAS_ATTACHMENTS:
 				@$bool = DevblocksPlatform::importGPC($_REQUEST['bool'],'integer',1);
 				$criteria = new DevblocksSearchCriteria($field,$oper,$bool);
 				break;
@@ -1780,9 +2361,20 @@ class View_Message extends C4_AbstractView implements IAbstractView_Subtotals, I
 				$criteria = new DevblocksSearchCriteria($field,$oper,$worker_ids);
 				break;
 				
+			case SearchFields_Message::FULLTEXT_NOTE_CONTENT:
 			case SearchFields_Message::MESSAGE_CONTENT:
 				@$scope = DevblocksPlatform::importGPC($_REQUEST['scope'],'string','expert');
 				$criteria = new DevblocksSearchCriteria($field,DevblocksSearchCriteria::OPER_FULLTEXT,array($value,$scope));
+				break;
+				
+			case SearchFields_Message::VIRTUAL_ATTACHMENT_NAME:
+				$criteria = new DevblocksSearchCriteria($field,$oper,explode(' OR ', $value));
+				break;
+				
+			case SearchFields_Message::VIRTUAL_MESSAGE_HEADER:
+				@$name = DevblocksPlatform::importGPC($_REQUEST['name'],'string','');
+				@$value = DevblocksPlatform::importGPC($_REQUEST['value'],'string','');
+				$criteria = new DevblocksSearchCriteria($field, $oper, array(array($name,$oper,$value)));
 				break;
 				
 			case SearchFields_Message::VIRTUAL_TICKET_STATUS:
@@ -2146,17 +2738,15 @@ class Context_Message extends Extension_DevblocksContext {
 		$defaults->class_name = $this->getViewClass();
 		$view = C4_AbstractViewLoader::getView($view_id, $defaults);
 		$view->name = 'Messages';
-//		$view->view_columns = array(
-//			SearchFields_Message::UPDATED_DATE,
-//		);
-		$view->addParams(array(
-//			SearchFields_Task::IS_COMPLETED => new DevblocksSearchCriteria(SearchFields_Task::IS_COMPLETED,'=',0),
-			//SearchFields_Task::VIRTUAL_WATCHERS => new DevblocksSearchCriteria(SearchFields_Task::VIRTUAL_WATCHERS,'in',array($active_worker->id)),
-		), true);
+		$view->addParams(array(), true);
 		
-		$view->addParamsRequired(array(
-			SearchFields_Message::TICKET_GROUP_ID => new DevblocksSearchCriteria(SearchFields_Message::TICKET_GROUP_ID,'in',array_keys($active_worker->getMemberships())),
-		), true);
+		$params_required = array();
+		
+		if(!empty($active_worker)) {
+			$params_required[SearchFields_Message::TICKET_GROUP_ID] = new DevblocksSearchCriteria(SearchFields_Message::TICKET_GROUP_ID,'in',array_keys($active_worker->getMemberships()));
+		}
+		
+		$view->addParamsRequired($params_required, true);
 		
 		$view->renderSortBy = SearchFields_Message::CREATED_DATE;
 		$view->renderSortAsc = false;
@@ -2166,8 +2756,8 @@ class Context_Message extends Extension_DevblocksContext {
 		return $view;
 	}
 	
-	function getView($context=null, $context_id=null, $options=array()) {
-		$view_id = str_replace('.','_',$this->id);
+	function getView($context=null, $context_id=null, $options=array(), $view_id=null) {
+		$view_id = !empty($view_id) ? $view_id : str_replace('.','_',$this->id);
 		
 		$defaults = new C4_AbstractViewModel();
 		$defaults->id = $view_id;

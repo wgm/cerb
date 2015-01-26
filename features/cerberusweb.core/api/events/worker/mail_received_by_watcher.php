@@ -2,7 +2,7 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2014, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
@@ -98,6 +98,8 @@ class Event_MailReceivedByWatcher extends Extension_DevblocksEvent {
 			if(!is_null($event_model)) {
 				$values['is_first'] = ($values['id'] == $ticket_values['initial_message_id']) ? 1 : 0;
 			}
+			
+			$values['ticket_has_owner'] = !empty($ticket_values['owner_id']) ? 1 : 0;
 
 			@$group_id = $ticket_values['group_id'];
 			
@@ -315,12 +317,6 @@ class Event_MailReceivedByWatcher extends Extension_DevblocksEvent {
 		$pass = true;
 		
 		switch($as_token) {
-			case 'ticket_has_owner':
-				$bool = $params['bool'];
-				@$value = $dict->ticket_owner_id;
-				$pass = ($bool == !empty($value));
-				break;
-			
 			case 'group_id':
 				$not = (substr($params['oper'],0,1) == '!');
 				$oper = ltrim($params['oper'],'!');

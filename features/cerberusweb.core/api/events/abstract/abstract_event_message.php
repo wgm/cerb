@@ -2,7 +2,7 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2014, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
@@ -90,6 +90,10 @@ abstract class AbstractEvent_Message extends Extension_DevblocksEvent {
 		
 			if(isset($ticket_values['group_id']))
 				$group_id = $ticket_values['group_id'];
+			
+			// [TODO] ticket_group_id and group_id are redundant here
+			
+			$values['ticket_has_owner'] = !empty($ticket_values['owner_id']) ? 1 : 0;
 			
 			// Clear dupe content
 			CerberusContexts::scrubTokensWithRegexp(
@@ -357,12 +361,6 @@ abstract class AbstractEvent_Message extends Extension_DevblocksEvent {
 		$pass = true;
 		
 		switch($as_token) {
-			case 'ticket_has_owner':
-				$bool = $params['bool'];
-				@$value = $dict->ticket_owner_id;
-				$pass = ($bool == !empty($value));
-				break;
-				
 			case 'ticket_watcher_count':
 				$not = (substr($params['oper'],0,1) == '!');
 				$oper = ltrim($params['oper'],'!');

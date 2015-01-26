@@ -2,7 +2,7 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2014, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
@@ -87,6 +87,8 @@ abstract class AbstractEvent_Ticket extends Extension_DevblocksEvent {
 					"#^bucket_id$#",
 				)
 			);
+			
+			$values['ticket_has_owner'] = !empty($merge_token_values['owner_id']) ? 1 : 0;
 			
 			// Merge
 			CerberusContexts::merge(
@@ -340,12 +342,6 @@ abstract class AbstractEvent_Ticket extends Extension_DevblocksEvent {
 		$pass = true;
 		
 		switch($as_token) {
-			case 'ticket_has_owner':
-				$bool = $params['bool'];
-				@$value = $dict->ticket_owner_id;
-				$pass = ($bool == !empty($value));
-				break;
-				
 			case 'ticket_spam_score':
 				$not = (substr($params['oper'],0,1) == '!');
 				$oper = ltrim($params['oper'],'!');

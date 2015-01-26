@@ -2,7 +2,7 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2014, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
@@ -55,15 +55,13 @@ class PageSection_ProfilesCalendar extends Extension_PageSection {
 			'value' => $calendar->name,
 		);
 		
-		$context_ext = Extension_DevblocksContext::get($calendar->owner_context);
-		$context_meta = $context_ext->getMeta($calendar->owner_context_id);
-		
 		$properties['owner'] = array(
 			'label' => ucfirst($translate->_('common.owner')),
-			'type' => Model_CustomField::TYPE_SINGLE_LINE,
-			'value' => sprintf("%s (%s)", $context_meta['name'], $context_ext->manifest->name)
+			'type' => Model_CustomField::TYPE_LINK,
+			'params' => array('context' => $calendar->owner_context),
+			'value' => $calendar->owner_context_id,
 		);
-			
+		
 		$properties['updated'] = array(
 			'label' => ucfirst($translate->_('common.updated')),
 			'type' => Model_CustomField::TYPE_DATE,
@@ -85,6 +83,21 @@ class PageSection_ProfilesCalendar extends Extension_PageSection {
 
 		$properties_custom_fieldsets = Page_Profiles::getProfilePropertiesCustomFieldsets(CerberusContexts::CONTEXT_CALENDAR, $calendar->id, $values);
 		$tpl->assign('properties_custom_fieldsets', $properties_custom_fieldsets);
+		
+		// Link counts
+		
+		$properties_links = array(
+			CerberusContexts::CONTEXT_CALENDAR => array(
+				$calendar->id => 
+					DAO_ContextLink::getContextLinkCounts(
+						CerberusContexts::CONTEXT_CALENDAR,
+						$calendar->id,
+						array(CerberusContexts::CONTEXT_WORKER, CerberusContexts::CONTEXT_CUSTOM_FIELDSET)
+					),
+			),
+		);
+				
+		$tpl->assign('properties_links', $properties_links);
 		
 		// Properties
 		

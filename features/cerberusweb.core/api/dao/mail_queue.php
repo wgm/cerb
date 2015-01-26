@@ -2,7 +2,7 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2014, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
@@ -86,6 +86,48 @@ class DAO_MailQueue extends DevblocksORMHelper {
 			return $objects[$id];
 		
 		return null;
+	}
+	
+	static function getDraftsByTicketIds($ids, $max_age=600, $ignore_worker_ids=array()) {
+		$ids = DevblocksPlatform::sanitizeArray($ids, 'int', array('unique','nonzero'));
+		$ignore_worker_ids = DevblocksPlatform::sanitizeArray($ignore_worker_ids, 'int', array('unique','nonzero'));
+		
+		if(empty($ids))
+			return array();
+
+		$results = self::getWhere(sprintf("%s != %d AND %s = %d AND %s in (%s) AND %s >= %d %s",
+			DAO_MailQueue::TICKET_ID,
+			0, // ticket_id exists
+			DAO_MailQueue::IS_QUEUED,
+			0, // is a draft
+			DAO_MailQueue::TICKET_ID,
+			implode(',', $ids), // is for one of these tickets
+			DAO_MailQueue::UPDATED,
+			time() - $max_age, // is no older than $max_age in secs
+			(!empty($ignore_worker_ids) // doesn't include one of these workers (optional) 
+				? sprintf("AND %s NOT IN (%s) ", DAO_MailQueue::WORKER_ID, implode(',', $ignore_worker_ids)) 
+				: ''
+			)
+		));
+		
+		$out = array();
+		
+		if(is_array($results))
+		foreach($results as $draft) {
+			if(!isset($out[$draft->ticket_id]))
+				$out[$draft->ticket_id] = array();
+			
+			// Only use the newest draft per ticket
+			if(isset($out[$draft->ticket_id]) && $out[$draft->ticket_id]->updated > $draft->updated)
+				continue;
+			
+			unset($draft->body);
+			unset($draft->params);
+			
+			$out[$draft->ticket_id] = $draft;
+		}
+		
+		return $out;
 	}
 	
 	/**
@@ -496,7 +538,7 @@ class Model_MailQueue {
 	}
 };
 
-class View_MailQueue extends C4_AbstractView implements IAbstractView_Subtotals {
+class View_MailQueue extends C4_AbstractView implements IAbstractView_Subtotals, IAbstractView_QuickSearch {
 	const DEFAULT_ID = 'mail_queue';
 
 	function __construct() {
@@ -610,6 +652,64 @@ class View_MailQueue extends C4_AbstractView implements IAbstractView_Subtotals 
 		}
 		
 		return $counts;
+	}
+	
+	function getQuickSearchFields() {
+		$fields = array(
+			'_fulltext' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_TEXT,
+					'options' => array('param_key' => SearchFields_MailQueue::SUBJECT, 'match' => DevblocksSearchCriteria::OPTION_TEXT_PARTIAL),
+				),
+			'subject' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_TEXT,
+					'options' => array('param_key' => SearchFields_MailQueue::SUBJECT, 'match' => DevblocksSearchCriteria::OPTION_TEXT_PARTIAL),
+				),
+			'to' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_TEXT,
+					'options' => array('param_key' => SearchFields_MailQueue::HINT_TO, 'match' => DevblocksSearchCriteria::OPTION_TEXT_PREFIX),
+				),
+			'updated' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_DATE,
+					'options' => array('param_key' => SearchFields_MailQueue::UPDATED),
+				),
+			'worker' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_WORKER,
+					'options' => array('param_key' => SearchFields_MailQueue::WORKER_ID),
+				),
+		);
+		
+		// Add searchable custom fields
+		
+		$fields = self::_appendFieldsFromQuickSearchContext(CerberusContexts::CONTEXT_DRAFT, $fields, null);
+		
+		// Sort by keys
+		
+		ksort($fields);
+		
+		return $fields;
+	}	
+	
+	function getParamsFromQuickSearchFields($fields) {
+		$search_fields = $this->getQuickSearchFields();
+		$params = DevblocksSearchCriteria::getParamsFromQueryFields($fields, $search_fields);
+
+		// Handle virtual fields and overrides
+		if(is_array($fields))
+		foreach($fields as $k => $v) {
+			switch($k) {
+				// ...
+			}
+		}
+		
+		$this->renderPage = 0;
+		$this->addParams($params, true);
+		
+		return $params;
 	}
 	
 	function render() {
@@ -991,11 +1091,11 @@ class Context_Draft extends Extension_DevblocksContext {
 		return $view;
 	}
 	
-	function getView($context=null, $context_id=null, $options=array()) {
+	function getView($context=null, $context_id=null, $options=array(), $view_id=null) {
 		// [TODO]
 		return NULL;
 		
-		$view_id = str_replace('.','_',$this->id);
+		$view_id = !empty($view_id) ? $view_id : str_replace('.','_',$this->id);
 		
 		$defaults = new C4_AbstractViewModel();
 		$defaults->id = $view_id;

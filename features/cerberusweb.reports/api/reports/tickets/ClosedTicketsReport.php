@@ -2,7 +2,7 @@
 /***********************************************************************
  | Cerb(tm) developed by Webgroup Media, LLC.
  |-----------------------------------------------------------------------
- | All source code & content (c) Copyright 2002-2014, Webgroup Media LLC
+ | All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
  |   unless specifically noted otherwise.
  |
  | This source code is released under the Devblocks Public License.
@@ -167,20 +167,18 @@ class ChReportClosedTickets extends Extension_Report {
 		
 		// Chart
 		
+		$query_parts = DAO_Ticket::getSearchQueryComponents($view->view_columns, $view->getParams());
+
 		$sql = sprintf("SELECT t.group_id as group_id, DATE_FORMAT(FROM_UNIXTIME(t.updated_date),'%s') as date_plot, ".
-			"count(*) AS hits ".
-			"FROM ticket t ".
-			"WHERE t.updated_date > %d AND t.updated_date <= %d ".
+			"count(t.id) AS hits ".
 			"%s ".
-			"AND t.is_deleted = 0 ".
-			"AND t.is_closed = 1 ".
-			"AND t.spam_training != 'S' ".
+			"%s ".
 			"GROUP BY group_id, date_plot ",
 			$date_group,
-			$start_time,
-			$end_time,
-			(is_array($filter_group_ids) && !empty($filter_group_ids) ? sprintf("AND t.group_id IN (%s)", implode(',', $filter_group_ids)) : "")
+			$query_parts['join'],
+			$query_parts['where']
 		);
+		
 		$rs = $db->Execute($sql);
 		
 		$data = array();

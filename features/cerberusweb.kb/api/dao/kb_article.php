@@ -2,7 +2,7 @@
 /***********************************************************************
  | Cerb(tm) developed by Webgroup Media, LLC.
  |-----------------------------------------------------------------------
- | All source code & content (c) Copyright 2002-2014, Webgroup Media LLC
+ | All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
  |   unless specifically noted otherwise.
  |
  | This source code is released under the Devblocks Public License.
@@ -356,9 +356,11 @@ class DAO_KbArticle extends Cerb_ORMHelper {
 			case SearchFields_KbArticle::FULLTEXT_ARTICLE_CONTENT:
 				$search = Extension_DevblocksSearchSchema::get(Search_KbArticle::ID);
 				$query = $search->getQueryFromParam($param);
-				$ids = $search->query($query, array());
 				
-				if(is_array($ids)) {
+				if(false === ($ids = $search->query($query, array()))) {
+					$args['where_sql'] .= 'AND 0 ';
+				
+				} elseif(is_array($ids)) {
 					if(empty($ids))
 						$ids = array(-1);
 					
@@ -570,7 +572,7 @@ class Search_KbArticle extends Extension_DevblocksSearchSchema {
 		$done = false;
 
 		while(!$done && time() < $stop_time) {
-			$where = sprintf("%s >= %d AND %s > %d",
+			$where = sprintf('(%1$s = %2$d AND %3$s > %4$d) OR (%1$s > %2$d)',
 				DAO_KbArticle::UPDATED,
 				$ptr_time,
 				DAO_KbArticle::ID,
@@ -597,7 +599,13 @@ class Search_KbArticle extends Extension_DevblocksSearchSchema {
 					$id
 				));
 				
-				$engine->index($this, $id, $article->title . ' ' . strip_tags($article->content));
+				$doc = array(
+					'title' => $article->title,
+					'content' => strip_tags($article->content),
+				);
+				
+				if(false === ($engine->index($this, $id, $doc)))
+					return false;
 				
 				flush();
 			}
@@ -943,8 +951,8 @@ class Context_KbArticle extends Extension_DevblocksContext implements IDevblocks
 		return $view;
 	}
 	
-	function getView($context=null, $context_id=null, $options=array()) {
-		$view_id = str_replace('.','_',$this->id);
+	function getView($context=null, $context_id=null, $options=array(), $view_id=null) {
+		$view_id = !empty($view_id) ? $view_id : str_replace('.','_',$this->id);
 		
 		$defaults = new C4_AbstractViewModel();
 		$defaults->id = $view_id;
@@ -982,7 +990,7 @@ class Context_KbArticle extends Extension_DevblocksContext implements IDevblocks
 	}
 };
 
-class View_KbArticle extends C4_AbstractView implements IAbstractView_Subtotals {
+class View_KbArticle extends C4_AbstractView implements IAbstractView_Subtotals, IAbstractView_QuickSearch {
 	const DEFAULT_ID = 'kb_overview';
 	
 	function __construct() {
@@ -1120,6 +1128,87 @@ class View_KbArticle extends C4_AbstractView implements IAbstractView_Subtotals 
 		}
 		
 		return $counts;
+	}
+	
+	// [TODO] Fulltext: Comments
+	// [TODO] Virtual: Topic
+	
+	function getQuickSearchFields() {
+		$fields = array(
+			'_fulltext' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_FULLTEXT,
+					'options' => array('param_key' => SearchFields_KbArticle::FULLTEXT_ARTICLE_CONTENT),
+				),
+			'content' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_FULLTEXT,
+					'options' => array('param_key' => SearchFields_KbArticle::FULLTEXT_ARTICLE_CONTENT),
+				),
+			'title' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_TEXT,
+					'options' => array('param_key' => SearchFields_KbArticle::TITLE, 'match' => DevblocksSearchCriteria::OPTION_TEXT_PARTIAL),
+				),
+			'updated' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_DATE,
+					'options' => array('param_key' => SearchFields_KbArticle::UPDATED),
+				),
+			'views' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_NUMBER,
+					'options' => array('param_key' => SearchFields_KbArticle::VIEWS),
+				),
+			'watchers' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_WORKER,
+					'options' => array('param_key' => SearchFields_KbArticle::VIRTUAL_WATCHERS),
+				),
+		);
+		
+		// Add searchable custom fields
+		
+		$fields = self::_appendFieldsFromQuickSearchContext(CerberusContexts::CONTEXT_KB_ARTICLE, $fields, null);
+		
+		// Engine/schema examples: Fulltext
+		
+		$ft_examples = array();
+		
+		if(false != ($schema = Extension_DevblocksSearchSchema::get(Search_KbArticle::ID))) {
+			if(false != ($engine = $schema->getEngine())) {
+				$ft_examples = $engine->getQuickSearchExamples($schema);
+			}
+		}
+		
+		if(!empty($ft_examples)) {
+			$fields['_fulltext']['examples'] = $ft_examples;
+			$fields['content']['examples'] = $ft_examples;
+		}
+		
+		// Sort by keys
+		
+		ksort($fields);
+		
+		return $fields;
+	}	
+	
+	function getParamsFromQuickSearchFields($fields) {
+		$search_fields = $this->getQuickSearchFields();
+		$params = DevblocksSearchCriteria::getParamsFromQueryFields($fields, $search_fields);
+
+		// Handle virtual fields and overrides
+		if(is_array($fields))
+		foreach($fields as $k => $v) {
+			switch($k) {
+				// ...
+			}
+		}
+		
+		$this->renderPage = 0;
+		$this->addParams($params, true);
+		
+		return $params;
 	}
 	
 	function render() {

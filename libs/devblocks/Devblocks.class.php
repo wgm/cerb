@@ -299,6 +299,38 @@ class DevblocksPlatform extends DevblocksEngine {
 	}
 	
 	/**
+	 * 
+	 * @param string $a
+	 * @param string $b
+	 * @param string $oper
+	 * @return bool
+	 */
+	public static function compareStrings($a, $b, $oper) {
+		@$not = (substr($oper, 0, 1) == '!');
+		@$oper = ltrim($oper, '!');
+		
+		$pass = false;
+		
+		switch($oper) {
+			case 'is':
+				$pass = (0==strcasecmp($a, $b));
+				break;
+			case 'like':
+				$regexp = DevblocksPlatform::strToRegExp($b);
+				$pass = @preg_match($regexp, $a);
+				break;
+			case 'contains':
+				$pass = (false !== stripos($a, $b)) ? true : false;
+				break;
+			case 'regexp':
+				$pass = @preg_match($b, $a);
+				break;
+		}
+		
+		return ($not) ? !$pass : $pass;;
+	}
+	
+	/**
 	 * Return a string as a regular expression, parsing * into a non-greedy
 	 * wildcard, etc.
 	 *
@@ -470,7 +502,7 @@ class DevblocksPlatform extends DevblocksEngine {
 			
 			libxml_use_internal_errors(true);
 			
-			$dom->loadHTML(sprintf('<?xml encoding="%s">', LANG_CHARSET_CODE) . $str);
+			$dom->loadHTML(sprintf('<?xml version="1.0" encoding="%s">', LANG_CHARSET_CODE) . $str);
 			
 			$errors = libxml_get_errors();
 			libxml_clear_errors();
@@ -512,6 +544,45 @@ class DevblocksPlatform extends DevblocksEngine {
 			}
 		}
 		
+		// Convert hyperlinks to plaintext
+		
+		$str = preg_replace_callback(
+			'@<a[^>]*?>(.*?)</a>@si',
+			function($matches) {
+				if(!isset($matches[0]))
+					return false;
+				
+				$out = '';
+				
+				if(false == ($dom = simplexml_load_string($matches[0])))
+					return false;
+				
+				@$href_link = $dom['href'];
+				@$href_label = (string) $dom;
+				
+				// Skip if there is no label text (images, etc)
+				if(empty($href_label)) {
+					$out = null;
+					
+				// If the link and label are the same, ignore label
+				} elseif($href_label == $href_link) {
+					$out = $href_link;
+					
+				// Otherwise, format like Markdown
+				} else {
+					$out = sprintf("[%s](%s)",
+						$href_label,
+						$href_link
+					);
+				}
+				
+				return $out;
+			},
+			$str
+		);
+		
+		// Code blocks to plaintext
+		
 		$str = preg_replace_callback(
 			'@<code[^>]*?>(.*?)</code>@si',
 			function($matches) {
@@ -523,6 +594,8 @@ class DevblocksPlatform extends DevblocksEngine {
 			},
 			$str
 		);
+		
+		// Preformatted blocks to plaintext
 		
 		$str = preg_replace_callback(
 			'#<pre.*?/pre\>#si',
@@ -692,16 +765,11 @@ class DevblocksPlatform extends DevblocksEngine {
 		return $purifier->purify($dirty_html);
 	}
 	
-	static function parseMarkdown($text, $use_parsedown=false) {
-		if($use_parsedown) {
-			$parser = new Parsedown();
-			$parser->set_breaks_enabled(true);
-			return $parser->parse($text);
-			
-		} else {
-			$parser = new markdown();
-			return $parser->parse($text);
-		}
+	static function parseMarkdown($text) {
+		$parser = new Parsedown();
+		$parser->setBreaksEnabled(true);
+		$parser->setMarkupEscaped(false);
+		return $parser->parse($text);
 	}
 	
 	static function parseRss($url) {
@@ -1830,6 +1898,13 @@ class DevblocksPlatform extends DevblocksEngine {
 		return _DevblocksDatabaseManager::getInstance();
 	}
 
+	/**
+	 * @return _DevblocksNaturalLanguageManager
+	 */
+	static function getNaturalLanguageService() {
+		return _DevblocksNaturalLanguageManager::getInstance();
+	}
+	
 	/**
 	 * @return _DevblocksUrlManager
 	 */

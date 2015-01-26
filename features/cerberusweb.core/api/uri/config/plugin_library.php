@@ -2,7 +2,7 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2014, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
@@ -63,6 +63,10 @@ class PageSection_SetupPluginLibrary extends Extension_PageSection {
 		if(isset($results['updated']) && !empty($results['upated'])) {
 			try {
 				CerberusApplication::update();
+				
+				$schema = Extension_DevblocksSearchSchema::get(Search_PluginLibrary::ID);
+				$schema->reindex();
+				$schema->index(time() + 30);
 				
 			} catch (Exception $e) {}
 	

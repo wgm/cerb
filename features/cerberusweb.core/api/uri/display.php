@@ -2,7 +2,7 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2014, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
@@ -429,7 +429,7 @@ class ChDisplayPage extends CerberusPageExtension {
 		
 		// Markdown
 		
-		$output = DevblocksPlatform::parseMarkdown($message_properties['content'], true);
+		$output = DevblocksPlatform::parseMarkdown($message_properties['content']);
 		
 		// Wrap the reply in a template if we have one
 		

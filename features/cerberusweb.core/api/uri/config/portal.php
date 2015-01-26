@@ -2,7 +2,7 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2014, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
@@ -121,11 +121,15 @@ class PageSection_SetupPortal extends Extension_PageSection {
 		$defaults->id = 'portal_templates';
 		$defaults->class_name = 'View_DevblocksTemplate';
 		
-		$view = C4_AbstractViewLoader::getView($defaults->id, $defaults);
-
-		$view->name = 'Custom Templates';
-		$view->addParam(new DevblocksSearchCriteria(SearchFields_DevblocksTemplate::TAG,'=','portal_'.$tool->code));
-		C4_AbstractViewLoader::setView($view->id, $view);
+		if(false != ($view = C4_AbstractViewLoader::getView($defaults->id, $defaults))) {
+			$view->name = 'Custom Templates';
+			
+			$view->addParamsRequired(array(
+				new DevblocksSearchCriteria(SearchFields_DevblocksTemplate::TAG,'=','portal_'.$tool->code),
+			), true);
+			
+			C4_AbstractViewLoader::setView($view->id, $view);
+		}
 		
 		$tpl->assign('view', $view);
 			

@@ -137,12 +137,14 @@ var atwho_twig_modifiers = [
 	{ name: "format", content: "Replace %s in formatted text with placeholders" },
 	{ name: "join(',')", content: "Join array elements into one string" },
 	{ name: "json_encode", content: "Encode text as JSON" },
+	{ name: "json_pretty", content: "Prettify JSON formatted text" },
 	{ name: "keys", content: "Return the keys of an array" },
 	{ name: "last", content: "Return the last element of an array or text" },
 	{ name: "length", content: "Calculate the length of an array or text" },
 	{ name: "md5", content: "Convert text to an MD5 hash" },
 	{ name: "merge", content: "Merge multiple arrays together" },
 	{ name: "nl2br", content: "Convert newlines to HTML breaks" },
+	{ name: "nlp_parse(patterns)", content: "Parse natural language with patterns" },
 	{ name: "number_format(2, '.', ',')", content: "Format a number" },
 	{ name: "regexp", content: "Match a regular expression" },
 	{ name: "replace('this', 'that')", content: "Replace text" },
@@ -151,8 +153,10 @@ var atwho_twig_modifiers = [
 	{ name: "slice", content: "Extract a slice of an array or text" },
 	{ name: "sort", content: "Sort an array" },
 	{ name: "split(',')", content: "Split text into an array by delimiter" },
+	{ name: "split_crlf", content: "Split text into an array by linefeeds" },
+	{ name: "split_csv", content: "Split text into an array by commas" },
 	{ name: "striptags", content: "Strip HTML/XML tags in text" },
-	{ name: "trim", content: "Remove whitespace or given characters from the ends of text" },
+	{ name: "trim", content: "Trim whitespace or given characters from the ends of text" },
 	{ name: "truncate(10)", content: "Truncate text" },
 	{ name: "url_encode", content: "Encode an array or text for use in a URL" },
 ];
@@ -494,7 +498,10 @@ var cAjaxCalls = function() {
 			options.source = url;
 		}
 		
-		$(sel).autocomplete(options);
+		var $sel = $(sel);
+		
+		$sel.autocomplete(options);
+		$sel.autocomplete('widget').css('max-width', $sel.closest('form').width());
 	}
 
 	this.orgAutoComplete = function(sel, options) {
@@ -508,7 +515,10 @@ var cAjaxCalls = function() {
 		if(null == options.autoFocus)
 			options.autoFocus = true;
 
-		$(sel).autocomplete(options);
+		var $sel = $(sel);
+		
+		$sel.autocomplete(options);
+		$sel.autocomplete('widget').css('max-width', $sel.closest('form').width());
 	}
 	
 	this.countryAutoComplete = function(sel, options) {
@@ -522,7 +532,10 @@ var cAjaxCalls = function() {
 		if(null == options.autoFocus)
 			options.autoFocus = true;
 		
-		$(sel).autocomplete(options);
+		var $sel = $(sel);
+		
+		$sel.autocomplete(options);
+		$sel.autocomplete('widget').css('max-width', $sel.closest('form').width());
 	}
 
 	this.chooser = function(button, context, field_name, options) {
@@ -596,6 +609,8 @@ var cAjaxCalls = function() {
 					return false;
 				}
 			});
+			
+			$autocomplete.autocomplete('widget').css('max-width', $autocomplete.closest('form').width());
 		}
 	}
 	

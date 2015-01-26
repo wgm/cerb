@@ -2,7 +2,7 @@
 /***********************************************************************
  | Cerb(tm) developed by Webgroup Media, LLC.
  |-----------------------------------------------------------------------
- | All source code & content (c) Copyright 2002-2014, Webgroup Media LLC
+ | All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
  |   unless specifically noted otherwise.
  |
  | This source code is released under the Devblocks Public License.
@@ -391,12 +391,12 @@ class WorkspaceTab_Dashboards extends Extension_WorkspaceTab {
 		// Get by workspace tab
 		// [TODO] Cache
 		$widgets = DAO_WorkspaceWidget::getWhere(
-				sprintf("%s = %d",
-					DAO_WorkspaceWidget::WORKSPACE_TAB_ID,
-					$tab->id
-				),
-				DAO_WorkspaceWidget::POS,
-				true
+			sprintf("%s = %d",
+				DAO_WorkspaceWidget::WORKSPACE_TAB_ID,
+				$tab->id
+			),
+			DAO_WorkspaceWidget::POS,
+			true
 		);
 
 		$columns = array();

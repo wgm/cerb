@@ -2,7 +2,7 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2014, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
@@ -167,23 +167,15 @@ class ChInternalController extends DevblocksControllerExtension {
 		if(empty($context) || empty($context_id) || empty($to_context))
 			return;
 			
-		if(null == ($ext_context = DevblocksPlatform::getExtension($to_context, true)))
+		if(null == ($ext_context = Extension_DevblocksContext::get($to_context)))
 			return;
-
-		if(!$ext_context instanceof Extension_DevblocksContext)
-			return;
-
-		$tpl = DevblocksPlatform::getTemplateService();
-		$active_worker = CerberusApplication::getActiveWorker();
 			
 		if(null != ($view = $ext_context->getView($context, $context_id))) {
+			$tpl = DevblocksPlatform::getTemplateService();
 			$tpl->assign('view', $view);
 			$tpl->display('devblocks:cerberusweb.core::internal/views/search_and_view.tpl');
 			$tpl->clearAssign('view');
 		}
-
-		unset($view);
-		unset($ext_content);
 	}
 	
 	/*
@@ -565,6 +557,31 @@ class ChInternalController extends DevblocksControllerExtension {
 		
 		if(!empty($view_id) && !empty($context)) {
 			C4_AbstractView::setMarqueeContextImported($view_id, $context, $line_number);
+		}
+	}
+	
+	/*
+	 * Links
+	 */
+	
+	function linksOpenAction() {
+		@$context = DevblocksPlatform::importGPC($_REQUEST['context'],'string');
+		@$context_id = DevblocksPlatform::importGPC($_REQUEST['context_id'],'integer');
+		@$to_context = DevblocksPlatform::importGPC($_REQUEST['to_context'],'string');
+
+		if(null == ($to_context_extension = Extension_DevblocksContext::get($to_context))
+			|| null == ($from_context_extension = Extension_DevblocksContext::get($context)))
+				return;
+		
+		$view_id = 'links_' . DevblocksPlatform::strAlphaNum($to_context_extension->id, '_', '_');
+			
+		if(false != ($view = $to_context_extension->getView($context, $context_id, null, $view_id))) {
+			$tpl = DevblocksPlatform::getTemplateService();
+			$tpl->assign('from_context_extension', $from_context_extension);
+			$tpl->assign('to_context_extension', $to_context_extension);
+			$tpl->assign('view', $view);
+			$tpl->display('devblocks:cerberusweb.core::internal/profiles/profile_links_popup.tpl');
+			$tpl->clearAssign('view');
 		}
 	}
 	
@@ -4259,7 +4276,7 @@ class ChInternalController extends DevblocksControllerExtension {
 					
 					switch($format) {
 						case 'parsedown':
-							if(false != ($output = DevblocksPlatform::parseMarkdown($output, true))) {
+							if(false != ($output = DevblocksPlatform::parseMarkdown($output))) {
 
 								// HTML template
 
@@ -4345,11 +4362,8 @@ class ChInternalController extends DevblocksControllerExtension {
 		
 		switch($format) {
 			case 'markdown':
-				$body = DevblocksPlatform::parseMarkdown($data);
-				break;
-				
 			case 'parsedown':
-				$body = DevblocksPlatform::parseMarkdown($data, true);
+				$body = DevblocksPlatform::parseMarkdown($data);
 				break;
 				
 			case 'html':

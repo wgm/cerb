@@ -2,7 +2,7 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2014, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
@@ -125,6 +125,10 @@ class Page_Profiles extends CerberusPageExtension {
 					'type' => $cf_group_field->type,
 					'value' => isset($values[$cf_group_field->id]) ? $values[$cf_group_field->id] : null,
 				);
+				
+				// Include parameters for abstract handling
+				if(!empty($cf_group_field->params))
+					$cf_group_props['cf_' . $cf_group_field_id]['params'] = $cf_group_field->params;
 			}
 			
 			$properties[$custom_fieldset->id] = array(

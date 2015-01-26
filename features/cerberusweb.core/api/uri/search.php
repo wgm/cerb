@@ -2,7 +2,7 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2014, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
@@ -40,6 +40,9 @@ class Page_Search extends CerberusPageExtension {
 		$response = DevblocksPlatform::getHttpResponse();
 		$active_worker = CerberusApplication::getActiveWorker();
 		
+		// Allow quick search queries to be sent in the URL
+		@$query = DevblocksPlatform::importGPC($_REQUEST['q'], 'string', '');
+		
 		$stack = $response->path;
 		@array_shift($stack); // search
 		@$context_extid = array_shift($stack); // context
@@ -57,7 +60,15 @@ class Page_Search extends CerberusPageExtension {
 		
 		$tpl->assign('context_ext', $context_ext);
 		
-		$view = $context_ext->getSearchView();
+		if(false == ($view = $context_ext->getSearchView())) /* @var $view C4_AbstractView */
+			return;
+		
+		// Quick search initialization
+		
+		if(!empty($query)) {
+			$view->addParamsWithQuickSearch($query, true);
+			$tpl->assign('quick_search_query', $query);
+		}
 		
 		// Placeholders
 		
@@ -85,20 +96,16 @@ class Page_Search extends CerberusPageExtension {
 	
 	function ajaxQuickSearchAction() {
 		@$view_id = DevblocksPlatform::importGPC($_REQUEST['view_id'],'string','');
-		@$token = DevblocksPlatform::importGPC($_REQUEST['field'],'string','');
 		@$query = DevblocksPlatform::importGPC($_REQUEST['query'],'string','');
-		
+
 		header("Content-type: application/json");
-		
-		$active_worker = CerberusApplication::getActiveWorker();
 		
 		if(null == ($view = C4_AbstractViewLoader::getView($view_id))) { /* @var $view C4_AbstractView */
 			echo json_encode(null);
 			return;
 		}
-		DAO_WorkerPref::set($active_worker->id, 'quicksearch_' . strtolower(get_class($view)), $token);
 		
-		$view->doQuickSearch($token, $query);
+		$view->addParamsWithQuickSearch($query);
 		
 		C4_AbstractViewLoader::setView($view->id, $view);
 		

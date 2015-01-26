@@ -279,7 +279,9 @@ function genericAjaxPopup($layer,request,target,modal,width,cb) {
 			$(this).unbind().find(':focus').blur();
 		}
 	};
-
+	
+	var $popup = null;
+	
 	// Restore position from previous dialog?
 	if(target == 'reuse') {
 		$popup = genericAjaxPopupFetch($layer);
@@ -293,6 +295,12 @@ function genericAjaxPopup($layer,request,target,modal,width,cb) {
 					at: 'left+' + left + ' top+' + top 
 				};
 			} catch(e) { }
+			
+		} else {
+			options.position = {
+				my: "center top",
+				at: "center top+20"
+			};
 		}
 		target = null;
 		
@@ -302,6 +310,11 @@ function genericAjaxPopup($layer,request,target,modal,width,cb) {
 			at: target.at
 		};
 		
+	} else {
+		options.position = {
+			my: "center top",
+			at: "center top+20"
+		};
 	}
 	
 	// Reset (if exists)
@@ -311,10 +324,11 @@ function genericAjaxPopup($layer,request,target,modal,width,cb) {
 	if(null != modal) options.modal = modal;
 	
 	// Load the popup content
-	$options = { async: false }
-	genericAjaxGet('',request + '&layer=' + $layer,
+	var $options = { async: false }
+	genericAjaxGet('', request + '&layer=' + $layer,
 		function(html) {
 			$popup = $("#popup"+$layer);
+			
 			if(0 == $popup.length) {
 				$("body").append("<div id='popup"+$layer+"' class='devblocks-popup' style='display:none;'></div>");
 				$popup = $('#popup'+$layer);
@@ -324,22 +338,23 @@ function genericAjaxPopup($layer,request,target,modal,width,cb) {
 			genericAjaxPopupRegister($layer, $popup);
 			
 			// Target
-			if(null != target) {
-				var offset = $(target).offset();
-				if(null != offset) {
-					var left = offset.left - $(document).scrollLeft();
-					var top = offset.top - $(document).scrollTop();
-					options.position = [left, top];
-				}
+			if(null != target && null == target.at) {
+				options.position = {
+					my: "right bottom",
+					at: "left top",
+					of: target
+				};
 			}
 			
 			// Max height
-			var max_height = Math.round($(window).height() * 0.85);
-			$popup.css('max-height', max_height + 'px');
+			//var max_height = Math.round($(window).height() * 0.85);
+			//$popup.css('max-height', max_height + 'px');
+			//options.maxHeight = max_height + 75;
 			
 			// Render
-			options.maxHeight = max_height + 75;
 			$popup.dialog(options);
+			
+			// Open
 			$popup.dialog('open');
 			
 			// Set the content

@@ -2,7 +2,7 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2014, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Cerberus Public License.
@@ -97,16 +97,23 @@ class DAO_Notification extends DevblocksORMHelper {
 	 * @param string $where
 	 * @return Model_Notification[]
 	 */
-	static function getWhere($where=null) {
+	static function getWhere($where=null, $sortBy=null, $sortAsc=true, $limit=null) {
 		$db = DevblocksPlatform::getDatabaseService();
 		
+		list($where_sql, $sort_sql, $limit_sql) = self::_getWhereSQL($where, $sortBy, $sortAsc, $limit);
+		
+		// SQL
 		$sql = "SELECT id, context, context_id, created_date, worker_id, message, is_read, url ".
 			"FROM notification ".
-			(!empty($where) ? sprintf("WHERE %s ",$where) : "").
-			"ORDER BY id desc";
+			$where_sql.
+			$sort_sql.
+			$limit_sql
+		;
 		$rs = $db->Execute($sql);
-		
-		return self::_getObjectsFromResult($rs);
+
+		$objects = self::_getObjectsFromResult($rs);
+
+		return $objects;
 	}
 
 	/**
@@ -405,10 +412,10 @@ class SearchFields_Notification implements IDevblocksSearchFields {
 		$translate = DevblocksPlatform::getTranslationService();
 		
 		$columns = array(
-			self::ID => new DevblocksSearchField(self::ID, 'we', 'id', $translate->_('notification.id')),
+			self::ID => new DevblocksSearchField(self::ID, 'we', 'id', $translate->_('common.id')),
 			self::CONTEXT => new DevblocksSearchField(self::CONTEXT, 'we', 'context', null),
 			self::CONTEXT_ID => new DevblocksSearchField(self::CONTEXT_ID, 'we', 'context_id', null),
-			self::CREATED_DATE => new DevblocksSearchField(self::CREATED_DATE, 'we', 'created_date', $translate->_('notification.created_date'), Model_CustomField::TYPE_DATE),
+			self::CREATED_DATE => new DevblocksSearchField(self::CREATED_DATE, 'we', 'created_date', $translate->_('common.created'), Model_CustomField::TYPE_DATE),
 			self::WORKER_ID => new DevblocksSearchField(self::WORKER_ID, 'we', 'worker_id', $translate->_('notification.worker_id'), Model_CustomField::TYPE_WORKER),
 			self::MESSAGE => new DevblocksSearchField(self::MESSAGE, 'we', 'message', $translate->_('notification.message'), Model_CustomField::TYPE_SINGLE_LINE),
 			self::IS_READ => new DevblocksSearchField(self::IS_READ, 'we', 'is_read', $translate->_('notification.is_read'), Model_CustomField::TYPE_CHECKBOX),
@@ -470,7 +477,7 @@ class Model_Notification {
 	}
 };
 
-class View_Notification extends C4_AbstractView implements IAbstractView_Subtotals {
+class View_Notification extends C4_AbstractView implements IAbstractView_Subtotals, IAbstractView_QuickSearch {
 	const DEFAULT_ID = 'notifications';
 
 	function __construct() {
@@ -590,6 +597,74 @@ class View_Notification extends C4_AbstractView implements IAbstractView_Subtota
 		}
 		
 		return $counts;
+	}
+	
+	function getQuickSearchFields() {
+		$fields = array(
+			'_fulltext' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_TEXT,
+					'options' => array('param_key' => SearchFields_Notification::MESSAGE, 'match' => DevblocksSearchCriteria::OPTION_TEXT_PARTIAL),
+				),
+			'created' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_DATE,
+					'options' => array('param_key' => SearchFields_Notification::CREATED_DATE),
+				),
+			'id' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_NUMBER,
+					'options' => array('param_key' => SearchFields_Notification::ID),
+				),
+			'isRead' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_BOOL,
+					'options' => array('param_key' => SearchFields_Notification::IS_READ),
+				),
+			'message' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_TEXT,
+					'options' => array('param_key' => SearchFields_Notification::MESSAGE, 'match' => DevblocksSearchCriteria::OPTION_TEXT_PARTIAL),
+				),
+			'url' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_TEXT,
+					'options' => array('param_key' => SearchFields_Notification::URL, 'match' => DevblocksSearchCriteria::OPTION_TEXT_PARTIAL),
+				),
+			'worker' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_WORKER,
+					'options' => array('param_key' => SearchFields_Notification::WORKER_ID),
+				),
+		);
+		
+		// Add searchable custom fields
+		
+		$fields = self::_appendFieldsFromQuickSearchContext(CerberusContexts::CONTEXT_NOTIFICATION, $fields, null);
+		
+		// Sort by keys
+		
+		ksort($fields);
+		
+		return $fields;
+	}	
+	
+	function getParamsFromQuickSearchFields($fields) {
+		$search_fields = $this->getQuickSearchFields();
+		$params = DevblocksSearchCriteria::getParamsFromQueryFields($fields, $search_fields);
+
+		// Handle virtual fields and overrides
+		if(is_array($fields))
+		foreach($fields as $k => $v) {
+			switch($k) {
+				// ...
+			}
+		}
+		
+		$this->renderPage = 0;
+		$this->addParams($params, true);
+		
+		return $params;
 	}
 	
 	function render() {
@@ -1001,8 +1076,8 @@ class Context_Notification extends Extension_DevblocksContext {
 		return $view;
 	}
 	
-	function getView($context=null, $context_id=null, $options=array()) {
-		$view_id = str_replace('.','_',$this->id);
+	function getView($context=null, $context_id=null, $options=array(), $view_id=null) {
+		$view_id = !empty($view_id) ? $view_id : str_replace('.','_',$this->id);
 		
 		$defaults = new C4_AbstractViewModel();
 		$defaults->id = $view_id;

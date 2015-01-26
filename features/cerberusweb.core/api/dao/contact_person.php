@@ -2,7 +2,7 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2014, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
@@ -19,6 +19,7 @@ class DAO_ContactPerson extends Cerb_ORMHelper {
 	const ID = 'id';
 	const EMAIL_ID = 'email_id';
 	const CREATED = 'created';
+	const UPDATED = 'updated';
 	const LAST_LOGIN = 'last_login';
 	const AUTH_SALT = 'auth_salt';
 	const AUTH_PASSWORD = 'auth_password';
@@ -41,6 +42,9 @@ class DAO_ContactPerson extends Cerb_ORMHelper {
 	static function update($ids, $fields, $check_deltas=true) {
 		if(!is_array($ids))
 			$ids = array($ids);
+		
+		if(!isset($fields[self::UPDATED]))
+			$fields[self::UPDATED] = time();
 		
 		// Make a diff for the requested objects in batches
 		
@@ -93,7 +97,7 @@ class DAO_ContactPerson extends Cerb_ORMHelper {
 		list($where_sql, $sort_sql, $limit_sql) = self::_getWhereSQL($where, $sortBy, $sortAsc, $limit);
 		
 		// SQL
-		$sql = "SELECT id, email_id, created, last_login, auth_salt, auth_password ".
+		$sql = "SELECT id, email_id, created, last_login, auth_salt, auth_password, updated ".
 			"FROM contact_person ".
 			$where_sql.
 			$sort_sql.
@@ -135,6 +139,7 @@ class DAO_ContactPerson extends Cerb_ORMHelper {
 			$object->last_login = intval($row['last_login']);
 			$object->auth_salt = $row['auth_salt'];
 			$object->auth_password = $row['auth_password'];
+			$object->updated = intval($row['updated']);
 			$objects[$object->id] = $object;
 		}
 		
@@ -212,6 +217,7 @@ class DAO_ContactPerson extends Cerb_ORMHelper {
 			"contact_person.last_login as %s, ".
 			"contact_person.auth_salt as %s, ".
 			"contact_person.auth_password as %s, ".
+			"contact_person.updated as %s, ".
 			"address.first_name as %s, ".
 			"address.last_name as %s, ".
 			"address.email as %s ",
@@ -221,6 +227,7 @@ class DAO_ContactPerson extends Cerb_ORMHelper {
 				SearchFields_ContactPerson::LAST_LOGIN,
 				SearchFields_ContactPerson::AUTH_SALT,
 				SearchFields_ContactPerson::AUTH_PASSWORD,
+				SearchFields_ContactPerson::UPDATED,
 				SearchFields_ContactPerson::ADDRESS_FIRST_NAME,
 				SearchFields_ContactPerson::ADDRESS_LAST_NAME,
 				SearchFields_ContactPerson::ADDRESS_EMAIL
@@ -281,6 +288,62 @@ class DAO_ContactPerson extends Cerb_ORMHelper {
 		$from_index = 'contact_person.id';
 		
 		switch($param_key) {
+			case SearchFields_ContactPerson::FULLTEXT_COMMENT_CONTENT:
+				$search = Extension_DevblocksSearchSchema::get(Search_CommentContent::ID);
+				$query = $search->getQueryFromParam($param);
+				
+				if(false === ($ids = $search->query($query, array('context_crc32' => sprintf("%u", crc32($from_context)))))) {
+					$args['where_sql'] .= 'AND 0 ';
+				
+				} elseif(is_array($ids)) {
+					$from_ids = DAO_Comment::getContextIdsByContextAndIds($from_context, $ids);
+					
+					$args['where_sql'] .= sprintf('AND %s IN (%s) ',
+						$from_index,
+						implode(', ', (!empty($from_ids) ? $from_ids : array(-1)))
+					);
+					
+				} elseif(is_string($ids)) {
+					$db = DevblocksPlatform::getDatabaseService();
+					$temp_table = sprintf("_tmp_%s", uniqid());
+					
+					$db->Execute(sprintf("CREATE TEMPORARY TABLE %s SELECT DISTINCT context_id AS id FROM comment INNER JOIN %s ON (%s.id=comment.id)",
+						$temp_table,
+						$ids,
+						$ids
+					));
+					
+					$args['join_sql'] .= sprintf("INNER JOIN %s ON (%s.id=%s) ",
+						$temp_table,
+						$temp_table,
+						$from_index
+					);
+				}
+				break;
+			
+			case SearchFields_ContactPerson::FULLTEXT_CONTACT:
+				$search = Extension_DevblocksSearchSchema::get(Search_Contact::ID);
+				$query = $search->getQueryFromParam($param);
+				
+				if(false === ($ids = $search->query($query, array()))) {
+					$args['where_sql'] .= 'AND 0 ';
+				
+				} elseif(is_array($ids)) {
+					if(empty($ids))
+						$ids = array(-1);
+					
+					$args['where_sql'] .= sprintf('AND contact_person.id IN (%s) ',
+						implode(', ', $ids)
+					);
+					
+				} elseif(is_string($ids)) {
+					$args['join_sql'] .= sprintf("INNER JOIN %s ON (%s.id=contact_person.id) ",
+						$ids,
+						$ids
+					);
+				}
+				break;
+			
 			case SearchFields_ContactPerson::VIRTUAL_CONTEXT_LINK:
 				$args['has_multiple_values'] = true;
 				self::_searchComponentsVirtualContextLinks($param, $from_context, $from_index, $args['join_sql'], $args['where_sql']);
@@ -362,8 +425,18 @@ class DAO_ContactPerson extends Cerb_ORMHelper {
 	
 	static function maint() {
 		$db = DevblocksPlatform::getDatabaseService();
+		$logger = DevblocksPlatform::getConsoleLog();
+		$tables = DevblocksPlatform::getDatabaseTables();
+		
 		$db->Execute("UPDATE address SET contact_person_id = 0 WHERE contact_person_id != 0 AND contact_person_id NOT IN (SELECT id FROM contact_person)");
 
+		// Search indexes
+		
+		if(isset($tables['fulltext_contact'])) {
+			$db->Execute("DELETE FROM fulltext_contact WHERE id NOT IN (SELECT id FROM contact_person)");
+			$logger->info('[Maint] Purged ' . $db->Affected_Rows() . ' fulltext_contact records.');
+		}
+		
 		// Fire event
 		$eventMgr = DevblocksPlatform::getEventService();
 		$eventMgr->trigger(
@@ -387,11 +460,17 @@ class SearchFields_ContactPerson implements IDevblocksSearchFields {
 	const LAST_LOGIN = 'c_last_login';
 	const AUTH_SALT = 'c_auth_salt';
 	const AUTH_PASSWORD = 'c_auth_password';
+	const UPDATED = 'c_updated';
 	
 	const ADDRESS_EMAIL = 'a_email';
 	const ADDRESS_FIRST_NAME = 'a_first_name';
 	const ADDRESS_LAST_NAME = 'a_last_name';
 	
+	// Fulltexts
+	const FULLTEXT_COMMENT_CONTENT = 'ftcc_content';
+	const FULLTEXT_CONTACT = 'ft_contact';
+	
+	// Virtuals
 	const VIRTUAL_CONTEXT_LINK = '*_context_link';
 	const VIRTUAL_HAS_FIELDSET = '*_has_fieldset';
 	const VIRTUAL_WATCHERS = '*_workers';
@@ -412,11 +491,15 @@ class SearchFields_ContactPerson implements IDevblocksSearchFields {
 			self::LAST_LOGIN => new DevblocksSearchField(self::LAST_LOGIN, 'contact_person', 'last_login', $translate->_('dao.contact_person.last_login'), Model_CustomField::TYPE_DATE),
 			self::AUTH_SALT => new DevblocksSearchField(self::AUTH_SALT, 'contact_person', 'auth_salt', $translate->_('dao.contact_person.auth_salt')),
 			self::AUTH_PASSWORD => new DevblocksSearchField(self::AUTH_PASSWORD, 'contact_person', 'auth_password', $translate->_('dao.contact_person.auth_password')),
+			self::UPDATED => new DevblocksSearchField(self::UPDATED, 'contact_person', 'updated', $translate->_('common.updated'), Model_CustomField::TYPE_DATE),
 			
 			self::ADDRESS_EMAIL => new DevblocksSearchField(self::ADDRESS_EMAIL, 'address', 'email', $translate->_('common.email'), Model_CustomField::TYPE_SINGLE_LINE),
 			self::ADDRESS_FIRST_NAME => new DevblocksSearchField(self::ADDRESS_FIRST_NAME, 'address', 'first_name', $translate->_('address.first_name'), Model_CustomField::TYPE_SINGLE_LINE),
 			self::ADDRESS_LAST_NAME => new DevblocksSearchField(self::ADDRESS_LAST_NAME, 'address', 'last_name', $translate->_('address.last_name'), Model_CustomField::TYPE_SINGLE_LINE),
 			
+			self::FULLTEXT_COMMENT_CONTENT => new DevblocksSearchField(self::FULLTEXT_COMMENT_CONTENT, 'ftcc', 'content', $translate->_('comment.filters.content'), 'FT'),
+			self::FULLTEXT_CONTACT => new DevblocksSearchField(self::FULLTEXT_CONTACT, 'ft', 'contact', $translate->_('common.search.fulltext'), 'FT'),
+				
 			self::VIRTUAL_CONTEXT_LINK => new DevblocksSearchField(self::VIRTUAL_CONTEXT_LINK, '*', 'context_link', $translate->_('common.links'), null),
 			self::VIRTUAL_HAS_FIELDSET => new DevblocksSearchField(self::VIRTUAL_HAS_FIELDSET, '*', 'has_fieldset', $translate->_('common.fieldset'), null),
 			self::VIRTUAL_WATCHERS => new DevblocksSearchField(self::VIRTUAL_WATCHERS, '*', 'workers', $translate->_('common.watchers'), 'WS'),
@@ -424,6 +507,11 @@ class SearchFields_ContactPerson implements IDevblocksSearchFields {
 			self::CONTEXT_LINK => new DevblocksSearchField(self::CONTEXT_LINK, 'context_link', 'from_context', null),
 			self::CONTEXT_LINK_ID => new DevblocksSearchField(self::CONTEXT_LINK_ID, 'context_link', 'from_context_id', null),
 		);
+		
+		// Fulltext indexes
+		
+		$columns[self::FULLTEXT_COMMENT_CONTENT]->ft_schema = Search_CommentContent::ID;
+		$columns[self::FULLTEXT_CONTACT]->ft_schema = Search_Contact::ID;
 		
 		// Custom fields with fieldsets
 		
@@ -442,6 +530,133 @@ class SearchFields_ContactPerson implements IDevblocksSearchFields {
 	}
 };
 
+class Search_Contact extends Extension_DevblocksSearchSchema {
+	const ID = 'cerb.search.schema.contact';
+	
+	public function getNamespace() {
+		return 'contact';
+	}
+	
+	public function getAttributes() {
+		return array();
+	}
+	
+	public function query($query, $attributes=array(), $limit=500) {
+		if(false == ($engine = $this->getEngine()))
+			return false;
+		
+		$ids = $engine->query($this, $query, $attributes, $limit);
+		
+		return $ids;
+	}
+	
+	public function reindex() {
+		$engine = $this->getEngine();
+		$meta = $engine->getIndexMeta($this);
+		
+		// If the index has a delta, start from the current record
+		if($meta['is_indexed_externally']) {
+			// Do nothing (let the remote tool update the DB)
+			
+		// Otherwise, start over
+		} else {
+			$this->setIndexPointer(self::INDEX_POINTER_RESET);
+		}
+	}
+	
+	public function setIndexPointer($pointer) {
+		switch($pointer) {
+			case self::INDEX_POINTER_RESET:
+				$this->setParam('last_indexed_id', 0);
+				$this->setParam('last_indexed_time', 0);
+				break;
+				
+			case self::INDEX_POINTER_CURRENT:
+				$this->setParam('last_indexed_id', 0);
+				$this->setParam('last_indexed_time', time());
+				break;
+		}
+	}
+	
+	public function index($stop_time=null) {
+		$logger = DevblocksPlatform::getConsoleLog();
+		
+		if(false == ($engine = $this->getEngine()))
+			return false;
+		
+		$ns = self::getNamespace();
+		$id = $this->getParam('last_indexed_id', 0);
+		$ptr_time = $this->getParam('last_indexed_time', 0);
+		$ptr_id = $id;
+		$done = false;
+
+		while(!$done && time() < $stop_time) {
+			// [TODO] This should check contacts based on contact->addy timestamps
+			// [TODO] Otherwise, it won't reindex when the names are set on email addys
+			
+			$where = sprintf('(%1$s = %2$d AND %3$s > %4$d) OR (%1$s > %2$d)',
+				DAO_ContactPerson::UPDATED,
+				$ptr_time,
+				DAO_ContactPerson::ID,
+				$id
+			);
+			$contacts = DAO_ContactPerson::getWhere($where, array(DAO_ContactPerson::UPDATED, DAO_ContactPerson::ID), array(true, true), 100);
+
+			if(empty($contacts)) {
+				$done = true;
+				continue;
+			}
+			
+			$last_time = $ptr_time;
+			
+			foreach($contacts as $contact) { /* @var $contact Model_ContactPerson */
+				$id = $contact->id;
+				$ptr_time = $contact->updated;
+				
+				$ptr_id = ($last_time == $ptr_time) ? $id : 0;
+				
+				$logger->info(sprintf("[Search] Indexing %s %d...",
+					$ns,
+					$id
+				));
+				
+				$doc = array(
+					'emails' => array(),
+				);
+				
+				foreach($contact->getAddresses() as $address) {
+					$doc['emails'][] = array(
+						'email' => $address->email,
+						'firstName' => $address->first_name,
+						'lastName' => $address->last_name,
+					);
+				}
+				
+				if(false === ($engine->index($this, $id, $doc)))
+					return false;
+				
+				flush();
+			}
+		}
+		
+		// If we ran out of records, always reset the ID and use the current time
+		if($done) {
+			$ptr_id = 0;
+			$ptr_time = time();
+		}
+		
+		$this->setParam('last_indexed_id', $ptr_id);
+		$this->setParam('last_indexed_time', $ptr_time);
+	}
+	
+	public function delete($ids) {
+		if(false == ($engine = $this->getEngine()))
+			return false;
+		
+		return $engine->delete($this, $ids);
+	}
+};
+
 class Model_ContactPerson {
 	public $id;
 	public $email_id;
@@ -449,6 +664,7 @@ class Model_ContactPerson {
 	public $last_login;
 	public $auth_salt;
 	public $auth_password;
+	public $updated;
 	
 	private $_addresses = array();
 	
@@ -475,7 +691,7 @@ class Model_ContactPerson {
 	}
 };
 
-class View_ContactPerson extends C4_AbstractView implements IAbstractView_Subtotals {
+class View_ContactPerson extends C4_AbstractView implements IAbstractView_Subtotals, IAbstractView_QuickSearch {
 	const DEFAULT_ID = 'contactperson';
 
 	function __construct() {
@@ -491,8 +707,8 @@ class View_ContactPerson extends C4_AbstractView implements IAbstractView_Subtot
 			SearchFields_ContactPerson::ADDRESS_FIRST_NAME,
 			SearchFields_ContactPerson::ADDRESS_LAST_NAME,
 			SearchFields_ContactPerson::ADDRESS_EMAIL,
-			SearchFields_ContactPerson::CREATED,
 			SearchFields_ContactPerson::LAST_LOGIN,
+			SearchFields_ContactPerson::UPDATED,
 		);
 		
 		// Filter fields
@@ -500,6 +716,8 @@ class View_ContactPerson extends C4_AbstractView implements IAbstractView_Subtot
 			SearchFields_ContactPerson::EMAIL_ID,
 			SearchFields_ContactPerson::AUTH_PASSWORD,
 			SearchFields_ContactPerson::AUTH_SALT,
+			SearchFields_ContactPerson::FULLTEXT_COMMENT_CONTENT,
+			SearchFields_ContactPerson::FULLTEXT_CONTACT,
 			SearchFields_ContactPerson::VIRTUAL_CONTEXT_LINK,
 			SearchFields_ContactPerson::VIRTUAL_HAS_FIELDSET,
 			SearchFields_ContactPerson::VIRTUAL_WATCHERS,
@@ -610,6 +828,110 @@ class View_ContactPerson extends C4_AbstractView implements IAbstractView_Subtot
 		
 		return $counts;
 	}
+	
+	function getQuickSearchFields() {
+		$fields = array(
+			'_fulltext' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_FULLTEXT,
+					'options' => array('param_key' => SearchFields_ContactPerson::FULLTEXT_CONTACT),
+				),
+			'comments' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_FULLTEXT,
+					'options' => array('param_key' => SearchFields_ContactPerson::FULLTEXT_COMMENT_CONTENT),
+				),
+			'created' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_DATE,
+					'options' => array('param_key' => SearchFields_ContactPerson::CREATED),
+				),
+			'email' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_TEXT,
+					'options' => array('param_key' => SearchFields_ContactPerson::ADDRESS_EMAIL, 'match' => DevblocksSearchCriteria::OPTION_TEXT_PREFIX),
+				),
+			'firstName' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_TEXT,
+					'options' => array('param_key' => SearchFields_ContactPerson::ADDRESS_FIRST_NAME, 'match' => DevblocksSearchCriteria::OPTION_TEXT_PREFIX),
+				),
+			'lastLogin' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_DATE,
+					'options' => array('param_key' => SearchFields_ContactPerson::LAST_LOGIN),
+				),
+			'lastName' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_TEXT,
+					'options' => array('param_key' => SearchFields_ContactPerson::ADDRESS_LAST_NAME, 'match' => DevblocksSearchCriteria::OPTION_TEXT_PREFIX),
+				),
+			'updated' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_DATE,
+					'options' => array('param_key' => SearchFields_ContactPerson::UPDATED),
+				),
+			'watchers' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_WORKER,
+					'options' => array('param_key' => SearchFields_ContactPerson::VIRTUAL_WATCHERS),
+				),
+		);
+		
+		// Add searchable custom fields
+		
+		$fields = self::_appendFieldsFromQuickSearchContext(CerberusContexts::CONTEXT_CONTACT_PERSON, $fields, null);
+		
+		// Engine/schema examples: Fulltext
+		
+		$ft_examples = array();
+		
+		if(false != ($schema = Extension_DevblocksSearchSchema::get(Search_Contact::ID))) {
+			if(false != ($engine = $schema->getEngine())) {
+				$ft_examples = $engine->getQuickSearchExamples($schema);
+			}
+		}
+		
+		if(!empty($ft_examples))
+			$fields['_fulltext']['examples'] = $ft_examples;
+		
+		// Engine/schema examples: Comments
+		
+		$ft_examples = array();
+		
+		if(false != ($schema = Extension_DevblocksSearchSchema::get(Search_CommentContent::ID))) {
+			if(false != ($engine = $schema->getEngine())) {
+				$ft_examples = $engine->getQuickSearchExamples($schema);
+			}
+		}
+		
+		if(!empty($ft_examples))
+			$fields['comments']['examples'] = $ft_examples;
+		
+		// Sort by keys
+		
+		ksort($fields);
+		
+		return $fields;
+	}	
+	
+	function getParamsFromQuickSearchFields($fields) {
+		$search_fields = $this->getQuickSearchFields();
+		$params = DevblocksSearchCriteria::getParamsFromQueryFields($fields, $search_fields);
+
+		// Handle virtual fields and overrides
+		if(is_array($fields))
+		foreach($fields as $k => $v) {
+			switch($k) {
+				// ...
+			}
+		}
+		
+		$this->renderPage = 0;
+		$this->addParams($params, true);
+		
+		return $params;
+	}
 
 	function render() {
 		$this->_sanitize();
@@ -655,7 +977,13 @@ class View_ContactPerson extends C4_AbstractView implements IAbstractView_Subtot
 				
 			case SearchFields_ContactPerson::CREATED:
 			case SearchFields_ContactPerson::LAST_LOGIN:
+			case SearchFields_ContactPerson::UPDATED:
 				$tpl->display('devblocks:cerberusweb.core::internal/views/criteria/__date.tpl');
+				break;
+				
+			case SearchFields_ContactPerson::FULLTEXT_COMMENT_CONTENT:
+			case SearchFields_ContactPerson::FULLTEXT_CONTACT:
+				$tpl->display('devblocks:cerberusweb.core::internal/views/criteria/__fulltext.tpl');
 				break;
 				
 			case SearchFields_ContactPerson::VIRTUAL_CONTEXT_LINK:
@@ -737,12 +1065,19 @@ class View_ContactPerson extends C4_AbstractView implements IAbstractView_Subtot
 				
 			case SearchFields_ContactPerson::CREATED:
 			case SearchFields_ContactPerson::LAST_LOGIN:
+			case SearchFields_ContactPerson::UPDATED:
 				$criteria = $this->_doSetCriteriaDate($field, $oper);
 				break;
 				
 			case 'placeholder_bool':
 				@$bool = DevblocksPlatform::importGPC($_REQUEST['bool'],'integer',1);
 				$criteria = new DevblocksSearchCriteria($field,$oper,$bool);
+				break;
+				
+			case SearchFields_ContactPerson::FULLTEXT_COMMENT_CONTENT:
+			case SearchFields_ContactPerson::FULLTEXT_CONTACT:
+				@$scope = DevblocksPlatform::importGPC($_REQUEST['scope'],'string','expert');
+				$criteria = new DevblocksSearchCriteria($field,DevblocksSearchCriteria::OPER_FULLTEXT,array($value,$scope));
 				break;
 				
 			case SearchFields_ContactPerson::VIRTUAL_CONTEXT_LINK:
@@ -941,6 +1276,7 @@ class Context_ContactPerson extends Extension_DevblocksContext implements IDevbl
 			'email_org__label',
 			'created',
 			'last_login',
+			'updated',
 		);
 	}
 	
@@ -968,6 +1304,7 @@ class Context_ContactPerson extends Extension_DevblocksContext implements IDevbl
 			'created' => $prefix.$translate->_('common.created'),
 			'id' => $prefix.$translate->_('common.id'),
 			'last_login' => $prefix.$translate->_('dao.contact_person.last_login'),
+			'updated' => $prefix.$translate->_('common.updated'),
 			'record_url' => $prefix.$translate->_('common.url.record'),
 		);
 		
@@ -977,6 +1314,7 @@ class Context_ContactPerson extends Extension_DevblocksContext implements IDevbl
 			'created' => Model_CustomField::TYPE_DATE,
 			'id' => Model_CustomField::TYPE_NUMBER,
 			'last_login' => Model_CustomField::TYPE_DATE,
+			'updated' => Model_CustomField::TYPE_DATE,
 			'record_url' => Model_CustomField::TYPE_URL,
 		);
 		
@@ -1006,6 +1344,8 @@ class Context_ContactPerson extends Extension_DevblocksContext implements IDevbl
 				$token_values['created'] = $person->created;
 			if(!empty($person->last_login))
 				$token_values['last_login'] = $person->last_login;
+			if(!empty($person->updated))
+				$token_values['updated'] = $person->updated;
 			
 			// Custom fields
 			$token_values = $this->_importModelCustomFieldsAsValues($person, $token_values);
@@ -1101,10 +1441,10 @@ class Context_ContactPerson extends Extension_DevblocksContext implements IDevbl
 		return $view;
 	}
 	
-	function getView($context=null, $context_id=null, $options=array()) {
+	function getView($context=null, $context_id=null, $options=array(), $view_id=null) {
 		$translate = DevblocksPlatform::getTranslationService();
 		
-		$view_id = str_replace('.','_',$this->id);
+		$view_id = !empty($view_id) ? $view_id : str_replace('.','_',$this->id);
 		
 		$defaults = new C4_AbstractViewModel();
 		$defaults->id = $view_id;
@@ -1177,6 +1517,11 @@ class Context_ContactPerson extends Extension_DevblocksContext implements IDevbl
 				'param' => SearchFields_ContactPerson::EMAIL_ID,
 				'force_match' => true,
 				'required' => true,
+			),
+			'updated' => array(
+				'label' => 'Updated Date',
+				'type' => Model_CustomField::TYPE_DATE,
+				'param' => SearchFields_ContactPerson::UPDATED,
 			),
 				
 			// Virtual fields

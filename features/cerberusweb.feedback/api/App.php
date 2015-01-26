@@ -2,7 +2,7 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2014, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
@@ -425,8 +425,7 @@ class SearchFields_FeedbackEntry {
 	}
 };
 
-// [TODO] Rename this for consistency  -- View_
-class View_FeedbackEntry extends C4_AbstractView implements IAbstractView_Subtotals {
+class View_FeedbackEntry extends C4_AbstractView implements IAbstractView_Subtotals, IAbstractView_QuickSearch {
 	const DEFAULT_ID = 'feedback_entries';
 
 	function __construct() {
@@ -561,6 +560,99 @@ class View_FeedbackEntry extends C4_AbstractView implements IAbstractView_Subtot
 		}
 		
 		return $counts;
+	}
+	
+	function getQuickSearchFields() {
+		$fields = array(
+			'_fulltext' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_TEXT,
+					'options' => array('param_key' => SearchFields_FeedbackEntry::QUOTE_TEXT, 'match' => DevblocksSearchCriteria::OPTION_TEXT_PARTIAL),
+				),
+			'created' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_DATE,
+					'options' => array('param_key' => SearchFields_FeedbackEntry::LOG_DATE),
+				),
+			'email' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_TEXT,
+					'options' => array('param_key' => SearchFields_FeedbackEntry::ADDRESS_EMAIL, 'match' => DevblocksSearchCriteria::OPTION_TEXT_PREFIX),
+				),
+			'mood' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_VIRTUAL,
+					'options' => array('param_key' => SearchFields_FeedbackEntry::QUOTE_MOOD),
+				),
+			'quote' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_TEXT,
+					'options' => array('param_key' => SearchFields_FeedbackEntry::QUOTE_TEXT, 'match' => DevblocksSearchCriteria::OPTION_TEXT_PARTIAL),
+				),
+			'worker' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_WORKER,
+					'options' => array('param_key' => SearchFields_FeedbackEntry::WORKER_ID),
+				),
+			'watchers' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_WORKER,
+					'options' => array('param_key' => SearchFields_FeedbackEntry::VIRTUAL_WATCHERS),
+				),
+		);
+		
+		// Add searchable custom fields
+		
+		$fields = self::_appendFieldsFromQuickSearchContext(CerberusContexts::CONTEXT_FEEDBACK, $fields, null);
+		
+		// Sort by keys
+		
+		ksort($fields);
+		
+		return $fields;
+	}	
+	
+	function getParamsFromQuickSearchFields($fields) {
+		$search_fields = $this->getQuickSearchFields();
+		$params = DevblocksSearchCriteria::getParamsFromQueryFields($fields, $search_fields);
+
+		// Handle virtual fields and overrides
+		if(is_array($fields))
+		foreach($fields as $k => $v) {
+			
+			switch($k) {
+				case 'mood':
+					$field_key = SearchFields_FeedbackEntry::QUOTE_MOOD;
+					$oper = DevblocksSearchCriteria::OPER_IN;
+					$patterns = DevblocksPlatform::parseCsvString($v);
+					
+					$values = array();
+					
+					foreach($patterns as $pattern) {
+						switch(strtolower(substr($pattern,0,1))) {
+							case 'n':
+								$values[0] = true;
+								break;
+							case 'p':
+								$values[1] = true;
+								break;
+							case 'c':
+								$values[2] = true;
+								break;
+						}
+					}
+					
+					if(!empty($values))
+						$params[$field_key] = new DevblocksSearchCriteria($field_key, $oper, array_keys($values));
+						
+					break;
+			}
+		}
+		
+		$this->renderPage = 0;
+		$this->addParams($params, true);
+		
+		return $params;
 	}
 	
 	function render() {
@@ -1243,8 +1335,8 @@ class Context_Feedback extends Extension_DevblocksContext implements IDevblocksC
 		return $view;
 	}
 	
-	function getView($context=null, $context_id=null, $options=array()) {
-		$view_id = str_replace('.','_',$this->id);
+	function getView($context=null, $context_id=null, $options=array(), $view_id=null) {
+		$view_id = !empty($view_id) ? $view_id : str_replace('.','_',$this->id);
 		
 		$defaults = new C4_AbstractViewModel();
 		$defaults->id = $view_id;

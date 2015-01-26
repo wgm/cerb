@@ -55,17 +55,25 @@ class _DevblocksClassLoadManager {
 		$this->registerClasses(DEVBLOCKS_PATH . 'libs/csstoinlinestyles/CssToInlineStyles.php', array(
 			'CssToInlineStyles'
 		));
-		$this->registerClasses(DEVBLOCKS_PATH . 'libs/markdown/markdown.php', array(
-			'markdown'
-		));
 		$this->registerClasses(DEVBLOCKS_PATH . 'libs/parsedown/Parsedown.php', array(
 			'Parsedown'
+		));
+		$this->registerClasses(DEVBLOCKS_PATH . 'libs/parsedown/ParsedownExtra.php', array(
+			'ParsedownExtra'
 		));
 		$this->registerClasses(DEVBLOCKS_PATH . 'libs/pclzip/pclzip.lib.php', array(
 			'PclZip'
 		));
 		$this->registerClasses(DEVBLOCKS_PATH . 'libs/s3/S3.php', array(
 			'S3'
+		));
+		$this->registerClasses(DEVBLOCKS_PATH . 'libs/swift/swift_required.php', array(
+			'Swift',
+			'Swift_Attachment',
+			'Swift_Mailer',
+			'Swift_Message',
+			'Swift_Plugins_AntiFloodPlugin',
+			'Swift_SmtpTransport',
 		));
 		$this->registerClasses(DEVBLOCKS_PATH . 'libs/Twig/Autoloader.php', array(
 			'Twig_Autoloader',
@@ -91,6 +99,9 @@ class _DevblocksClassLoadManager {
 		));
 		$this->registerClasses(DEVBLOCKS_PATH . 'api/services/logging.php', array(
 			'_DevblocksLogManager',
+		));
+		$this->registerClasses(DEVBLOCKS_PATH . 'api/services/nlp.php', array(
+			'_DevblocksNaturalLanguageManager',
 		));
 		$this->registerClasses(DEVBLOCKS_PATH . 'api/services/openid.php', array(
 			'_DevblocksOpenIDManager',

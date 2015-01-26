@@ -1,6 +1,8 @@
+{if $view instanceof IAbstractView_QuickSearch}
 <div style="float:right;">
 	{include file="devblocks:cerberusweb.core::search/quick_search.tpl" view=$view return_url=null reset=false}
 </div>
+{/if}
 
 <div style="float:left;">
 	<h2>{$context_ext->manifest->name}</h2>
@@ -130,5 +132,7 @@ $(function() {
 			});
 		}
 	});
+	
+	$(document).find('INPUT.cerb-input-quicksearch:first').focus();
 });
 </script>

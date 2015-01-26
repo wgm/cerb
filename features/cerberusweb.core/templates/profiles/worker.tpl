@@ -4,36 +4,39 @@
 {$gravatar_plugin = DevblocksPlatform::getPlugin('cerberusweb.gravatar')}
 {$gravatar_enabled = $gravatar_plugin && $gravatar_plugin->enabled}
 
-<table cellpadding="0" cellspacing="0" border="0" width="100%">
-	<tr>
-		<td width="1%" nowrap="nowrap" rowspan="2" valign="top" style="padding-left:10px;">
-			{if $gravatar_enabled}
-			<img src="{if $is_ssl}https://secure.{else}http://www.{/if}gravatar.com/avatar/{$worker->email|trim|lower|md5}?s=64&d=http://cerbweb.com/gravatar/gravatar_nouser.jpg" height="64" width="64" border="0" style="margin:0px 5px 5px 0px;">
-			{/if}
-		</td>
-		<td width="98%" valign="top">
-			<h1 style="color:rgb(0,120,0);font-weight:bold;font-size:150%;margin:0px;">{$worker->getName()}</h1>
-			{if !empty($worker->title)}<div>{$worker->title}</div>{/if}
-		</td>
-		<td width="1%" nowrap="nowrap" align="right">
-			{$ctx = Extension_DevblocksContext::get($page_context)}
-			{include file="devblocks:cerberusweb.core::search/quick_search.tpl" view=$ctx->getSearchView() return_url="{devblocks_url}c=search&context={$ctx->manifest->params.alias}{/devblocks_url}" reset=true}
-		</td>
-	</tr>
-	<tr>
-		<td colspan="2">
-			{$memberships = $worker->getMemberships()}
-			{if !empty($memberships)}
-			<ul class="bubbles">
-				{foreach from=$memberships item=member key=group_id name=groups}
-					{$group = $groups.{$group_id}}
-					<li><a href="{devblocks_url}c=profiles&k=group&id={$group->id}-{$group->name|devblocks_permalink}{/devblocks_url}" style="{if $member->is_manager}font-weight:bold;{/if}">{$group->name}</a></li>
-				{/foreach}
-			</ul>
-			{/if}
-		</td>
-	</tr>
-</table>
+<div style="float:right;display:inline-block;">
+	{$ctx = Extension_DevblocksContext::get($page_context)}
+	{include file="devblocks:cerberusweb.core::search/quick_search.tpl" view=$ctx->getSearchView() return_url="{devblocks_url}c=search&context={$ctx->manifest->params.alias}{/devblocks_url}"}
+</div>
+
+<div style="float:left;display:inline-block;">
+	<table cellpadding="0" cellspacing="0" border="0">
+		<tr>
+			<td nowrap="nowrap" rowspan="2" valign="top" style="padding-left:10px;">
+				{if $gravatar_enabled}
+				<img src="{if $is_ssl}https://secure.{else}http://www.{/if}gravatar.com/avatar/{$worker->email|trim|lower|md5}?s=64&d=http://cerbweb.com/gravatar/gravatar_nouser.jpg" height="64" width="64" border="0" style="margin:0px 5px 5px 0px;">
+				{/if}
+			</td>
+			<td valign="top">
+				<h1 style="color:rgb(0,120,0);font-weight:bold;font-size:150%;margin:0px;">{$worker->getName()}</h1>
+				{if !empty($worker->title)}<div>{$worker->title}</div>{/if}
+			</td>
+		</tr>
+		<tr>
+			<td colspan="2">
+				{$memberships = $worker->getMemberships()}
+				{if !empty($memberships)}
+				<ul class="bubbles">
+					{foreach from=$memberships item=member key=group_id name=groups}
+						{$group = $groups.{$group_id}}
+						<li><a href="{devblocks_url}c=profiles&k=group&id={$group->id}-{$group->name|devblocks_permalink}{/devblocks_url}" style="{if $member->is_manager}font-weight:bold;{/if}">{$group->name}</a></li>
+					{/foreach}
+				</ul>
+				{/if}
+			</td>
+		</tr>
+	</table>
+</div>
 
 <div style="clear:both;"></div>
 
@@ -80,6 +83,8 @@
 
 {include file="devblocks:cerberusweb.core::internal/custom_fieldsets/profile_fieldsets.tpl" properties=$properties_custom_fieldsets}
 
+{include file="devblocks:cerberusweb.core::internal/profiles/profile_record_links.tpl" properties=$properties_links}
+
 <div>
 {include file="devblocks:cerberusweb.core::internal/notifications/context_profile.tpl" context=$page_context context_id=$page_context_id}
 </div>
@@ -99,7 +104,7 @@
 		{/if}
 		
 		{$tabs[] = 'availability'}
-		<li><a href="{devblocks_url}ajax.php?c=internal&a=handleSectionAction&section=calendars&action=showCalendarAvailabilityTab&point={$point}&context={$page_context}&context_id={$page_context_id}&id={$profile_worker_prefs.availability_calendar_id}{/devblocks_url}">Availability</a></li>
+		<li><a href="{devblocks_url}ajax.php?c=internal&a=handleSectionAction&section=calendars&action=showCalendarAvailabilityTab&point={$point}&context={$page_context}&context_id={$page_context_id}&id={$worker->calendar_id}{/devblocks_url}">Availability</a></li>
 		
 		{$tabs[] = 'activity'}
 		<li><a href="{devblocks_url}ajax.php?c=internal&a=showTabActivityLog&scope=both&point={$point}&context={$page_context}&context_id={$page_context_id}{/devblocks_url}">{'common.activity_log'|devblocks_translate|capitalize}</a></li>

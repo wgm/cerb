@@ -2,7 +2,7 @@
 /***********************************************************************
  | Cerb(tm) developed by Webgroup Media, LLC.
  |-----------------------------------------------------------------------
- | All source code & content (c) Copyright 2002-2014, Webgroup Media LLC
+ | All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
  |   unless specifically noted otherwise.
  |
  | This source code is released under the Devblocks Public License.
@@ -48,7 +48,7 @@
  */
 
 if(class_exists('C4_AbstractView')):
-class View_DevblocksTemplate extends C4_AbstractView {
+class View_DevblocksTemplate extends C4_AbstractView implements IAbstractView_QuickSearch {
 	const DEFAULT_ID = 'templates';
 
 	function __construct() {
@@ -78,6 +78,76 @@ class View_DevblocksTemplate extends C4_AbstractView {
 			$this->renderTotal
 		);
 	}
+	
+	function getQuickSearchFields() {
+		return array(
+			'id',
+			'path',
+			'plugin',
+			'tag',
+			'updated',
+		);
+	}	
+	
+	function getParamsFromQuickSearchFields($fields) {
+		$params = array();
+
+		if(is_array($fields))
+		foreach($fields as $k => $v) {
+			
+			switch($k) {
+				// Texts (fuzzy)
+				
+				case '_fulltext':
+				case 'path':
+				case 'plugin':
+				case 'tag':
+					$field_keys = array(
+						'_fulltext' => SearchFields_DevblocksTemplate::PATH,
+						'path' => SearchFields_DevblocksTemplate::PATH,
+						'plugin' => SearchFields_DevblocksTemplate::PLUGIN_ID,
+						'tag' => SearchFields_DevblocksTemplate::TAG,
+					);
+					
+					@$field_key = $field_keys[$k];
+					
+					if($field_key && false != ($param = DevblocksSearchCriteria::getTextParamFromQuery($field_key, $v, DevblocksSearchCriteria::OPTION_TEXT_PARTIAL)))
+						$params[$field_key] = $param;
+					break;
+					
+				// Dates
+				
+				case 'updated':
+					$field_keys = array(
+						'updated' => SearchFields_DevblocksTemplate::LAST_UPDATED,
+					);
+					
+					@$field_key = $field_keys[$k];
+					
+					if($field_key && false != ($param = DevblocksSearchCriteria::getDateParamFromQuery($field_key, $v)))
+						$params[$field_key] = $param;
+					break;
+					
+				// Numbers
+				
+				case 'id':
+					$field_keys = array(
+						'id' => SearchFields_DevblocksTemplate::ID,
+					);
+					
+					@$field_key = $field_keys[$k];
+					
+					if($field_key && false != ($param = DevblocksSearchCriteria::getNumberParamFromQuery($field_key, $v)))
+						$params[$field_key] = $param;
+					break;
+			}
+		}
+		
+		$this->renderPage = 0;
+		$this->addParams($params, true);
+		
+		return $params;
+	}
 
 	function render() {
 		$this->_sanitize();
@@ -97,7 +167,6 @@ class View_DevblocksTemplate extends C4_AbstractView {
 		$tpl->assign('id', $this->id);
 
 		switch($field) {
-			case SearchFields_DevblocksTemplate::CONTENT:
 			case SearchFields_DevblocksTemplate::PATH:
 			case SearchFields_DevblocksTemplate::PLUGIN_ID:
 			case SearchFields_DevblocksTemplate::TAG:
@@ -106,13 +175,8 @@ class View_DevblocksTemplate extends C4_AbstractView {
 			case SearchFields_DevblocksTemplate::LAST_UPDATED:
 				$tpl->display('devblocks:cerberusweb.core::internal/views/criteria/__date.tpl');
 				break;
-			default:
-				// Custom Fields
-//				if('cf_' == substr($field,0,3)) {
-//					$this->_renderCriteriaCustomField($tpl, substr($field,3));
-//				} else {
-//					echo ' ';
-//				}
+			case SearchFields_DevblocksTemplate::ID:
+				$tpl->display('devblocks:cerberusweb.core::internal/views/criteria/__number.tpl');
 				break;
 		}
 	}
@@ -136,22 +200,21 @@ class View_DevblocksTemplate extends C4_AbstractView {
 		$criteria = null;
 
 		switch($field) {
-			case SearchFields_DevblocksTemplate::CONTENT:
+			// String
 			case SearchFields_DevblocksTemplate::PATH:
 			case SearchFields_DevblocksTemplate::PLUGIN_ID:
 			case SearchFields_DevblocksTemplate::TAG:
 				$criteria = $this->_doSetCriteriaString($field, $oper, $value);
 				break;
 				
+			// Date
 			case SearchFields_DevblocksTemplate::LAST_UPDATED:
 				$criteria = $this->_doSetCriteriaDate($field, $oper);
 				break;
 				
-			default:
-				// Custom Fields
-//				if(substr($field,0,3)=='cf_') {
-//					$criteria = $this->_doSetCriteriaCustomField($field, substr($field,3));
-//				}
+			// Number
+			case SearchFields_DevblocksTemplate::ID:
+				$criteria = new DevblocksSearchCriteria($field,$oper,$value);
 				break;
 		}
 

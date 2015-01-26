@@ -2,7 +2,7 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2014, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
@@ -53,13 +53,6 @@ class PageSection_ProfilesGroup extends Extension_PageSection {
 		
 		$properties = array();
 				
-// 				$properties['email'] = array(
-// 					'label' => ucfirst($translate->_('common.email')),
-// 					'type' => Model_CustomField::TYPE_SINGLE_LINE,
-// 					'value' => $worker->email,
-// 				);
-				
-
 		// Custom Fields
 
 		@$values = array_shift(DAO_CustomFieldValue::getValuesByContextIds(CerberusContexts::CONTEXT_GROUP, $group->id)) or array();
@@ -74,6 +67,21 @@ class PageSection_ProfilesGroup extends Extension_PageSection {
 
 		$properties_custom_fieldsets = Page_Profiles::getProfilePropertiesCustomFieldsets(CerberusContexts::CONTEXT_GROUP, $group->id, $values);
 		$tpl->assign('properties_custom_fieldsets', $properties_custom_fieldsets);
+		
+		// Link counts
+		
+		$properties_links = array(
+			CerberusContexts::CONTEXT_GROUP => array(
+				$group->id => 
+					DAO_ContextLink::getContextLinkCounts(
+						CerberusContexts::CONTEXT_GROUP,
+						$group->id,
+						array(CerberusContexts::CONTEXT_WORKER, CerberusContexts::CONTEXT_CUSTOM_FIELDSET)
+					),
+			),
+		);
+		
+		$tpl->assign('properties_links', $properties_links);
 		
 		// Properties
 		

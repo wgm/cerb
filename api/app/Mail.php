@@ -2,7 +2,7 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2014, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
@@ -1317,7 +1317,7 @@ class CerberusMail {
 		$base_url = $url_writer->write('c=files', true) . '/';
 		
 		// Generate an HTML part using Parsedown
-		if(false !== ($html_body = DevblocksPlatform::parseMarkdown($content, true))) {
+		if(false !== ($html_body = DevblocksPlatform::parseMarkdown($content))) {
 			
 			// Determine if we have an HTML template
 			if(!$html_template_id || false == ($html_template = DAO_MailHtmlTemplate::get($html_template_id))) {
@@ -1416,7 +1416,7 @@ class CerberusMail {
 		}
 		
 		try {
-			$content = DevblocksPlatform::parseMarkdown($content, true);
+			$content = DevblocksPlatform::parseMarkdown($content);
 			$content = DevblocksPlatform::stripHTML($content);
 			
 		} catch (Exception $e) {

@@ -2,7 +2,7 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2014, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
@@ -44,6 +44,16 @@ class PageSection_ProfilesTicket extends Extension_PageSection {
 		}
 		
 		$tpl->assign('ticket', $ticket);
+		
+		// Permissions
+		
+		$active_worker_memberships = $active_worker->getMemberships();
+		
+		// Check group membership ACL
+		if(!isset($active_worker_memberships[$ticket->group_id])) {
+			DevblocksPlatform::redirect(new DevblocksHttpRequest());
+			exit;
+		}
 		
 		// Remember the last tab/URL
 		@$selected_tab = array_shift($stack);
@@ -166,15 +176,31 @@ class PageSection_ProfilesTicket extends Extension_PageSection {
 		
 		$tpl->assign('properties', $properties);
 		
-		// Permissions
+		// Link counts
 		
-		$active_worker_memberships = $active_worker->getMemberships();
+		$properties_links = array(
+			CerberusContexts::CONTEXT_TICKET => array(
+				$ticket->id => 
+					DAO_ContextLink::getContextLinkCounts(
+						CerberusContexts::CONTEXT_TICKET,
+						$ticket->id,
+						array(CerberusContexts::CONTEXT_WORKER, CerberusContexts::CONTEXT_CUSTOM_FIELDSET)
+					),
+			),
+		);
 		
-		// Check group membership ACL
-		if(!isset($active_worker_memberships[$ticket->group_id])) {
-			DevblocksPlatform::redirect(new DevblocksHttpRequest());
-			exit;
+		if(isset($ticket->org_id)) {
+			$properties_links[CerberusContexts::CONTEXT_ORG] = array(
+				$ticket->org_id => 
+					DAO_ContextLink::getContextLinkCounts(
+						CerberusContexts::CONTEXT_ORG,
+						$ticket->org_id,
+						array(CerberusContexts::CONTEXT_WORKER, CerberusContexts::CONTEXT_CUSTOM_FIELDSET)
+					),
+			);
 		}
+		
+		$tpl->assign('properties_links', $properties_links);
 		
 		// Groups
 		$groups = DAO_Group::getAll();

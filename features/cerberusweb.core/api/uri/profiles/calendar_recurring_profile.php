@@ -2,7 +2,7 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2014, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
@@ -51,8 +51,9 @@ class PageSection_ProfilesCalendarRecurringProfile extends Extension_PageSection
 			
 		$properties['calendar_id'] = array(
 			'label' => ucfirst($translate->_('common.calendar')),
-			'type' => null,
-			'value' => DAO_Calendar::get($calendar_recurring_profile->calendar_id),
+			'type' => Model_CustomField::TYPE_LINK,
+			'params' => array('context' => CerberusContexts::CONTEXT_CALENDAR),
+			'value' => $calendar_recurring_profile->calendar_id,
 		);
 		
 		$properties['event_start'] = array(
@@ -111,6 +112,32 @@ class PageSection_ProfilesCalendarRecurringProfile extends Extension_PageSection
 
 		$properties_custom_fieldsets = Page_Profiles::getProfilePropertiesCustomFieldsets(CerberusContexts::CONTEXT_CALENDAR_EVENT_RECURRING, $calendar_recurring_profile->id, $values);
 		$tpl->assign('properties_custom_fieldsets', $properties_custom_fieldsets);
+		
+		// Link counts
+		
+		$properties_links = array(
+			CerberusContexts::CONTEXT_CALENDAR_EVENT_RECURRING => array(
+				$calendar_recurring_profile->id => 
+					DAO_ContextLink::getContextLinkCounts(
+						CerberusContexts::CONTEXT_CALENDAR_EVENT_RECURRING,
+						$calendar_recurring_profile->id,
+						array(CerberusContexts::CONTEXT_WORKER, CerberusContexts::CONTEXT_CUSTOM_FIELDSET)
+					),
+			),
+		);
+		
+		if(isset($calendar_recurring_profile->calendar_id)) {
+			$properties_links[CerberusContexts::CONTEXT_CALENDAR] = array(
+				$calendar_recurring_profile->calendar_id => 
+					DAO_ContextLink::getContextLinkCounts(
+						CerberusContexts::CONTEXT_CALENDAR,
+						$calendar_recurring_profile->calendar_id,
+						array(CerberusContexts::CONTEXT_WORKER, CerberusContexts::CONTEXT_CUSTOM_FIELDSET)
+					),
+			);
+		}
+		
+		$tpl->assign('properties_links', $properties_links);
 		
 		// Properties
 		

@@ -2,7 +2,7 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2014, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
@@ -34,8 +34,8 @@ class DAO_Address extends Cerb_ORMHelper {
 		$translate = DevblocksPlatform::getTranslationService();
 		
 		return array(
-			'id' => $translate->_('address.id'),
-			'email' => $translate->_('address.email'),
+			'id' => $translate->_('common.id'),
+			'email' => $translate->_('common.email'),
 			'first_name' => $translate->_('address.first_name'),
 			'last_name' => $translate->_('address.last_name'),
 			'contact_person_id' => $translate->_('address.contact_person_id'),
@@ -146,11 +146,18 @@ class DAO_Address extends Cerb_ORMHelper {
 	static function maint() {
 		$db = DevblocksPlatform::getDatabaseService();
 		$logger = DevblocksPlatform::getConsoleLog();
+		$tables = DevblocksPlatform::getDatabaseTables();
 		
 		$sql = "DELETE FROM address_to_worker WHERE worker_id NOT IN (SELECT id FROM worker)";
 		$db->Execute($sql);
 		$logger->info('[Maint] Purged ' . $db->Affected_Rows() . ' address_to_worker records.');
 
+		// Search indexes
+		if(isset($tables['fulltext_address'])) {
+			$db->Execute("DELETE FROM fulltext_address WHERE id NOT IN (SELECT id FROM address)");
+			$logger->info('[Maint] Purged ' . $db->Affected_Rows() . ' fulltext_address records.');
+		}
+		
 		// Fire event
 		$eventMgr = DevblocksPlatform::getEventService();
 		$eventMgr->trigger(
@@ -443,9 +450,11 @@ class DAO_Address extends Cerb_ORMHelper {
 			case SearchFields_Address::FULLTEXT_COMMENT_CONTENT:
 				$search = Extension_DevblocksSearchSchema::get(Search_CommentContent::ID);
 				$query = $search->getQueryFromParam($param);
-				$ids = $search->query($query, array('context_crc32' => sprintf("%u", crc32($from_context))));
 				
-				if(is_array($ids)) {
+				if(false === ($ids = $search->query($query, array('context_crc32' => sprintf("%u", crc32($from_context)))))) {
+					$args['where_sql'] .= 'AND 0 ';
+				
+				} elseif(is_array($ids)) {
 					$from_ids = DAO_Comment::getContextIdsByContextAndIds($from_context, $ids);
 					
 					$args['where_sql'] .= sprintf('AND %s IN (%s) ',
@@ -463,12 +472,35 @@ class DAO_Address extends Cerb_ORMHelper {
 						$ids
 					));
 					
-					$args['join_sql'] .= sprintf("INNER JOIN %s ON (%s.id=a.id) ",
+					$args['join_sql'] .= sprintf("INNER JOIN %s ON (%s.id=%s) ",
 						$temp_table,
-						$temp_table
+						$temp_table,
+						$from_index
 					);
 				}
+				break;
 				
+			case SearchFields_Address::FULLTEXT_ADDRESS:
+				$search = Extension_DevblocksSearchSchema::get(Search_Address::ID);
+				$query = $search->getQueryFromParam($param);
+				
+				if(false === ($ids = $search->query($query, array()))) {
+					$args['where_sql'] .= 'AND 0 ';
+					
+				} elseif(is_array($ids)) {
+					if(empty($ids))
+						$ids = array(-1);
+					
+					$args['where_sql'] .= sprintf('AND a.id IN (%s) ',
+						implode(', ', $ids)
+					);
+					
+				} elseif(is_string($ids)) {
+					$args['join_sql'] .= sprintf("INNER JOIN %s ON (%s.id=a.id) ",
+						$ids,
+						$ids
+					);
+				}
 				break;
 			
 			case SearchFields_Address::VIRTUAL_CONTEXT_LINK:
@@ -561,14 +593,15 @@ class SearchFields_Address implements IDevblocksSearchFields {
 	
 	const ORG_NAME = 'o_name';
 
+	// Fulltexts
+	const FULLTEXT_ADDRESS = 'ft_address';
+	const FULLTEXT_COMMENT_CONTENT = 'ftcc_content';
+
 	// Virtuals
 	const VIRTUAL_CONTEXT_LINK = '*_context_link';
 	const VIRTUAL_HAS_FIELDSET = '*_has_fieldset';
 	const VIRTUAL_WATCHERS = '*_workers';
 	
-	// Comment Content
-	const FULLTEXT_COMMENT_CONTENT = 'ftcc_content';
-
 	// Context Links
 	const CONTEXT_LINK = 'cl_context_from';
 	const CONTEXT_LINK_ID = 'cl_context_from_id';
@@ -580,8 +613,8 @@ class SearchFields_Address implements IDevblocksSearchFields {
 		$translate = DevblocksPlatform::getTranslationService();
 		
 		$columns = array(
-			self::ID => new DevblocksSearchField(self::ID, 'a', 'id', $translate->_('address.id'), null),
-			self::EMAIL => new DevblocksSearchField(self::EMAIL, 'a', 'email', $translate->_('address.email'), Model_CustomField::TYPE_SINGLE_LINE),
+			self::ID => new DevblocksSearchField(self::ID, 'a', 'id', $translate->_('common.id'), null),
+			self::EMAIL => new DevblocksSearchField(self::EMAIL, 'a', 'email', $translate->_('common.email'), Model_CustomField::TYPE_SINGLE_LINE),
 			self::FIRST_NAME => new DevblocksSearchField(self::FIRST_NAME, 'a', 'first_name', $translate->_('address.first_name'), Model_CustomField::TYPE_SINGLE_LINE),
 			self::LAST_NAME => new DevblocksSearchField(self::LAST_NAME, 'a', 'last_name', $translate->_('address.last_name'), Model_CustomField::TYPE_SINGLE_LINE),
 			self::CONTACT_PERSON_ID => new DevblocksSearchField(self::NUM_SPAM, 'a', 'contact_person_id', $translate->_('address.contact_person_id'), null),
@@ -594,18 +627,20 @@ class SearchFields_Address implements IDevblocksSearchFields {
 			self::CONTACT_ORG_ID => new DevblocksSearchField(self::CONTACT_ORG_ID, 'a', 'contact_org_id', $translate->_('address.contact_org_id'), null),
 			self::ORG_NAME => new DevblocksSearchField(self::ORG_NAME, 'o', 'name', $translate->_('contact_org.name'), Model_CustomField::TYPE_SINGLE_LINE),
 			
+			self::FULLTEXT_ADDRESS => new DevblocksSearchField(self::FULLTEXT_ADDRESS, 'ft', 'address', $translate->_('common.search.fulltext'), 'FT'),				
+			self::FULLTEXT_COMMENT_CONTENT => new DevblocksSearchField(self::FULLTEXT_COMMENT_CONTENT, 'ftcc', 'content', $translate->_('comment.filters.content'), 'FT'),
+				
 			self::VIRTUAL_CONTEXT_LINK => new DevblocksSearchField(self::VIRTUAL_CONTEXT_LINK, '*', 'context_link', $translate->_('common.links'), null),
 			self::VIRTUAL_HAS_FIELDSET => new DevblocksSearchField(self::VIRTUAL_HAS_FIELDSET, '*', 'has_fieldset', $translate->_('common.fieldset'), null),
 			self::VIRTUAL_WATCHERS => new DevblocksSearchField(self::VIRTUAL_WATCHERS, '*', 'workers', $translate->_('common.watchers'), 'WS'),
 			
 			self::CONTEXT_LINK => new DevblocksSearchField(self::CONTEXT_LINK, 'context_link', 'from_context', null, null),
 			self::CONTEXT_LINK_ID => new DevblocksSearchField(self::CONTEXT_LINK_ID, 'context_link', 'from_context_id', null, null),
-				
-			self::FULLTEXT_COMMENT_CONTENT => new DevblocksSearchField(self::FULLTEXT_COMMENT_CONTENT, 'ftcc', 'content', $translate->_('comment.filters.content'), 'FT'),
 		);
 		
 		// Fulltext indexes
 		
+		$columns[self::FULLTEXT_ADDRESS]->ft_schema = Search_Address::ID;
 		$columns[self::FULLTEXT_COMMENT_CONTENT]->ft_schema = Search_CommentContent::ID;
 		
 		// Custom fields with fieldsets
@@ -622,6 +657,138 @@ class SearchFields_Address implements IDevblocksSearchFields {
 		DevblocksPlatform::sortObjects($columns, 'db_label');
 		
 		return $columns;
+	}
+};
+
+class Search_Address extends Extension_DevblocksSearchSchema {
+	const ID = 'cerb.search.schema.address';
+	
+	public function getNamespace() {
+		return 'address';
+	}
+	
+	public function getAttributes() {
+		return array();
+	}
+	
+	public function query($query, $attributes=array(), $limit=500) {
+		if(false == ($engine = $this->getEngine()))
+			return false;
+		
+		$ids = $engine->query($this, $query, $attributes, $limit);
+		
+		return $ids;
+	}
+	
+	public function reindex() {
+		$engine = $this->getEngine();
+		$meta = $engine->getIndexMeta($this);
+		
+		// If the index has a delta, start from the current record
+		if($meta['is_indexed_externally']) {
+			// Do nothing (let the remote tool update the DB)
+			
+		// Otherwise, start over
+		} else {
+			$this->setIndexPointer(self::INDEX_POINTER_RESET);
+		}
+	}
+	
+	public function setIndexPointer($pointer) {
+		switch($pointer) {
+			case self::INDEX_POINTER_RESET:
+				$this->setParam('last_indexed_id', 0);
+				$this->setParam('last_indexed_time', 0);
+				break;
+				
+			case self::INDEX_POINTER_CURRENT:
+				$this->setParam('last_indexed_id', 0);
+				$this->setParam('last_indexed_time', time());
+				break;
+		}
+	}
+	
+	public function index($stop_time=null) {
+		$logger = DevblocksPlatform::getConsoleLog();
+		
+		if(false == ($engine = $this->getEngine()))
+			return false;
+		
+		$ns = self::getNamespace();
+		$id = $this->getParam('last_indexed_id', 0);
+		$ptr_time = $this->getParam('last_indexed_time', 0);
+		$ptr_id = $id;
+		$done = false;
+
+		while(!$done && time() < $stop_time) {
+			$where = sprintf('(%1$s = %2$d AND %3$s > %4$d) OR (%1$s > %2$d)',
+				DAO_Address::UPDATED,
+				$ptr_time,
+				DAO_Address::ID,
+				$id
+			);
+			$addresses = DAO_Address::getWhere($where, array(DAO_Address::UPDATED, DAO_Address::ID), array(true, true), 100);
+
+			$dicts = array();
+			
+			if(empty($addresses)) {
+				$done = true;
+				continue;
+			}
+			
+			foreach($addresses as $address_id => $address) {
+				$labels = array();
+				$values = array();
+				CerberusContexts::getContext(CerberusContexts::CONTEXT_ADDRESS, $address, $labels, $values, null, true, true);
+				$dicts[$address_id] = DevblocksDictionaryDelegate::instance($values);
+			}
+			
+			// Batch load org names
+			DevblocksDictionaryDelegate::bulkLazyLoad($dicts, 'org_name');
+			
+			$last_time = $ptr_time;
+			
+			// Loop dictionaries
+			foreach($dicts as $dict) {
+				$id = $dict->id;
+				$ptr_time = $dict->updated;
+				
+				$ptr_id = ($last_time == $ptr_time) ? $id : 0;
+				
+				$logger->info(sprintf("[Search] Indexing %s %d...",
+					$ns,
+					$id
+				));
+				
+				$doc = array(
+					'email' => $dict->address,
+					'firstName' => $dict->first_name,
+					'lastName' => $dict->last_name,
+					'org' => $dict->org_name,
+				);
+				
+				if(false === ($engine->index($this, $id, $doc)))
+					return false;
+				
+				flush();
+			}
+		}
+		
+		// If we ran out of records, always reset the ID and use the current time
+		if($done) {
+			$ptr_id = 0;
+			$ptr_time = time();
+		}
+		
+		$this->setParam('last_indexed_id', $ptr_id);
+		$this->setParam('last_indexed_time', $ptr_time);
+	}
+	
+	public function delete($ids) {
+		if(false == ($engine = $this->getEngine()))
+			return false;
+		
+		return $engine->delete($this, $ids);
 	}
 };
 
@@ -660,7 +827,7 @@ class Model_Address {
 	}
 };
 
-class View_Address extends C4_AbstractView implements IAbstractView_Subtotals {
+class View_Address extends C4_AbstractView implements IAbstractView_Subtotals, IAbstractView_QuickSearch {
 	const DEFAULT_ID = 'addresses';
 
 	function __construct() {
@@ -685,6 +852,7 @@ class View_Address extends C4_AbstractView implements IAbstractView_Subtotals {
 			SearchFields_Address::CONTACT_ORG_ID,
 			SearchFields_Address::CONTEXT_LINK,
 			SearchFields_Address::CONTEXT_LINK_ID,
+			SearchFields_Address::FULLTEXT_ADDRESS,
 			SearchFields_Address::FULLTEXT_COMMENT_CONTENT,
 			SearchFields_Address::VIRTUAL_CONTEXT_LINK,
 			SearchFields_Address::VIRTUAL_HAS_FIELDSET,
@@ -805,6 +973,136 @@ class View_Address extends C4_AbstractView implements IAbstractView_Subtotals {
 		return $counts;
 	}
 	
+	function getQuickSearchFields() {
+		$fields = array(
+			'_fulltext' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_FULLTEXT,
+					'options' => array('param_key' => SearchFields_Address::FULLTEXT_ADDRESS),
+				),
+			'comments' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_FULLTEXT,
+					'options' => array('param_key' => SearchFields_Address::FULLTEXT_COMMENT_CONTENT),
+				),
+			'email' =>
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_TEXT,
+					'options' => array('param_key' => SearchFields_Address::EMAIL, 'match' => DevblocksSearchCriteria::OPTION_TEXT_PREFIX),
+				),
+			'firstName' =>
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_TEXT,
+					'options' => array('param_key' => SearchFields_Address::FIRST_NAME, 'match' => DevblocksSearchCriteria::OPTION_TEXT_PREFIX),
+				),
+			'id' =>
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_NUMBER,
+					'options' => array('param_key' => SearchFields_Address::ID),
+				),
+			'isBanned' =>
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_BOOL,
+					'options' => array('param_key' => SearchFields_Address::IS_BANNED),
+				),
+			'isDefunct' =>
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_BOOL,
+					'options' => array('param_key' => SearchFields_Address::IS_DEFUNCT),
+				),
+			'lastName' =>
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_TEXT,
+					'options' => array('param_key' => SearchFields_Address::LAST_NAME, 'match' => DevblocksSearchCriteria::OPTION_TEXT_PREFIX),
+				),
+			'nonspam' =>
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_NUMBER,
+					'options' => array('param_key' => SearchFields_Address::NUM_NONSPAM),
+				),
+			'org' =>
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_TEXT,
+					'options' => array('param_key' => SearchFields_Address::ORG_NAME, 'match' => DevblocksSearchCriteria::OPTION_TEXT_PARTIAL),
+				),
+			'org.id' =>
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_NUMBER,
+					'options' => array('param_key' => SearchFields_Address::CONTACT_ORG_ID),
+				),
+			'spam' =>
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_NUMBER,
+					'options' => array('param_key' => SearchFields_Address::NUM_SPAM),
+				),
+			'updated' =>
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_DATE,
+					'options' => array('param_key' => SearchFields_Address::UPDATED),
+				),
+			'watchers' =>
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_WORKER,
+					'options' => array('param_key' => SearchFields_Address::VIRTUAL_WATCHERS),
+				),
+		);
+		
+		// Add searchable custom fields
+		
+		$fields = self::_appendFieldsFromQuickSearchContext(CerberusContexts::CONTEXT_ADDRESS, $fields, null);
+		$fields = self::_appendFieldsFromQuickSearchContext(CerberusContexts::CONTEXT_ORG, $fields, 'org');
+		
+		// Engine/schema examples: Fulltext
+		
+		$ft_examples = array();
+		
+		if(false != ($schema = Extension_DevblocksSearchSchema::get(Search_Address::ID))) {
+			if(false != ($engine = $schema->getEngine())) {
+				$ft_examples = $engine->getQuickSearchExamples($schema);
+			}
+		}
+		
+		if(!empty($ft_examples))
+			$fields['_fulltext']['examples'] = $ft_examples;
+		
+		// Engine/schema examples: Comments
+		
+		$ft_examples = array();
+		
+		if(false != ($schema = Extension_DevblocksSearchSchema::get(Search_CommentContent::ID))) {
+			if(false != ($engine = $schema->getEngine())) {
+				$ft_examples = $engine->getQuickSearchExamples($schema);
+			}
+		}
+		
+		if(!empty($ft_examples))
+			$fields['comments']['examples'] = $ft_examples;
+		
+		// Sort by keys
+		
+		ksort($fields);
+		
+		return $fields;
+	}
+	
+	function getParamsFromQuickSearchFields($fields) {
+		$search_fields = $this->getQuickSearchFields();
+		$params = DevblocksSearchCriteria::getParamsFromQueryFields($fields, $search_fields);
+
+		// Handle virtual fields and overrides
+		if(is_array($fields))
+		foreach($fields as $k => $v) {
+			switch($k) {
+				// ...
+			}
+		}
+		
+		$this->renderPage = 0;
+		$this->addParams($params, true);
+		
+		return $params;
+	}	
+	
 	function render() {
 		$this->_sanitize();
 		
@@ -871,6 +1169,7 @@ class View_Address extends C4_AbstractView implements IAbstractView_Subtotals {
 				$tpl->display('devblocks:cerberusweb.core::internal/views/criteria/__context_worker.tpl');
 				break;
 				
+			case SearchFields_Address::FULLTEXT_ADDRESS:
 			case SearchFields_Address::FULLTEXT_COMMENT_CONTENT:
 				$tpl->display('devblocks:cerberusweb.core::internal/views/criteria/__fulltext.tpl');
 				break;
@@ -965,6 +1264,7 @@ class View_Address extends C4_AbstractView implements IAbstractView_Subtotals {
 				$criteria = new DevblocksSearchCriteria($field,$oper,$worker_ids);
 				break;
 				
+			case SearchFields_Address::FULLTEXT_ADDRESS:
 			case SearchFields_Address::FULLTEXT_COMMENT_CONTENT:
 				@$scope = DevblocksPlatform::importGPC($_REQUEST['scope'],'string','expert');
 				$criteria = new DevblocksSearchCriteria($field,DevblocksSearchCriteria::OPER_FULLTEXT,array($value,$scope));
@@ -1422,8 +1722,8 @@ class Context_Address extends Extension_DevblocksContext implements IDevblocksCo
 		return $view;
 	}
 	
-	function getView($context=null, $context_id=null, $options=array()) {
-		$view_id = str_replace('.','_',$this->id);
+	function getView($context=null, $context_id=null, $options=array(), $view_id=null) {
+		$view_id = !empty($view_id) ? $view_id : str_replace('.','_',$this->id);
 		
 		$defaults = new C4_AbstractViewModel();
 		$defaults->id = $view_id;

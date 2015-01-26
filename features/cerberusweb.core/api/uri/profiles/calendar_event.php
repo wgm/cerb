@@ -2,7 +2,7 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2014, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
@@ -59,6 +59,13 @@ class PageSection_ProfilesCalendarEvent extends Extension_PageSection {
 
 		$properties = array();
 
+		$properties['calendar_id'] = array(
+			'label' => ucfirst($translate->_('common.calendar')),
+			'type' => Model_CustomField::TYPE_LINK,
+			'params' => array('context' => CerberusContexts::CONTEXT_CALENDAR),
+			'value' => $event->calendar_id,
+		);
+		
 		$properties['date_start'] = array(
 			'label' => ucfirst($translate->_('dao.calendar_event.date_start')),
 			'type' => null,
@@ -91,6 +98,34 @@ class PageSection_ProfilesCalendarEvent extends Extension_PageSection {
 
 		$properties_custom_fieldsets = Page_Profiles::getProfilePropertiesCustomFieldsets(CerberusContexts::CONTEXT_CALENDAR_EVENT, $event->id, $values);
 		$tpl->assign('properties_custom_fieldsets', $properties_custom_fieldsets);
+		
+		// Link counts
+		
+		$properties_links = array(
+			CerberusContexts::CONTEXT_CALENDAR_EVENT => array(
+				$event->id => 
+					DAO_ContextLink::getContextLinkCounts(
+						CerberusContexts::CONTEXT_CALENDAR_EVENT,
+						$event->id,
+						array(CerberusContexts::CONTEXT_WORKER, CerberusContexts::CONTEXT_CUSTOM_FIELDSET)
+					),
+			),
+		);
+		
+		if(isset($event->calendar_id)) {
+			$properties_links[CerberusContexts::CONTEXT_CALENDAR] = array(
+				$event->calendar_id => 
+					DAO_ContextLink::getContextLinkCounts(
+						CerberusContexts::CONTEXT_CALENDAR,
+						$event->calendar_id,
+						array(CerberusContexts::CONTEXT_WORKER, CerberusContexts::CONTEXT_CUSTOM_FIELDSET)
+					),
+			);
+		}
+		
+		$tpl->assign('properties_links', $properties_links);
+		
+		// Properties
 		
 		$tpl->assign('properties', $properties);
 		

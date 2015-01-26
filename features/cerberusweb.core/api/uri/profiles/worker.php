@@ -2,7 +2,7 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2014, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
@@ -76,14 +76,60 @@ class PageSection_ProfilesWorker extends Extension_PageSection {
 		
 		$properties['email'] = array(
 			'label' => ucfirst($translate->_('common.email')),
+			'type' => Model_CustomField::TYPE_LINK,
+			'params' => array('context' => CerberusContexts::CONTEXT_ADDRESS),
+			'value' => $worker->getAddress()->id,
+		);
+		
+		$properties['title'] = array(
+			'label' => ucfirst($translate->_('worker.title')),
 			'type' => Model_CustomField::TYPE_SINGLE_LINE,
-			'value' => $worker->email,
+			'value' => $worker->title,
 		);
 		
 		$properties['is_superuser'] = array(
 			'label' => ucfirst($translate->_('worker.is_superuser')),
 			'type' => Model_CustomField::TYPE_CHECKBOX,
 			'value' => $worker->is_superuser,
+		);
+		
+		$properties['is_disabled'] = array(
+			'label' => ucfirst($translate->_('common.disabled')),
+			'type' => Model_CustomField::TYPE_CHECKBOX,
+			'value' => $worker->is_disabled,
+		);
+		
+		$properties['language'] = array(
+			'label' => ucfirst($translate->_('worker.language')),
+			'type' => Model_CustomField::TYPE_SINGLE_LINE,
+			'value' => $worker->language,
+		);
+		
+		$properties['timezone'] = array(
+			'label' => ucfirst($translate->_('worker.timezone')),
+			'type' => Model_CustomField::TYPE_SINGLE_LINE,
+			'value' => $worker->timezone,
+		);
+		
+		$properties['at_mention_name'] = array(
+			'label' => ucfirst($translate->_('worker.at_mention_name')),
+			'type' => Model_CustomField::TYPE_SINGLE_LINE,
+			'value' => $worker->at_mention_name,
+		);
+		
+		if(!empty($worker->calendar_id)) {
+			$properties['calendar_id'] = array(
+				'label' => ucfirst($translate->_('common.calendar')),
+				'type' => Model_CustomField::TYPE_LINK,
+				'params' => array('context' => CerberusContexts::CONTEXT_CALENDAR),
+				'value' => $worker->calendar_id,
+			);
+		}
+		
+		$properties['auth_extension'] = array(
+			'label' => ucfirst($translate->_('worker.auth_extension_id')),
+			'type' => Model_CustomField::TYPE_SINGLE_LINE,
+			'value' => $worker->auth_extension_id,
 		);
 		
 		// Custom Fields
@@ -100,6 +146,21 @@ class PageSection_ProfilesWorker extends Extension_PageSection {
 
 		$properties_custom_fieldsets = Page_Profiles::getProfilePropertiesCustomFieldsets(CerberusContexts::CONTEXT_WORKER, $worker->id, $values);
 		$tpl->assign('properties_custom_fieldsets', $properties_custom_fieldsets);
+		
+		// Link counts
+		
+		$properties_links = array(
+			CerberusContexts::CONTEXT_WORKER => array(
+				$worker->id => 
+					DAO_ContextLink::getContextLinkCounts(
+						CerberusContexts::CONTEXT_WORKER,
+						$worker->id,
+						array(CerberusContexts::CONTEXT_WORKER, CerberusContexts::CONTEXT_CUSTOM_FIELDSET)
+					),
+			),
+		);
+		
+		$tpl->assign('properties_links', $properties_links);
 		
 		// Properties
 		
@@ -154,7 +215,10 @@ class PageSection_ProfilesWorker extends Extension_PageSection {
 		}
 		
 		if(!empty($availability_calendar_id)) {
-			DAO_WorkerPref::set($active_worker->id, 'availability_calendar_id', $availability_calendar_id);
+			$fields = array(
+				DAO_Worker::CALENDAR_ID => $availability_calendar_id,
+			);
+			DAO_Worker::update($active_worker->id, $fields);
 		}
 		
 		DevblocksPlatform::redirect(new DevblocksHttpResponse(array('profiles','worker','me','availability')));

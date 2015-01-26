@@ -2,7 +2,7 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2014, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
@@ -290,16 +290,31 @@ class Ch_RestFrontController implements DevblocksHttpRequestHandler {
 		if(!$permitted) {
 			Plugin_RestAPI::render(array('__status'=>'error', 'message'=>"Access denied! (You are not authorized to make this request)"));
 		}
+
+		// Controller
 		
 		@$controller_uri = array_shift($stack); // e.g. tickets
 		
-		// Look up the subcontroller for this URI
 		$controllers = $this->_getRestControllers();
 
 		if(isset($controllers[$controller_uri])
 			&& null != ($controller = DevblocksPlatform::getExtension($controllers[$controller_uri]->id, true, true))) {
 			/* @var $controller Extension_RestController */
+			
+			// Set the active worker
 			CerberusApplication::setActiveWorker($worker);
+			
+			// Set worker language
+			DevblocksPlatform::setLocale(!empty($worker->language) ? $worker->language : 'en_US');
+			
+			// Set worker timezone
+			if(!empty($worker->timezone)) @date_default_timezone_set($worker->timezone);
+			
+			// Set worker time format
+			$default_time_format = DevblocksPlatform::getPluginSetting('cerberusweb.core', CerberusSettings::TIME_FORMAT, CerberusSettingsDefaults::TIME_FORMAT);
+			DevblocksPlatform::setDateTimeFormat(!empty($worker->time_format) ? $worker->time_format : $default_time_format);
+			
+			// Handle the request
 			$controller->setPayload($this->_payload);
 			array_unshift($stack, $verb);
 			$controller->handleRequest(new DevblocksHttpRequest($stack));
@@ -669,6 +684,8 @@ abstract class Extension_RestController extends DevblocksExtension {
 	}
 	
 	protected function _handlePostSearch() {
+		@$query = DevblocksPlatform::importGPC($_REQUEST['q'],'string',null);
+		
 		@$criteria = DevblocksPlatform::importGPC($_REQUEST['criteria'],'array',array());
 		@$opers = DevblocksPlatform::importGPC($_REQUEST['oper'],'array',array());
 		@$values = DevblocksPlatform::importGPC($_REQUEST['value'],'array',array());
@@ -701,6 +718,7 @@ abstract class Extension_RestController extends DevblocksExtension {
 		}
 		
 		$options = array(
+			'query' => $query,
 			'show_results' => $show_results,
 			'subtotals' => $subtotals,
 		);

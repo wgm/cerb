@@ -112,14 +112,15 @@ class DevblocksSearchEngineSphinx extends Extension_DevblocksSearchEngine {
 		$engine_params = $schema->getEngineParams();
 		
 		if(isset($engine_params['config']) && isset($engine_params['config']['quick_search_examples']))
-			return DevblocksPlatform::parseCrlfString($engine_params['config']['quick_search_examples']);
+			if(!empty($engine_params['config']['quick_search_examples']))
+				return DevblocksPlatform::parseCrlfString($engine_params['config']['quick_search_examples']);
 		
 		return array(
-			"all of these words",
-			'"this exact phrase"',
+			"(all of these words)",
+			'("this exact phrase")',
 			'(this | that)',
 			'wildcard*',
-			'"a quorum of at least three of these words"/3',
+			'("a quorum of at least three of these words"/3)',
 		);
 	}
 	
@@ -269,7 +270,7 @@ class DevblocksSearchEngineSphinx extends Extension_DevblocksSearchEngine {
 		return $value;
 	}
 	
-	private function _index(Extension_DevblocksSearchSchema $schema, $id, $content, $attributes=array()) {
+	private function _index(Extension_DevblocksSearchSchema $schema, $id, array $doc, $attributes=array()) {
 		if(is_null($this->db))
 			return false;
 		
@@ -277,6 +278,8 @@ class DevblocksSearchEngineSphinx extends Extension_DevblocksSearchEngine {
 		
 		if(empty($index_rt))
 			return false;
+		
+		$content = $this->_getTextFromDoc($doc);
 		
 		$fields = array(
 			'id' => intval($id),
@@ -321,8 +324,8 @@ class DevblocksSearchEngineSphinx extends Extension_DevblocksSearchEngine {
 		return (false !== $result) ? true : false;
 	}
 	
-	public function index(Extension_DevblocksSearchSchema $schema, $id, $content, array $attributes=array()) {
-		if(false === ($ids = $this->_index($schema, $id, $content, $attributes)))
+	public function index(Extension_DevblocksSearchSchema $schema, $id, array $doc, array $attributes=array()) {
+		if(false === ($ids = $this->_index($schema, $id, $doc, $attributes)))
 			return false;
 		
 		return true;
@@ -346,6 +349,359 @@ class DevblocksSearchEngineSphinx extends Extension_DevblocksSearchEngine {
 				$id
 			));
 		}
+		
+		return true;
+	}
+};
+
+class DevblocksSearchEngineElasticSearch extends Extension_DevblocksSearchEngine {
+	const ID = 'devblocks.search.engine.elasticsearch';
+	
+	private $_config = array();
+	
+	private function _execute($verb='GET', $url, $payload=array()) {
+		$headers = array();
+		
+		$ch = curl_init($url);
+		curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+		curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+		
+		if(!empty($headers))
+			curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+		
+		switch($verb) {
+			case 'PUT':
+				$headers[] = 'Content-Type: application/json';
+				curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'PUT');
+				curl_setopt($ch, CURLOPT_POST, true);
+				curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
+				break;
+		}
+		
+		$out = curl_exec($ch);
+		
+		$status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+		$content_type = curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
+		
+		curl_close($ch);
+		
+		if($status != 200 || false == (@$json = json_decode($out, true)))
+			return false; 
+		
+		return $json;
+	}
+	
+	private function _putRecord($type, $id, $doc) {
+		@$base_url = rtrim($this->_config['base_url'], '/');
+		@$index = trim($this->_config['index'], '/');
+		
+		if(empty($base_url) || empty($index) || empty($type))
+			return false;
+		
+		$url = sprintf("%s/%s/%s/%d",
+			$base_url,
+			urlencode($index),
+			urlencode($type),
+			$id
+		);
+		
+		if(false == ($json = $this->_execute('PUT', $url, $doc)))
+			return false;
+		
+		return $json;
+	}
+	
+	private function _getSearch($type, $query, $limit=500) {
+		@$base_url = rtrim($this->_config['base_url'], '/');
+		@$index = trim($this->_config['index'], '/');
+		
+		if(empty($base_url) || empty($index) || empty($type))
+			return false;
+		
+		
+		$url = sprintf("%s/%s/%s/_search?q=%s&_source=false&size=%d&default_operator=AND",
+			$base_url,
+			urlencode($index),
+			urlencode($type),
+			urlencode($query),
+			$limit
+		);
+		
+		if(false == ($json = $this->_execute('GET', $url)))
+			return false;
+		
+		return $json;
+	}
+	
+	private function _getCount($type) {
+		@$base_url = rtrim($this->_config['base_url'], '/');
+		@$index = trim($this->_config['index'], '/');
+		
+		if(empty($base_url) || empty($index) || empty($type))
+			return false;
+		
+		$url = sprintf("%s/%s/%s/_count",
+			$base_url,
+			urlencode($index),
+			urlencode($type)
+		);
+		
+		if(false == ($json = $this->_execute('GET', $url)))
+			return false;
+		
+		if(!is_array($json) || !isset($json['count']))
+			return false;
+		
+		return intval($json['count']);
+	}
+	
+	public function testConfig(array $config) {
+		@$base_url = $config['base_url'];
+		@$index = $config['index'];
+		
+		if(empty($base_url))
+			return "A base URL is required.";
+		
+		if(empty($index))
+			return "An index name is required.";
+		
+		if(false === ($json = $this->_execute('GET', $base_url)))
+			return false;
+		
+		if(isset($json['status']) && 200 == $json['status']) {
+			return true;
+			
+		} else {
+			return false;
+		}
+		
+		return true;
+	}
+	
+	public function setConfig(array $config) {
+		$this->_config = $config;
+	}
+	
+	public function renderConfigForSchema(Extension_DevblocksSearchSchema $schema) {
+		$tpl = DevblocksPlatform::getTemplateService();
+		$tpl->assign('engine', $this);
+		
+		$engine_params = $schema->getEngineParams();
+		@$engine_extension_id = $engine_params['engine_extension_id'];
+		
+		if($engine_extension_id == $this->id & isset($engine_params['config']))
+			$tpl->assign('engine_params', $engine_params['config']);
+		
+		$tpl->display('devblocks:devblocks.core::search_engine/elasticsearch.tpl');
+	}
+	
+	public function getIndexMeta(Extension_DevblocksSearchSchema $schema) {
+		@$index = $this->_config['index'];
+		@$type = $schema->getNamespace();
+		
+		$count = $this->_getCount($type);
+		
+		return array(
+			'count' => $count, // Elasticsearch can't always count rows (if no attributes, non-extern-docinfo)
+			'max_id' => false, // Elasticsearchcan't tell us the max ID w/o attributes
+			'is_indexed_externally' => false,
+		);
+	}
+	
+	public function getQuickSearchExamples(Extension_DevblocksSearchSchema $schema) {
+		$engine_params = $schema->getEngineParams();
+		
+		if(isset($engine_params['config']) && isset($engine_params['config']['quick_search_examples']))
+			if(!empty($engine_params['config']['quick_search_examples']))
+				return DevblocksPlatform::parseCrlfString($engine_params['config']['quick_search_examples']);
+		
+		return array(
+			"(all of these words)",
+			'("this exact phrase")',
+			'(this OR that)',
+			'[(this OR that) NOT (this OR that)]',
+			'(wildcard*)',
+			'(person@example.com)',
+		);
+	}
+	
+	public function query(Extension_DevblocksSearchSchema $schema, $query, array $attributes=array(), $limit=500) {
+		@$type = $schema->getNamespace();
+		
+		if(empty($type))
+			return false;
+		
+		$schema_attributes = $schema->getAttributes();
+		
+		if(is_array($attributes))
+		foreach($attributes as $attr => $attr_val) {
+			@$attr_type = $schema_attributes[$attr];
+			
+			if(empty($attr_type))
+				continue;
+			
+			switch($attr_type) {
+				case 'string':
+					$query .= sprintf(' %s:"%s"',
+						$attr,
+						$attr_val
+					);
+					break;
+				
+				case 'int':
+				case 'int4':
+				case 'int8':
+					$query .= sprintf(' %s:%d',
+						$attr,
+						$attr_val
+					);
+					break;
+					
+				case 'uint4':
+				case 'uint8':
+					$query .= sprintf(' %s:%d',
+						$attr,
+						$attr_val
+					);
+					break;
+			}
+		}
+		
+		$cache = DevblocksPlatform::getCacheService();
+		$cache_key = sprintf("elasticsearch:%s:%s", $type, md5($query));
+		$is_only_cached_for_request = !$cache->isVolatile();
+		
+		if(null === ($ids = $cache->load($cache_key, false, $is_only_cached_for_request))) {
+			$ids = array();
+			$json = $this->_getSearch($type, $query, $limit);
+			
+			if(is_array($json) && isset($json['hits']))
+			foreach($json['hits']['hits'] as $hit) {
+				$ids[] = $hit['_id'];
+			}
+			
+			$cache->save($ids, $cache_key, array(), 300, $is_only_cached_for_request);
+		}
+		
+		return $ids;
+	}
+	
+	public function getQueryFromParam($param) {
+		$values = array();
+		$value = null;
+		$scope = null;
+
+		if(!is_array($param->value) && !is_string($param->value))
+			break;
+		
+		if(!is_array($param->value) && preg_match('#^\[.*\]$#', $param->value)) {
+			$values = json_decode($param->value, true);
+			
+		} elseif(is_array($param->value)) {
+			$values = $param->value;
+			
+		} else {
+			$values = $param->value;
+			
+		}
+		
+		if(!is_array($values)) {
+			$value = $values;
+			$scope = 'expert';
+			
+		} else {
+			$value = $values[0];
+			$scope = $values[1];
+		}
+		
+		switch($scope) {
+			case 'all':
+				$value = $value;
+				break;
+				
+			// OR
+			case 'any':
+				$words = explode(' ', $value);
+				$value = implode(' | ', $words);
+				break;
+				
+			case 'phrase':
+				$value = '"'.$value.'"';
+				break;
+				
+			default:
+			case 'expert':
+				break;
+		}
+		
+		return $value;
+	}
+	
+	private function _index(Extension_DevblocksSearchSchema $schema, $id, array $doc, $attributes=array()) {
+		@$type = $schema->getNamespace();
+		
+		if(empty($type))
+			return false;
+		
+		// Do we need to add attributes to the document?
+		
+		$schema_attributes = $schema->getAttributes();
+		
+		if(is_array($attributes))
+		foreach($attributes as $attr => $attr_val) {
+			@$attr_type = $schema_attributes[$attr];
+			
+			if(empty($attr_type))
+				continue;
+			
+			switch($attr_type) {
+				case 'string':
+					$doc[$attr] = $attr_val;
+					break;
+				
+				case 'int':
+				case 'int4':
+				case 'int8':
+					$doc[$attr] = intval($attr_val);
+					break;
+					
+				case 'uint4':
+				case 'uint8':
+					$doc[$attr] = intval($attr_val);
+					break;
+			}
+		}
+		
+		// Send to Elasticsearch
+		
+		$json = $this->_putRecord($type, $id, $doc);
+		
+		return true;
+	}
+	
+	public function index(Extension_DevblocksSearchSchema $schema, $id, array $doc, array $attributes=array()) {
+		if(false === ($ids = $this->_index($schema, $id, $doc, $attributes)))
+			return false;
+		
+		return true;
+	}
+
+	public function delete(Extension_DevblocksSearchSchema $schema, $ids) {
+		@$base_url = $this->_config['base_url'];
+		@$index = $this->_config['index'];
+		@$ns = $schema->getNamespace();
+		
+		/*
+		if(!is_array($ids))
+			$ids = array($ids);
+			
+		foreach($ids as $id) {
+			$result = mysqli_query($this->db, sprintf("DELETE FROM %s WHERE id = %d",
+				$this->escapeNamespace($index_rt),
+				$id
+			));
+		}
+		*/
 		
 		return true;
 	}
@@ -393,30 +749,43 @@ class DevblocksSearchEngineMysqlFulltext extends Extension_DevblocksSearchEngine
 	
 	private function _getMaxId(Extension_DevblocksSearchSchema $schema) {
 		$db = DevblocksPlatform::getDatabaseService();
+		$tables = DevblocksPlatform::getDatabaseTables();
 		$ns = $schema->getNamespace();
+		
+		if(!isset($tables['fulltext_' . $ns]))
+			return false;
 		
 		return intval($db->GetOne(sprintf("SELECT MAX(id) FROM fulltext_%s", $db->escape($ns))));
 	}
 	
 	private function _getCount(Extension_DevblocksSearchSchema $schema) {
 		$db = DevblocksPlatform::getDatabaseService();
+		$tables = DevblocksPlatform::getDatabaseTables();
 		$ns = $schema->getNamespace();
+
+		if(!isset($tables['fulltext_' . $ns]))
+			return false;
 		
 		return intval($db->GetOne(sprintf("SELECT COUNT(id) FROM fulltext_%s", $db->escape($ns))));
 	}
 	
 	public function getQuickSearchExamples(Extension_DevblocksSearchSchema $schema) {
 		return array(
-			'a multiple word phrase',
-			'"any" "of" "these" "words"',
-			'"this phrase" or any of these words',
+			'(+all +of +these +terms)',
+			'(+this -that)',
+			'"a multiple word phrase"',
+			'("any" "of" "these terms")',
 			'person@example.com',
 		);
 	}
 	
 	public function query(Extension_DevblocksSearchSchema $schema, $query, array $attributes=array(), $limit=500) {
 		$db = DevblocksPlatform::getDatabaseService();
+		$tables = DevblocksPlatform::getDatabaseTables();
 		$ns = $schema->getNamespace();
+		
+		if(!isset($tables['fulltext_' . $ns]))
+			return false;
 		
 		$escaped_query = $db->escape($query);
 		$where_sql = null;
@@ -715,10 +1084,19 @@ class DevblocksSearchEngineMysqlFulltext extends Extension_DevblocksSearchEngine
 		return $text;
 	}
 	
-	private function _index(Extension_DevblocksSearchSchema $schema, $id, $content, $attributes=array()) {
+	private function _index(Extension_DevblocksSearchSchema $schema, $id, array $doc, $attributes=array()) {
 		$db = DevblocksPlatform::getDatabaseService();
+		$tables = DevblocksPlatform::getDatabaseTables();
 		$ns = $schema->getNamespace();
+		
+		$content = $this->_getTextFromDoc($doc);
+		
 		$content = $this->prepareText($content);
+		
+		// If the table doesn't exist, create it at index time
+		if(!isset($tables['fulltext_' . $this->escapeNamespace($ns)]))
+			if(false === $this->_createTable($schema))
+				return false;
 		
 		$fields = array(
 			'id' => intval($id),
@@ -769,16 +1147,8 @@ class DevblocksSearchEngineMysqlFulltext extends Extension_DevblocksSearchEngine
 		return $return;
 	}
 	
-	public function index(Extension_DevblocksSearchSchema $schema, $id, $content, array $attributes=array()) {
-		if(false === ($ids = $this->_index($schema, $id, $content, $attributes))) {
-			// Create the table dynamically
-			if($this->_createTable($schema)) {
-				return $this->_index($schema, $id, $content, $attributes);
-			}
-			return false;
-		}
-		
-		return true;
+	public function index(Extension_DevblocksSearchSchema $schema, $id, array $doc, array $attributes=array()) {
+		return $this->_index($schema, $id, $doc, $attributes);
 	}
 	
 	private function _createTable(Extension_DevblocksSearchSchema $schema) {
