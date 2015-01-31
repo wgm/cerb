@@ -1139,7 +1139,7 @@ class DevblocksPlatform extends DevblocksEngine {
 				break;
 				
 			case 'seconds':
-				$label = DevblocksPlatform::strSecsToString(intval($number));
+				$label = DevblocksPlatform::strSecsToString(intval($number), 2);
 				break;
 				
 			case 'minutes':
@@ -1366,7 +1366,9 @@ class DevblocksPlatform extends DevblocksEngine {
 	 * @return boolean
 	 */
 	static function isDatabaseEmpty() {
-		$db = DevblocksPlatform::getDatabaseService();
+		if(false == ($db = DevblocksPlatform::getDatabaseService()))
+			return true;
+		
 		return $db->isEmpty();
 	}
 	
