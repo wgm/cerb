@@ -1363,13 +1363,21 @@ class CerberusParser {
 					DAO_Attachment::MIME_TYPE => 'text/html',
 					DAO_Attachment::STORAGE_SHA1HASH => $sha1_hash,
 				);
-				$file_id = DAO_Attachment::create($fields);
 				
-				Storage_Attachments::put($file_id, $message->htmlbody);
+				if(false != ($file_id = DAO_Attachment::create($fields))) {
+					Storage_Attachments::put($file_id, $message->htmlbody);
+				}
 			}
 			
-			if(!empty($file_id))
+			// Link the HTML part to the message
+			if(!empty($file_id)) {
 				DAO_AttachmentLink::create($file_id, CerberusContexts::CONTEXT_MESSAGE, $model->getMessageId());
+				
+				// This built-in field is faster than searching for the HTML part again in the attachments
+				DAO_Message::update($message_id, array(
+					DAO_Message::HTML_ATTACHMENT_ID => $file_id,
+				));
+			}
 		}
 		
 		// Pre-load custom fields
@@ -1413,6 +1421,9 @@ class CerberusParser {
 		// Finalize our new ticket details (post-message creation)
 		/* @var $model CerberusParserModel */
 		if($model->getIsNew()) {
+			$deliver_to_group = DAO_Group::get($model->getGroupId());
+			$deliver_to_bucket = $deliver_to_group->getDefaultBucket();
+			
 			$change_fields = array(
 				DAO_Ticket::MASK => CerberusApplication::generateTicketMask(),
 				DAO_Ticket::SUBJECT => $model->getSubject(),
@@ -1425,7 +1436,9 @@ class CerberusParser {
 				DAO_Ticket::LAST_ACTION_CODE => CerberusTicketActionCode::TICKET_OPENED,
 				DAO_Ticket::FIRST_MESSAGE_ID => $model->getMessageId(),
 				DAO_Ticket::LAST_MESSAGE_ID => $model->getMessageId(),
-				DAO_Ticket::GROUP_ID => $model->getGroupId(), // this triggers move rules
+				DAO_Ticket::GROUP_ID => $deliver_to_group->id, // this triggers move rules
+				DAO_Ticket::BUCKET_ID => $deliver_to_bucket->id, // this triggers move rules
+				DAO_Ticket::IMPORTANCE => 50,
 			);
 			
 			// Spam probabilities

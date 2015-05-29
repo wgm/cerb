@@ -33,7 +33,7 @@ class _DevblocksTemplateManager {
 
 			$instance->caching = 0;
 			$instance->cache_lifetime = 0;
-			$instance->compile_check = (defined('DEVELOPMENT_MODE') && DEVELOPMENT_MODE) ? true : false;
+			$instance->compile_check = DEVELOPMENT_MODE ? true : false;
 			
 			$instance->error_unassigned = false;
 			$instance->error_reporting = E_ERROR & ~E_NOTICE;
@@ -265,7 +265,7 @@ class _DevblocksTemplateManager {
 			
 			if($quote_started && $quote_ended) {
 				if($quote_ended - $quote_started >= $length) {
-					$lines[$quote_started] = "<div style='margin:5px;'><a href='javascript:;' style='background-color:rgb(255,255,204);' onclick=\"$(this).closest('div').next('div').toggle();$(this).parent().fadeOut();\">-show quote-</a></div><div class='hidden' style='display:none;font-style:italic;color:rgb(66,116,62);'>" . $lines[$quote_started];
+					$lines[$quote_started] = "<div style='margin:5px;'><a href='javascript:;' style='color:rgb(50,50,50);background-color:rgb(255,255,204);' onclick=\"$(this).closest('div').next('div').toggle();$(this).parent().fadeOut();\">-show quote-</a></div><div class='hidden' style='display:none;font-style:italic;color:rgb(66,116,62);'>" . $lines[$quote_started];
 					$lines[$quote_ended] = $lines[$quote_ended]."</div>";
 				}
 				$quote_started = false;
@@ -311,7 +311,7 @@ class _DevblocksSmartyTemplateResource {
 		}
 			
 		// If not in DB, check plugin's relative path on disk
-		$path = APP_PATH . '/' . $plugin->dir . '/templates/' . $tpl_path;
+		$path = $plugin->getStoragePath() . '/templates/' . $tpl_path;
 		
 		if(!file_exists($path))
 			return false;
@@ -354,7 +354,7 @@ class _DevblocksSmartyTemplateResource {
 		}
 			
 		// If not in DB, check plugin's relative path on disk
-		$path = APP_PATH . '/' . $plugin->dir . '/templates/' . $tpl_path;
+		$path = $plugin->getStoragePath() . '/templates/' . $tpl_path;
 		
 		if(!file_exists($path))
 			return false;

@@ -128,6 +128,12 @@ class DevblocksSearchCriteria {
 	}
 	
 	public static function getDateParamFromQuery($field_key, $query) {
+		// [TODO] Add more operators, for now we assume it's always '[date] to [date]' format
+		
+		// [TODO] If not a range search, and not a relative start point, we could treat this as an absolute (=)
+		
+		// [TODO] Handle >=, >, <=, <, =, !=
+		
 		$oper = DevblocksSearchCriteria::OPER_BETWEEN;
 		$values = null;
 		
@@ -174,6 +180,8 @@ class DevblocksSearchCriteria {
 	}
 	
 	public static function getNumberParamFromQuery($field_key, $query) {
+		// [TODO] Add more operators
+
 		$oper = self::OPER_EQ;
 		
 		if(preg_match('#^([\<\>\!\=]+)(.*)#', $query, $matches)) {
@@ -217,6 +225,9 @@ class DevblocksSearchCriteria {
 	}
 	
 	public static function getWorkerParamFromQuery($field_key, $query) {
+		// [TODO] NOT?
+		// [TODO] This can have placeholders
+		
 		$oper = self::OPER_IN;
 		$value = null;
 		
@@ -323,6 +334,12 @@ class DevblocksSearchCriteria {
 	}
 	
 	public static function getTextParamFromQuery($field_key, $query, $options=0) {
+		// [TODO] Detect operators
+		// [TODO] OPER_NEQ OPER_NIN?
+		// [TODO] OPER_IN?
+		// [TODO] Quoted query is literal (no wildcards)
+		// [TODO] AND/OR/NOT parentheses? <- Would probably need a lexer
+		
 		$oper = self::OPER_EQ;
 		
 		// If blank
@@ -828,6 +845,20 @@ class DevblocksPluginManifest {
 		DAO_Platform::updatePlugin($this->id, $fields);
 	}
 	
+	function getStoragePath() {
+		if($this->dir == 'libs/devblocks') {
+			return rtrim(DEVBLOCKS_PATH, DIRECTORY_SEPARATOR);
+			
+		} elseif(substr($this->dir, 0, 9) == 'features/') {
+			return APP_PATH . '/features/' . $this->id;
+			
+		} else {
+			return APP_STORAGE_PATH . '/plugins/' . $this->id;
+		}
+		
+		return false;
+	}
+	
 	/**
 	 *
 	 */
@@ -850,7 +881,7 @@ class DevblocksPluginManifest {
 		
 		if(isset($this->manifest_cache['patches']))
 		foreach($this->manifest_cache['patches'] as $patch) {
-			$path = APP_PATH . '/' . $this->dir . '/' . $patch['file'];
+			$path = $this->getStoragePath() . '/' . $patch['file'];
 			$patches[] = new DevblocksPatch($this->id, $patch['version'], $patch['revision'], $path);
 		}
 		
@@ -924,20 +955,20 @@ class DevblocksPluginManifest {
 		$db = DevblocksPlatform::getDatabaseService();
 		$prefix = (APP_DB_PREFIX != '') ? APP_DB_PREFIX.'_' : ''; // [TODO] Cleanup
 		
-		$db->Execute(sprintf("DELETE FROM %splugin WHERE id = %s",
+		$db->ExecuteMaster(sprintf("DELETE FROM %splugin WHERE id = %s",
 			$prefix,
 			$db->qstr($this->id)
 		));
-		$db->Execute(sprintf("DELETE FROM %sextension WHERE plugin_id = %s",
+		$db->ExecuteMaster(sprintf("DELETE FROM %sextension WHERE plugin_id = %s",
 			$prefix,
 			$db->qstr($this->id)
 		));
 		
-		$db->Execute(sprintf("DELETE FROM %1\$sproperty_store WHERE extension_id NOT IN (SELECT id FROM %1\$sextension)", $prefix));
+		$db->ExecuteMaster(sprintf("DELETE FROM %1\$sproperty_store WHERE extension_id NOT IN (SELECT id FROM %1\$sextension)", $prefix));
 	}
 	
 	function uninstall() {
-		$plugin_path = APP_PATH . '/' . $this->dir;
+		$plugin_path = $this->getStoragePath();
 		$storage_path = APP_STORAGE_PATH . '/plugins/';
 		
 		// Only delete the files if the plugin is in the storage filesystem.
@@ -1005,7 +1036,7 @@ class DevblocksExtensionManifest {
 		if(null == ($plugin = DevblocksPlatform::getPlugin($this->plugin_id)))
 			return;
 
-		$class_file = APP_PATH . '/' . $plugin->dir . '/' . $this->file;
+		$class_file = $plugin->getStoragePath() . '/' . $this->file;
 		$class_name = $this->class;
 
 		DevblocksPlatform::registerClasses($class_file,array($class_name));

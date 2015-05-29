@@ -1,12 +1,18 @@
 <?php
-if(!defined('APP_DB_HOST'))
-	define('APP_DB_HOST','localhost');
+if(!defined('APP_DB_PCONNECT'))
+	define('APP_DB_PCONNECT',false);
+
+if(!defined('APP_DB_PREFIX'))
+	define('APP_DB_PREFIX','');
+
+if(!defined('APP_DB_ENGINE'))
+	define('APP_DB_ENGINE','MyISAM');
 
 if(!defined('APP_DB_DATABASE'))
 	define('APP_DB_DATABASE','');
 
-if(!defined('APP_DB_ENGINE'))
-	define('APP_DB_ENGINE','MyISAM');
+if(!defined('APP_DB_HOST'))
+	define('APP_DB_HOST','');
 
 if(!defined('APP_DB_USER'))
 	define('APP_DB_USER','');
@@ -14,11 +20,14 @@ if(!defined('APP_DB_USER'))
 if(!defined('APP_DB_PASS'))
 	define('APP_DB_PASS','');
 
-if(!defined('APP_DB_PCONNECT'))
-	define('APP_DB_PCONNECT',false);
+if(!defined('APP_DB_SLAVE_HOST'))
+	define('APP_DB_SLAVE_HOST','');
 
-if(!defined('APP_DB_PREFIX'))
-	define('APP_DB_PREFIX','');
+if(!defined('APP_DB_SLAVE_USER'))
+	define('APP_DB_SLAVE_USER','');
+
+if(!defined('APP_DB_SLAVE_PASS'))
+	define('APP_DB_SLAVE_PASS','');
 
 if(!defined('DEVBLOCKS_LANGUAGE'))
 	define('DEVBLOCKS_LANGUAGE','en');
@@ -41,20 +50,23 @@ if(!defined('APP_TEMP_PATH'))
 if(!defined('DEVBLOCKS_PATH'))
 	define('DEVBLOCKS_PATH',APP_PATH . '/libs/devblocks/');
 
-if(!defined('LANG_CHARSET_MAIL_CONTENT_TYPE'))
-	define('LANG_CHARSET_MAIL_CONTENT_TYPE','text/plain');
-
 if(!defined('LANG_CHARSET_CODE'))
-	define('LANG_CHARSET_CODE','iso-8859-1');
+	define('LANG_CHARSET_CODE','utf-8');
 
 if(!defined('DB_CHARSET_CODE'))
-	define('DB_CHARSET_CODE','latin1'); // latin1, utf8
+	define('DB_CHARSET_CODE','utf8');
 
 if(!defined('APP_SESSION_NAME'))
 	define('APP_SESSION_NAME', 'Devblocks');
 
+if(!defined('ONDEMAND_MODE'))
+	define('ONDEMAND_MODE', false);
+
 if(!defined('DEVELOPMENT_MODE'))
 	define('DEVELOPMENT_MODE', false);
+
+if(!defined('DEVELOPMENT_MODE_QUERIES'))
+	define('DEVELOPMENT_MODE_QUERIES', false);
 
 // ----
 

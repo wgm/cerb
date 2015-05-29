@@ -133,11 +133,6 @@
 				<seg>[Mail] Kan nieuwe berichten opstellen vanuit de helpdesk</seg>
 			</tuv>
 		</tu>
-		<tu tuid="acl.core.rss">
-			<tuv xml:lang="nl_NL">
-				<seg>[RSS] Kan lijsten als een RSS feed exporteren </seg>
-			</tuv>
-		</tu>
 		<tu tuid="acl.core.snippets.actions.create">
 			<tuv xml:lang="nl_NL">
 				<seg/>
@@ -521,11 +516,6 @@
 		<tu tuid="activity.mail.search">
 			<tuv xml:lang="nl_NL">
 				<seg>%s zoekt naar tickets</seg>
-			</tuv>
-		</tu>
-		<tu tuid="activity.mail.workflow">
-			<tuv xml:lang="nl_NL">
-				<seg>%s bekijkt %s in Workflow</seg>
 			</tuv>
 		</tu>
 		<tu tuid="activity.mail.workspaces">
@@ -1178,6 +1168,11 @@
 				<seg>GUID</seg>
 			</tuv>
 		</tu>
+		<tu tuid="common.history">
+			<tuv xml:lang="nl_NL">
+				<seg>historie</seg>
+			</tuv>
+		</tu>
 		<tu tuid="common.hours">
 			<tuv xml:lang="nl_NL">
 				<seg>uren</seg>
@@ -1201,6 +1196,11 @@
 		<tu tuid="common.import.upload_csv.tip">
 			<tuv xml:lang="nl_NL">
 				<seg>(willekeurige kolom volgorde; de volgende stap laat u kiezen waar de data naartoe gaat)</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.importance">
+			<tuv xml:lang="nl_NL">
+				<seg></seg>
 			</tuv>
 		</tu>
 		<tu tuid="common.inactive">
@@ -1371,6 +1371,11 @@
 		<tu tuid="common.no">
 			<tuv xml:lang="nl_NL">
 				<seg>nee</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.no_thanks">
+			<tuv xml:lang="nl_NL">
+				<seg>Nee dank u!</seg>
 			</tuv>
 		</tu>
 		<tu tuid="common.nobody">
@@ -1803,12 +1808,12 @@
 				<seg>Profiel ID</seg>
 			</tuv>
 		</tu>
-		<tu tuid="config.mail.pop3.error_hostname">
+		<tu tuid="config.mailboxes.error_hostname">
 			<tuv xml:lang="nl_NL">
 				<seg>Error: Geen hostname opgegeven.</seg>
 			</tuv>
 		</tu>
-		<tu tuid="config.mail.pop3.failed">
+		<tu tuid="config.mailboxes.failed">
 			<tuv xml:lang="nl_NL">
 				<seg>Mailbox connectie mislukt.</seg>
 			</tuv>
@@ -2768,11 +2773,6 @@
 				<seg>(huidige map)</seg>
 			</tuv>
 		</tu>
-		<tu tuid="display.reply.next.move.no_thanks">
-			<tuv xml:lang="nl_NL">
-				<seg>Nee dank u!</seg>
-			</tuv>
-		</tu>
 		<tu tuid="display.reply.next.owner">
 			<tuv xml:lang="nl_NL">
 				<seg/>
@@ -2996,11 +2996,6 @@
 		<tu tuid="header.config">
 			<tuv xml:lang="nl_NL">
 				<seg>setup</seg>
-			</tuv>
-		</tu>
-		<tu tuid="header.history">
-			<tuv xml:lang="nl_NL">
-				<seg>historie</seg>
 			</tuv>
 		</tu>
 		<tu tuid="header.last_viewed">
@@ -3286,11 +3281,6 @@
 		<tu tuid="mail.worklist.draft_in_progress">
 			<tuv xml:lang="nl_NL">
 				<seg></seg>
-			</tuv>
-		</tu>
-		<tu tuid="mail.workflow">
-			<tuv xml:lang="nl_NL">
-				<seg>Workflow</seg>
 			</tuv>
 		</tu>
 		<tu tuid="mail.workspaces.create">
@@ -4049,7 +4039,7 @@
 				<seg/>
 			</tuv>
 		</tu>
-		<tu tuid="preferences.account.mail.reply_textbox_size.inelastic">
+		<tu tuid="preferences.account.mail.reply_textbox_size.auto">
 			<tuv xml:lang="nl_NL">
 				<seg/>
 			</tuv>
@@ -4469,11 +4459,6 @@
 				<seg>Werknemer geschiedenis tussen bepaalde datums</seg>
 			</tuv>
 		</tu>
-		<tu tuid="rss.bad_feed">
-			<tuv xml:lang="nl_NL">
-				<seg>Foutieve Data Feed.</seg>
-			</tuv>
-		</tu>
 		<tu tuid="search.date.between">
 			<tuv xml:lang="nl_NL">
 				<seg>tussen</seg>
@@ -4729,11 +4714,6 @@
 				<seg>Ticket taken</seg>
 			</tuv>
 		</tu>
-		<tu tuid="ticket.assignable">
-			<tuv xml:lang="nl_NL">
-				<seg>Toewijsbaar</seg>
-			</tuv>
-		</tu>
 		<tu tuid="ticket.closed_at">
 			<tuv xml:lang="nl_NL">
 				<seg/>
@@ -4837,11 +4817,6 @@
 		<tu tuid="ticket.spam_training">
 			<tuv xml:lang="nl_NL">
 				<seg>Spam training</seg>
-			</tuv>
-		</tu>
-		<tu tuid="ticket.status">
-			<tuv xml:lang="nl_NL">
-				<seg>Status</seg>
 			</tuv>
 		</tu>
 		<tu tuid="ticket.subject">

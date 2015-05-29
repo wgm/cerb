@@ -58,8 +58,9 @@
 <fieldset class="peek">
 	<legend>{'common.mail'|devblocks_translate|capitalize}</legend>
 	
-	<b>{'preferences.account.mail.display'|devblocks_translate}:</b>
+	<b>{'preferences.account.mail.display'|devblocks_translate}</b>
 	<div style="margin:0px 0px 10px 10px;">
+		<label><input type="checkbox" name="mail_disable_html_display" value="1" {if $prefs.mail_disable_html_display}checked{/if}> {'preferences.account.mail.display.disable_html'|devblocks_translate}</label><br>
 		<label><input type="checkbox" name="mail_always_show_all" value="1" {if $prefs.mail_always_show_all}checked{/if}> {'preferences.account.mail.readall'|devblocks_translate}</label><br>
 		<label><input type="checkbox" name="mail_display_inline_log" value="1" {if $prefs.mail_display_inline_log}checked{/if}> {'preferences.account.mail.display.inline_log'|devblocks_translate}</label><br>
 	</div>
@@ -76,7 +77,7 @@
 		
 		{'preferences.account.mail.reply_textbox_size.pixels'|devblocks_translate} <input type="text" name="mail_reply_textbox_size_px" size="4" maxlength=4" value="{$prefs.mail_reply_textbox_size_px|default:'500'}" onfocus="$(this).prev().find('input:radio').click();"> pixels<br>
 		<div style="margin:0px 0px 10px 10px;">
-			<label><input type="checkbox" name="mail_reply_textbox_size_inelastic" value="1" {if !empty($prefs.mail_reply_textbox_size_inelastic)}checked{/if}> {'preferences.account.mail.reply_textbox_size.inelastic'|devblocks_translate}</label><br>
+			<label><input type="checkbox" name="mail_reply_textbox_size_auto" value="1" {if !empty($prefs.mail_reply_textbox_size_auto)}checked{/if}> {'preferences.account.mail.reply_textbox_size.auto'|devblocks_translate}</label><br>
 		</div>
 	</div>
 
@@ -114,9 +115,9 @@
 			<input type="hidden" name="worker_emails[]" value="{$address->address}">
 
 			{if 0 == strcasecmp($address->address, $active_worker->email)}
-			<button type="button"><span class="cerb-sprite2 sprite-tick-circle-gray"></span></button>
+			<button type="button"><span class="glyphicons glyphicons-circle-ok" style="font-size:16px;color:rgb(80,80,80);"></span></button>
 			{else}
-			<button type="button" onclick="if(confirm('Are you sure you want to delete this email address?')) { $(this).closest('li').remove(); }" class="delete"><span class="cerb-sprite2 sprite-minus-circle"></span></button>
+			<button type="button" onclick="if(confirm('Are you sure you want to delete this email address?')) { $(this).closest('li').remove(); }" class="delete"><span class="glyphicons glyphicons-circle-minus" style="color:rgb(200,0,0);"></span></button>
 			{/if}
 
 			<b>{$address->address}</b>
@@ -139,7 +140,7 @@
 	</ul>
 </fieldset>
 
-<button type="submit"><span class="cerb-sprite2 sprite-tick-circle"></span> {'common.save_changes'|devblocks_translate}</button>
+<button type="submit"><span class="glyphicons glyphicons-circle-ok" style="color:rgb(0,180,0);"></span> {'common.save_changes'|devblocks_translate}</button>
 </form>
 
 <form action="{devblocks_url}{/devblocks_url}" name="resendConfirmationForm" method="post">

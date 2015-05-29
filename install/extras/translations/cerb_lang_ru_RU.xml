@@ -133,11 +133,6 @@
 				<seg>[Почта] Может создавать новые сообщение из хелпдеска</seg>
 			</tuv>
 		</tu>
-		<tu tuid="acl.core.rss">
-			<tuv xml:lang="ru_RU">
-				<seg>[RSS] Может экспортировать списки как фиды RSS</seg>
-			</tuv>
-		</tu>
 		<tu tuid="acl.core.snippets.actions.create">
 			<tuv xml:lang="ru_RU">
 				<seg/>
@@ -521,11 +516,6 @@
 		<tu tuid="activity.mail.search">
 			<tuv xml:lang="ru_RU">
 				<seg>%s ищет заявки</seg>
-			</tuv>
-		</tu>
-		<tu tuid="activity.mail.workflow">
-			<tuv xml:lang="ru_RU">
-				<seg>%s просматриват Поток:%s </seg>
 			</tuv>
 		</tu>
 		<tu tuid="activity.mail.workspaces">
@@ -1178,6 +1168,11 @@
 				<seg>GUID</seg>
 			</tuv>
 		</tu>
+		<tu tuid="common.history">
+			<tuv xml:lang="ru_RU">
+				<seg>история</seg>
+			</tuv>
+		</tu>
 		<tu tuid="common.hours">
 			<tuv xml:lang="ru_RU">
 				<seg>часов</seg>
@@ -1201,6 +1196,11 @@
 		<tu tuid="common.import.upload_csv.tip">
 			<tuv xml:lang="ru_RU">
 				<seg/>
+			</tuv>
+		</tu>
+		<tu tuid="common.importance">
+			<tuv xml:lang="ru_RU">
+				<seg></seg>
 			</tuv>
 		</tu>
 		<tu tuid="common.inactive">
@@ -1371,6 +1371,11 @@
 		<tu tuid="common.no">
 			<tuv xml:lang="ru_RU">
 				<seg>нет</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.no_thanks">
+			<tuv xml:lang="ru_RU">
+				<seg>Нет</seg>
 			</tuv>
 		</tu>
 		<tu tuid="common.nobody">
@@ -1803,12 +1808,12 @@
 				<seg>Идентификатор профайла</seg>
 			</tuv>
 		</tu>
-		<tu tuid="config.mail.pop3.error_hostname">
+		<tu tuid="config.mailboxes.error_hostname">
 			<tuv xml:lang="ru_RU">
 				<seg>Ошибка: Не указано имя хоста.</seg>
 			</tuv>
 		</tu>
-		<tu tuid="config.mail.pop3.failed">
+		<tu tuid="config.mailboxes.failed">
 			<tuv xml:lang="ru_RU">
 				<seg>Соединение с почтовым ящиком не удалось.</seg>
 			</tuv>
@@ -2768,11 +2773,6 @@
 				<seg>(текущий бакет)</seg>
 			</tuv>
 		</tu>
-		<tu tuid="display.reply.next.move.no_thanks">
-			<tuv xml:lang="ru_RU">
-				<seg>Нет</seg>
-			</tuv>
-		</tu>
 		<tu tuid="display.reply.next.owner">
 			<tuv xml:lang="ru_RU">
 				<seg>На кого назначить?</seg>
@@ -2996,11 +2996,6 @@
 		<tu tuid="header.config">
 			<tuv xml:lang="ru_RU">
 				<seg>Настройка хелпдеска</seg>
-			</tuv>
-		</tu>
-		<tu tuid="header.history">
-			<tuv xml:lang="ru_RU">
-				<seg>история</seg>
 			</tuv>
 		</tu>
 		<tu tuid="header.last_viewed">
@@ -3286,11 +3281,6 @@
 		<tu tuid="mail.worklist.draft_in_progress">
 			<tuv xml:lang="ru_RU">
 				<seg></seg>
-			</tuv>
-		</tu>
-		<tu tuid="mail.workflow">
-			<tuv xml:lang="ru_RU">
-				<seg>Поток</seg>
 			</tuv>
 		</tu>
 		<tu tuid="mail.workspaces.create">
@@ -4048,7 +4038,7 @@
 				<seg/>
 			</tuv>
 		</tu>
-		<tu tuid="preferences.account.mail.reply_textbox_size.inelastic">
+		<tu tuid="preferences.account.mail.reply_textbox_size.auto">
 			<tuv xml:lang="ru_RU">
 				<seg/>
 			</tuv>
@@ -4473,11 +4463,6 @@
 				<seg>История сотрудника</seg>
 			</tuv>
 		</tu>
-		<tu tuid="rss.bad_feed">
-			<tuv xml:lang="ru_RU">
-				<seg>Bad feed data.</seg>
-			</tuv>
-		</tu>
 		<tu tuid="search.date.between">
 			<tuv xml:lang="ru_RU">
 				<seg>между</seg>
@@ -4757,11 +4742,6 @@ login &lt;ftp&#13;
 				<seg>Задачи заявки</seg>
 			</tuv>
 		</tu>
-		<tu tuid="ticket.assignable">
-			<tuv xml:lang="ru_RU">
-				<seg/>
-			</tuv>
-		</tu>
 		<tu tuid="ticket.closed_at">
 			<tuv xml:lang="ru_RU">
 				<seg/>
@@ -4865,11 +4845,6 @@ login &lt;ftp&#13;
 		<tu tuid="ticket.spam_training">
 			<tuv xml:lang="ru_RU">
 				<seg>Обучение спаму</seg>
-			</tuv>
-		</tu>
-		<tu tuid="ticket.status">
-			<tuv xml:lang="ru_RU">
-				<seg>Состояние</seg>
 			</tuv>
 		</tu>
 		<tu tuid="ticket.subject">

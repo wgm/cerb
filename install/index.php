@@ -307,7 +307,7 @@ switch($step) {
 		@$db_pass = DevblocksPlatform::importGPC($_POST['db_pass'],'string');
 
 		@$db = DevblocksPlatform::getDatabaseService();
-		if(!is_null($db) && @$db->isConnected()) {
+		if(!is_null($db)) {
 			// If we've been to this step, skip past framework.config.php
 			$tpl->assign('step', STEP_INIT_DB);
 			$tpl->display('steps/redirect.tpl');
@@ -502,20 +502,23 @@ switch($step) {
 
 	// Initialize the database
 	case STEP_INIT_DB:
+		$db = DevblocksPlatform::getDatabaseService();
+		
 		// [TODO] Add current user to patcher/upgrade authorized IPs
 		
-		if(DevblocksPlatform::isDatabaseEmpty()) { // install
+		$tables = $db->metaTables();
+		
+		if(empty($tables)) { // install
 			try {
 				DevblocksPlatform::update();
+				
 			} catch(Exception $e) {
 				$tpl->assign('error', $e->getMessage());
 				$tpl->assign('template', 'steps/step_init_db.tpl');
 			}
 			
 			// Read in plugin information from the filesystem to the database
-			DevblocksPlatform::readPlugins();
-			
-			$plugins = DevblocksPlatform::getPluginRegistry();
+			$plugins = DevblocksPlatform::readPlugins();
 			
 			// Tailor which plugins are enabled by default
 			if(is_array($plugins))
@@ -541,6 +544,8 @@ switch($step) {
 			
 			// Platform + App
 			try {
+				DevblocksPlatform::clearCache();
+				
 				CerberusApplication::update();
 				
 				// Reload plugin translations
@@ -633,70 +638,93 @@ switch($step) {
 	
 	// Set up and test the outgoing SMTP
 	case STEP_OUTGOING_MAIL:
-		$settings = DevblocksPlatform::getPluginSettingsService();
-		
-		@$smtp_host = DevblocksPlatform::importGPC($_POST['smtp_host'],'string',$settings->get('cerberusweb.core',CerberusSettings::SMTP_HOST,CerberusSettingsDefaults::SMTP_HOST));
-		@$smtp_port = DevblocksPlatform::importGPC($_POST['smtp_port'],'integer',$settings->get('cerberusweb.core',CerberusSettings::SMTP_PORT,CerberusSettingsDefaults::SMTP_PORT));
-		@$smtp_enc = DevblocksPlatform::importGPC($_POST['smtp_enc'],'string',$settings->get('cerberusweb.core',CerberusSettings::SMTP_ENCRYPTION_TYPE,CerberusSettingsDefaults::SMTP_ENCRYPTION_TYPE));
+		@$extension_id = DevblocksPlatform::importGPC($_POST['extension_id'],'string');
+		@$smtp_host = DevblocksPlatform::importGPC($_POST['smtp_host'],'string');
+		@$smtp_port = DevblocksPlatform::importGPC($_POST['smtp_port'],'integer');
+		@$smtp_enc = DevblocksPlatform::importGPC($_POST['smtp_enc'],'string');
 		@$smtp_auth_user = DevblocksPlatform::importGPC($_POST['smtp_auth_user'],'string');
 		@$smtp_auth_pass = DevblocksPlatform::importGPC($_POST['smtp_auth_pass'],'string');
+		
 		@$form_submit = DevblocksPlatform::importGPC($_POST['form_submit'],'integer');
 		@$passed = DevblocksPlatform::importGPC($_POST['passed'],'integer');
 		
 		if(!empty($form_submit)) {
-			$mail_service = DevblocksPlatform::getMailService();
-			
-			$mailer = null;
+
+			// Test the given mail transport details
 			try {
-				$mailer = $mail_service->getMailer(array(
-					'host' => $smtp_host,
-					'port' => $smtp_port,
-					'auth_user' => $smtp_auth_user,
-					'auth_pass' => $smtp_auth_pass,
-					'enc' => $smtp_enc,
-				));
+				if(false == ($mail_transport = Extension_MailTransport::get($extension_id)))
+					throw new Exception_CerbInstaller("Invalid mail transport extension.");
 				
-				$transport = $mailer->getTransport();
-				$transport->start();
-				$transport->stop();
+				$error = null;
 				
-				if(!empty($smtp_host))
-					$settings->set('cerberusweb.core',CerberusSettings::SMTP_HOST, $smtp_host);
-				if(!empty($smtp_port))
-					$settings->set('cerberusweb.core',CerberusSettings::SMTP_PORT, $smtp_port);
-				if(!empty($smtp_auth_user)) {
-					$settings->set('cerberusweb.core',CerberusSettings::SMTP_AUTH_ENABLED, 1);
-					$settings->set('cerberusweb.core',CerberusSettings::SMTP_AUTH_USER, $smtp_auth_user);
-					$settings->set('cerberusweb.core',CerberusSettings::SMTP_AUTH_PASS, $smtp_auth_pass);
-				} else {
-					$settings->set('cerberusweb.core',CerberusSettings::SMTP_AUTH_ENABLED, 0);
+				if($mail_transport->id == CerbMailTransport_Smtp::ID) {
+					$options = array(
+						'host' => $smtp_host,
+						'port' => $smtp_port,
+						'auth_user' => $smtp_auth_user,
+						'auth_pass' => $smtp_auth_pass,
+						'enc' => $smtp_enc,
+					);
+				
+					if(false == ($mail_transport->testConfig($options, $error)))
+						throw new Exception_CerbInstaller($error);
+					
+					$fields = array(
+						DAO_MailTransport::NAME => $smtp_host . ' SMTP',
+						DAO_MailTransport::EXTENSION_ID => CerbMailTransport_Smtp::ID,
+						DAO_MailTransport::IS_DEFAULT => 1,
+						DAO_MailTransport::PARAMS_JSON => json_encode($options),
+					);
+					$transport_id = DAO_MailTransport::create($fields);
+					
+				} elseif($mail_transport->id == CerbMailTransport_Null::ID) {
+					// This is always valid
+					$fields = array(
+						DAO_MailTransport::NAME => 'Null Mailer',
+						DAO_MailTransport::EXTENSION_ID => CerbMailTransport_Null::ID,
+						DAO_MailTransport::IS_DEFAULT => 1,
+						DAO_MailTransport::PARAMS_JSON => json_encode(array()),
+					);
+					$transport_id = DAO_MailTransport::create($fields);
+					
 				}
-				if(!empty($smtp_enc))
-					$settings->set('cerberusweb.core',CerberusSettings::SMTP_ENCRYPTION_TYPE, $smtp_enc);
+				
+				if($transport_id) {
+					// Set this as the default transport id
+					DAO_MailTransport::setDefault($transport_id);
+					
+					// Set it as the transport on the default reply-to
+					if(false != ($default_replyto = DAO_AddressOutgoing::getDefault())) {
+						DAO_AddressOutgoing::update($default_replyto->address_id, array(
+							DAO_AddressOutgoing::REPLY_MAIL_TRANSPORT_ID => $transport_id,
+						));
+					}
+				}
+				
+				// If we made it this far then we succeeded
 				
 				$tpl->assign('step', STEP_DEFAULTS);
 				$tpl->display('steps/redirect.tpl');
 				exit;
 				
+			} catch (Exception_CerbInstaller $e) {
+				$error = $e->getMessage();
+				
+				$tpl->assign('extension_id', $extension_id);
+				$tpl->assign('smtp_host', $smtp_host);
+				$tpl->assign('smtp_port', $smtp_port);
+				$tpl->assign('smtp_auth_user', $smtp_auth_user);
+				$tpl->assign('smtp_auth_pass', $smtp_auth_pass);
+				$tpl->assign('smtp_enc', $smtp_enc);
+				$tpl->assign('form_submit', true);
+				
+				$tpl->assign('error_display', 'SMTP Connection Failed! ' . $e->getMessage());
+				$tpl->assign('template', 'steps/step_outgoing_mail.tpl');
 			}
-			catch(Exception $e) {
-				$form_submit = 0;
-				$tpl->assign('smtp_error_display', 'SMTP Connection Failed! ' . $e->getMessage());
-			}
-			$tpl->assign('smtp_host', $smtp_host);
-			$tpl->assign('smtp_port', $smtp_port);
-			$tpl->assign('smtp_auth_user', $smtp_auth_user);
-			$tpl->assign('smtp_auth_pass', $smtp_auth_pass);
-			$tpl->assign('smtp_enc', $smtp_enc);
-			$tpl->assign('form_submit', $form_submit);
+			
 		} else {
-			$tpl->assign('smtp_host', 'localhost');
-			$tpl->assign('smtp_port', '25');
-			$tpl->assign('smtp_enc', 'None');
+			$tpl->assign('template', 'steps/step_outgoing_mail.tpl');
 		}
-		
-		// First time, or retry
-		$tpl->assign('template', 'steps/step_outgoing_mail.tpl');
 		
 		break;
 
@@ -704,16 +732,23 @@ switch($step) {
 	case STEP_DEFAULTS:
 		@$form_submit = DevblocksPlatform::importGPC($_POST['form_submit'],'integer');
 		@$worker_email = DevblocksPlatform::importGPC($_POST['worker_email'],'string');
+		@$worker_firstname = DevblocksPlatform::importGPC($_POST['worker_firstname'],'string');
+		@$worker_lastname = DevblocksPlatform::importGPC($_POST['worker_lastname'],'string');
 		@$worker_pass = DevblocksPlatform::importGPC($_POST['worker_pass'],'string');
 		@$worker_pass2 = DevblocksPlatform::importGPC($_POST['worker_pass2'],'string');
+		@$timezone = DevblocksPlatform::importGPC($_POST['timezone'],'string');
 
-		$settings = DevblocksPlatform::getPluginSettingsService();
+		$date = DevblocksPlatform::getDateService();
+		
+		$timezones = $date->getTimezones();
+		$tpl->assign('timezones', $timezones);
 		
 		if(!empty($form_submit)) {
 			// Persist form scope
 			$tpl->assign('worker_email', $worker_email);
 			$tpl->assign('worker_pass', $worker_pass);
 			$tpl->assign('worker_pass2', $worker_pass2);
+			$tpl->assign('timezone', $timezone);
 			
 			// Sanity/Error checking
 			if(!empty($worker_email) && !empty($worker_pass) && $worker_pass == $worker_pass2) {
@@ -764,26 +799,74 @@ switch($step) {
 						DAO_Worker::TITLE => 'Administrator',
 						DAO_Worker::IS_SUPERUSER => 1,
 						DAO_Worker::AUTH_EXTENSION_ID => 'login.password',
+						DAO_Worker::TIME_FORMAT => 'D, d M Y h:i a',
+						DAO_Worker::LANGUAGE => 'en_US',
 					);
+					
+					if(!empty($worker_firstname)) {
+						$fields[DAO_Worker::FIRST_NAME] = $worker_firstname;
+						$fields[DAO_Worker::AT_MENTION_NAME] = $worker_firstname;
+					}
+					
+					if(!empty($worker_lastname))
+						$fields[DAO_Worker::LAST_NAME] = $worker_lastname;
+					
+					if(!empty($timezone))
+						$fields[DAO_Worker::TIMEZONE] = $timezone;
 					
 					$worker_id = DAO_Worker::create($fields);
 					
 					DAO_Worker::setAuth($worker_id, $worker_pass);
 	
 					// Add the worker e-mail to the addresses table
+					
 					if(!empty($worker_email))
 						DAO_Address::lookupAddress($worker_email, true);
 					
 					// Authorize this e-mail address (watchers, etc.)
+					
 					DAO_AddressToWorker::assign($worker_email, $worker_id, true);
 					
 					// Default group memberships
+					
 					if(!empty($dispatch_gid))
 						DAO_Group::setGroupMember($dispatch_gid,$worker_id,true);
 					if(!empty($support_gid))
 						DAO_Group::setGroupMember($support_gid,$worker_id,true);
 					if(!empty($sales_gid))
 						DAO_Group::setGroupMember($sales_gid,$worker_id,true);
+					
+					// Create a default calendar
+					
+					if(!empty($worker_firstname))
+						$label = sprintf("%s%s's Calendar", $worker_firstname, $worker_lastname ? (' ' . $worker_lastname) : '');
+					else
+						$label = 'My Calendar';
+					
+					$fields = array(
+						DAO_Calendar::NAME => $label,
+						DAO_Calendar::OWNER_CONTEXT => CerberusContexts::CONTEXT_WORKER,
+						DAO_Calendar::OWNER_CONTEXT_ID => $worker_id,
+						DAO_Calendar::PARAMS_JSON => json_encode(array(
+							"manual_disabled" => "0",
+							"sync_enabled" => "0",
+							"start_on_mon" => "1",
+							"hide_start_time" => "0",
+							"color_available" => "#A0D95B",
+							"color_busy" => "#C8C8C8",
+							"series" => array(
+								array("datasource"=>""),
+								array("datasource"=>""),
+								array("datasource"=>""),
+							)
+						)),
+						DAO_Calendar::UPDATED_AT => time(),
+					);
+					$calendar_id = DAO_Calendar::create($fields);
+					
+					DAO_Worker::update($worker_id, array(
+						DAO_Worker::CALENDAR_ID => $calendar_id,
+					));
 				}
 				
 				// Send a first ticket which allows people to reply for support
@@ -801,7 +884,7 @@ Welcome to Cerb!
 
 We automatically set up a few things for you during the installation process.
 
-You'll notice you have three groups:
+You'll notice that you have three groups:
 * Dispatch: All your mail will be delivered to this group by default.
 * Support: This is a group for holding tickets related to customer service.
 * Sales: This is a group for holding tickets relates to sales.
@@ -811,14 +894,14 @@ If these default groups don't meet your needs, feel free to change them by click
 Simply reply to this message if you have any questions.  Our response will show up on this page as a new message.
 
 For project news, training resources, sneak peeks of development progress, tips & tricks, and more:
-http://www.facebook.com/cerbapp
-http://twitter.com/cerb6
-https://vimeo.com/channels/cerb
-http://cerbweb.com/book/latest/worker_guide/
+ * http://www.facebook.com/cerbapp
+ * http://twitter.com/cerb6
+ * https://vimeo.com/channels/cerb
+ * http://cerbweb.com/book/latest/worker_guide/
 
-Thanks!
----
-The Cerb Team
+Enjoy!
+-- 
+the Cerb team
 Webgroup Media, LLC.
 http://www.cerbweb.com/
 EOF;
@@ -913,7 +996,7 @@ EOF;
 		if(is_array($crons))
 		foreach($crons as $id => $cron) { /* @var $cron CerberusCronPageExtension */
 			switch($id) {
-				case 'cron.pop3':
+				case 'cron.mailbox':
 					$cron->setParam(CerberusCronPageExtension::PARAM_ENABLED, true);
 					$cron->setParam(CerberusCronPageExtension::PARAM_DURATION, '5');
 					$cron->setParam(CerberusCronPageExtension::PARAM_TERM, 'm');

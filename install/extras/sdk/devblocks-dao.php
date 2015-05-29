@@ -61,7 +61,7 @@ foreach($fields as $field_name => $field_type) {
 		$db = DevblocksPlatform::getDatabaseService();
 		
 		$sql = "INSERT INTO <?php echo $table_name; ?> () VALUES ()";
-		$db->Execute($sql);
+		$db->ExecuteMaster($sql);
 		$id = $db->LastInsertId();
 		
 		self::update($id, $fields);
@@ -118,7 +118,7 @@ foreach($fields as $field_name => $field_type) {
 	 * @param integer $limit
 	 * @return Model_<?php echo $class_name; ?>[]
 	 */
-	static function getWhere($where=null, $sortBy=null, $sortAsc=true, $limit=null) {
+	static function getWhere($where=null, $sortBy=null, $sortAsc=true, $limit=null, $options=null) {
 		$db = DevblocksPlatform::getDatabaseService();
 
 		list($where_sql, $sort_sql, $limit_sql) = self::_getWhereSQL($where, $sortBy, $sortAsc, $limit);
@@ -130,9 +130,29 @@ foreach($fields as $field_name => $field_type) {
 			$sort_sql.
 			$limit_sql
 		;
-		$rs = $db->Execute($sql);
+		
+		if($options & Cerb_ORMHelper::OPT_GET_MASTER_ONLY) {
+			$rs = $db->ExecuteMaster($sql);
+		} else {
+			$rs = $db->ExecuteSlave($sql);
+		}
 		
 		return self::_getObjectsFromResult($rs);
+	}
+	
+	/**
+	 *
+	 * @param bool $nocache
+	 * @return Model_<?php echo $class_name,"\n"; ?>[]
+	 */
+	static function getAll($nocache=false) {
+		//$cache = DevblocksPlatform::getCacheService();
+		//if($nocache || null === ($objects = $cache->load(self::_CACHE_ALL))) {
+			$objects = self::getWhere(null, DAO_<?php echo $class_name,"\n"; ?>::NAME, true, null, Cerb_ORMHelper::OPT_GET_MASTER_ONLY);
+			//$cache->save($buckets, self::_CACHE_ALL);
+		//}
+		
+		return $objects;
 	}
 
 	/**
@@ -140,6 +160,9 @@ foreach($fields as $field_name => $field_type) {
 	 * @return Model_<?php echo $class_name,"\n"; ?>
 	 */
 	static function get($id) {
+		if(empty($id))
+			return null;
+		
 		$objects = self::getWhere(sprintf("%s = %d",
 			self::ID,
 			$id
@@ -150,6 +173,42 @@ foreach($fields as $field_name => $field_type) {
 		
 		return null;
 	}
+	
+	/**
+	 * 
+	 * @param array $ids
+	 * @return Model_<?php echo $class_name,"\n"; ?>[]
+	 */
+	static function getIds($ids) {
+		if(!is_array($ids))
+			$ids = array($ids);
+
+		if(empty($ids))
+			return array();
+
+		if(!method_exists(get_called_class(), 'getWhere'))
+			return array();
+
+		$db = DevblocksPlatform::getDatabaseService();
+
+		$ids = DevblocksPlatform::importVar($ids, 'array:integer');
+
+		$models = array();
+
+		$results = static::getWhere(sprintf("id IN (%s)",
+			implode(',', $ids)
+		));
+
+		// Sort $models in the same order as $ids
+		foreach($ids as $id) {
+			if(isset($results[$id]))
+				$models[$id] = $results[$id];
+		}
+
+		unset($results);
+
+		return $models;
+	}	
 	
 	/**
 	 * @param resource $rs
@@ -189,7 +248,7 @@ foreach($fields as $field_name => $field_type) {
 		
 		$ids_list = implode(',', $ids);
 		
-		$db->Execute(sprintf("DELETE FROM <?php echo $table_name; ?> WHERE id IN (%s)", $ids_list));
+		$db->ExecuteMaster(sprintf("DELETE FROM <?php echo $table_name; ?> WHERE id IN (%s)", $ids_list));
 		
 		// Fire event
 		$eventMgr = DevblocksPlatform::getEventService();
@@ -340,9 +399,9 @@ foreach($fields as $field_name => $field_type) {
 			$sort_sql;
 			
 		if($limit > 0) {
-			$rs = $db->SelectLimit($sql,$limit,$page*$limit) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs ADORecordSet */
+			$rs = $db->SelectLimit($sql,$limit,$page*$limit) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs mysqli_result */
 		} else {
-			$rs = $db->Execute($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs ADORecordSet */
+			$rs = $db->ExecuteSlave($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs mysqli_result */
 			$total = mysqli_num_rows($rs);
 		}
 		
@@ -362,7 +421,7 @@ foreach($fields as $field_name => $field_type) {
 					($has_multiple_values ? "SELECT COUNT(DISTINCT <?php echo $table_name; ?>.id) " : "SELECT COUNT(<?php echo $table_name; ?>.id) ").
 					$join_sql.
 					$where_sql;
-				$total = $db->GetOne($count_sql);
+				$total = $db->GetOneSlave($count_sql);
 			}
 		}
 		
@@ -619,7 +678,7 @@ foreach($fields as $field_name => $field_type) {
 		
 		// Add searchable custom fields
 		
-		$fields = self::_appendFieldsFromQuickSearchContext(<?php echo $ctx_ext_id; ?>, $fields, null);
+		$fields = self::_appendFieldsFromQuickSearchContext('<?php echo $ctx_ext_id; ?>', $fields, null);
 		
 		// Sort by keys
 		ksort($fields);
@@ -1096,7 +1155,6 @@ class Context_<?php echo $class_name;?> extends Extension_DevblocksContext imple
 		$view->renderFilters = false;
 		$view->renderTemplate = 'contextlinks_chooser';
 		
-		C4_AbstractViewLoader::setView($view_id, $view);
 		return $view;
 	}
 	
@@ -1121,7 +1179,6 @@ class Context_<?php echo $class_name;?> extends Extension_DevblocksContext imple
 		$view->addParamsRequired($params_req, true);
 		
 		$view->renderTemplate = 'context';
-		C4_AbstractViewLoader::setView($view_id, $view);
 		return $view;
 	}
 	
@@ -1235,7 +1292,7 @@ class Context_<?php echo $class_name;?> extends Extension_DevblocksContext imple
 			<td width="0%" nowrap="nowrap" valign="top" align="right">{$translate->_('common.watchers')|capitalize}: </td>
 			<td width="100%">
 				{if empty($model->id)}
-					<button type="button" class="chooser_watcher"><span class="cerb-sprite sprite-view"></span></button>
+					<button type="button" class="chooser_watcher"><span class="glyphicons glyphicons-search"></span></button>
 					<ul class="chooser-container bubbles" style="display:block;"></ul>
 				{else}
 					{$object_watchers = DAO_ContextLink::getContextLinks('<?php echo $ctx_ext_id; ?>', array($model->id), CerberusContexts::CONTEXT_WORKER)}
@@ -1261,7 +1318,7 @@ class Context_<?php echo $class_name;?> extends Extension_DevblocksContext imple
 
 <fieldset class="peek">
 	<legend>{'common.comment'|devblocks_translate|capitalize}</legend>
-	&lt;textarea name="comment" rows="5" cols="45" style="width:98%;" placeholder="{'comment.notify.at_mention'|devblocks_translate}"&gt;&lt;/textarea&gt;
+	&lt;textarea name="comment" rows="2" cols="45" style="width:98%;" placeholder="{'comment.notify.at_mention'|devblocks_translate}"&gt;&lt;/textarea&gt;
 </fieldset>
 
 {if !empty($model->id)}
@@ -1272,14 +1329,14 @@ class Context_<?php echo $class_name;?> extends Extension_DevblocksContext imple
 		Are you sure you want to delete this <?php echo strtolower($object_name); ?>?
 	</div>
 	
-	<button type="button" class="delete" onclick="var $frm=$(this).closest('form');$frm.find('input:hidden[name=do_delete]').val('1');$frm.find('button.submit').click();"><span class="cerb-sprite2 sprite-tick-circle"></span> Confirm</button>
-	<button type="button" onclick="$(this).closest('form').find('div.buttons').fadeIn();$(this).closest('fieldset.delete').fadeOut();"><span class="cerb-sprite2 sprite-minus-circle"></span> {'common.cancel'|devblocks_translate|capitalize}</button>
+	<button type="button" class="delete" onclick="var $frm=$(this).closest('form');$frm.find('input:hidden[name=do_delete]').val('1');$frm.find('button.submit').click();"><span class="glyphicons glyphicons-circle-ok" style="color:rgb(0,180,0);"></span> Confirm</button>
+	<button type="button" onclick="$(this).closest('form').find('div.buttons').fadeIn();$(this).closest('fieldset.delete').fadeOut();"><span class="glyphicons glyphicons-circle-minus" style="color:rgb(200,0,0);"></span> {'common.cancel'|devblocks_translate|capitalize}</button>
 </fieldset>
 {/if}
 
 <div class="buttons">
-	<button type="button" class="submit" onclick="genericAjaxPopupPostCloseReloadView(null,'frm<?php echo $class_name; ?>Peek','{$view_id}', false, '<?php echo $table_name; ?>_save');"><span class="cerb-sprite2 sprite-tick-circle"></span> {$translate->_('common.save_changes')|capitalize}</button>
-	{if !empty($model->id)}<button type="button" onclick="$(this).parent().siblings('fieldset.delete').fadeIn();$(this).closest('div').fadeOut();"><span class="cerb-sprite2 sprite-cross-circle"></span> {'common.delete'|devblocks_translate|capitalize}</button>{/if}
+	<button type="button" class="submit" onclick="genericAjaxPopupPostCloseReloadView(null,'frm<?php echo $class_name; ?>Peek','{$view_id}', false, '<?php echo $table_name; ?>_save');"><span class="glyphicons glyphicons-circle-ok" style="color:rgb(0,180,0);"></span> {$translate->_('common.save_changes')|capitalize}</button>
+	{if !empty($model->id)}<button type="button" onclick="$(this).parent().siblings('fieldset.delete').fadeIn();$(this).closest('div').fadeOut();"><span class="glyphicons glyphicons-circle-remove" style="color:rgb(200,0,0);"></span> {'common.delete'|devblocks_translate|capitalize}</button>{/if}
 </div>
 
 {if !empty($model->id)}
@@ -1321,8 +1378,10 @@ class Context_<?php echo $class_name;?> extends Extension_DevblocksContext imple
 
 		$textarea.atwho({
 			at: '@',
-			{literal}tpl: '<li data-value="@${at_mention}">${name} <small style="margin-left:10px;">${title}</small></li>',{/literal}
+			{literal}displayTpl: '<li>${name} <small style="margin-left:10px;">${title}</small> <small style="margin-left:10px;">@${at_mention}</small></li>',{/literal}
+			{literal}insertTpl: '@${at_mention}',{/literal}
 			data: atwho_workers,
+			searchKey: '_index',
 			limit: 10
 		});
 	});
@@ -1345,15 +1404,15 @@ $field_prefix = strtolower(substr($table_name,0,1));
 <table cellpadding="0" cellspacing="0" border="0" class="worklist" width="100%">
 	<tr>
 		<td nowrap="nowrap"><span class="title">{$view->name}</span></td>
-		<td nowrap="nowrap" align="right">
-			<a href="javascript:;" title="{'common.add'|devblocks_translate|capitalize}" class="minimal" onclick="genericAjaxPopup('peek','c=internal&a=showPeekPopup&context={$view_context}&context_id=0&view_id={$view->id}',null,false,'500');"><span class="cerb-sprite2 sprite-plus-circle-frame"></span></a>
-			<a href="javascript:;" title="{'common.search'|devblocks_translate|capitalize}" class="minimal" onclick="genericAjaxPopup('search','c=internal&a=viewShowQuickSearchPopup&view_id={$view->id}',null,false,'400');"><span class="cerb-sprite2 sprite-document-search-result"></span></a>
-			<a href="javascript:;" title="{'common.customize'|devblocks_translate|capitalize}" class="minimal" onclick="genericAjaxGet('customize{$view->id}','c=internal&a=viewCustomize&id={$view->id}');toggleDiv('customize{$view->id}','block');"><span class="cerb-sprite2 sprite-gear"></span></a>
-			<a href="javascript:;" title="Subtotals" class="subtotals minimal"><span class="cerb-sprite2 sprite-application-sidebar-list"></span></a>
-			{*<a href="javascript:;" title="{$translate->_('common.import')|capitalize}" onclick="genericAjaxPopup('import','c=internal&a=showImportPopup&context={$view_context}&view_id={$view->id}',null,false,'500');"><span class="cerb-sprite2 sprite-application-import"></span></a>*}
-			<a href="javascript:;" title="{$translate->_('common.export')|capitalize}" class="minimal" onclick="genericAjaxGet('{$view->id}_tips','c=internal&a=viewShowExport&id={$view->id}');toggleDiv('{$view->id}_tips','block');"><span class="cerb-sprite2 sprite-application-export"></span></a>
-			<a href="javascript:;" title="{$translate->_('common.copy')|capitalize}" onclick="genericAjaxGet('{$view->id}_tips','c=internal&a=viewShowCopy&view_id={$view->id}');toggleDiv('{$view->id}_tips','block');"><span class="cerb-sprite2 sprite-applications"></span></a>
-			<a href="javascript:;" title="{'common.refresh'|devblocks_translate|capitalize}" class="minimal" onclick="genericAjaxGet('view{$view->id}','c=internal&a=viewRefresh&id={$view->id}');"><span class="cerb-sprite2 sprite-arrow-circle-135-left"></span></a>
+		<td nowrap="nowrap" align="right" class="title-toolbar">
+			<a href="javascript:;" title="{'common.add'|devblocks_translate|capitalize}" class="minimal" onclick="genericAjaxPopup('peek','c=internal&a=showPeekPopup&context={$view_context}&context_id=0&view_id={$view->id}',null,false,'500');"><span class="glyphicons glyphicons-circle-plus"></span></a>
+			<a href="javascript:;" title="{'common.search'|devblocks_translate|capitalize}" class="minimal" onclick="genericAjaxPopup('search','c=internal&a=viewShowQuickSearchPopup&view_id={$view->id}',null,false,'400');"><span class="glyphicons glyphicons-search"></span></a>
+			<a href="javascript:;" title="{'common.customize'|devblocks_translate|capitalize}" class="minimal" onclick="genericAjaxGet('customize{$view->id}','c=internal&a=viewCustomize&id={$view->id}');toggleDiv('customize{$view->id}','block');"><span class="glyphicons glyphicons-cogwheel"></span></a>
+			<a href="javascript:;" title="{'common.subtotals'|devblocks_translate|capitalize}" class="subtotals minimal"><span class="glyphicons glyphicons-signal"></span></a>
+			{*<a href="javascript:;" title="{$translate->_('common.import')|capitalize}" onclick="genericAjaxPopup('import','c=internal&a=showImportPopup&context={$view_context}&view_id={$view->id}',null,false,'500');"><span class="glyphicons glyphicons-file-import"></span></a>*}
+			<a href="javascript:;" title="{$translate->_('common.export')|capitalize}" class="minimal" onclick="genericAjaxGet('{$view->id}_tips','c=internal&a=viewShowExport&id={$view->id}');toggleDiv('{$view->id}_tips','block');"><span class="glyphicons glyphicons-file-export"></span></a>
+			<a href="javascript:;" title="{$translate->_('common.copy')|capitalize}" onclick="genericAjaxGet('{$view->id}_tips','c=internal&a=viewShowCopy&view_id={$view->id}');toggleDiv('{$view->id}_tips','block');"><span class="glyphicons glyphicons-duplicate"></span></a>
+			<a href="javascript:;" title="{'common.refresh'|devblocks_translate|capitalize}" class="minimal" onclick="genericAjaxGet('view{$view->id}','c=internal&a=viewRefresh&id={$view->id}');"><span class="glyphicons glyphicons-refresh"></span></a>
 			<input type="checkbox" class="select-all">
 		</td>
 	</tr>
@@ -1374,21 +1433,24 @@ $field_prefix = strtolower(substr($table_name,0,1));
 	{* Column Headers *}
 	<thead>
 	<tr>
-		<th style="text-align:center;width:75px;">
-			<a href="javascript:;">{'common.watchers'|devblocks_translate|capitalize}</a>
+		{if !$view->options.disable_watchers}
+		<th class="no-sort" style="text-align:center;width:40px;padding-left:0;padding-right:0;" title="{'common.watchers'|devblocks_translate|capitalize}">
+			<span class="glyphicons glyphicons-eye-open" style="color:rgb(80,80,80);"></span>
 		</th>
+		{/if}
+
 		{foreach from=$view->view_columns item=header name=headers}
 			{* start table header, insert column title and link *}
-			<th nowrap="nowrap">
-			<a href="javascript:;" onclick="genericAjaxGet('view{$view->id}','c=internal&a=viewSortBy&id={$view->id}&sortBy={$header}');">{$view_fields.$header->db_label|capitalize}</a>
+			<th class="{if $view->options.disable_sorting}no-sort{/if}">
+			{if !$view->options.disable_sorting && !empty($view_fields.$header->db_column)}
+				<a href="javascript:;" onclick="genericAjaxGet('view{$view->id}','c=internal&a=viewSortBy&id={$view->id}&sortBy={$header}');">{$view_fields.$header->db_label|capitalize}</a>
+			{else}
+				<a href="javascript:;" style="text-decoration:none;">{$view_fields.$header->db_label|capitalize}</a>
+			{/if}
 			
 			{* add arrow if sorting by this column, finish table header tag *}
 			{if $header==$view->renderSortBy}
-				{if $view->renderSortAsc}
-					<span class="cerb-sprite sprite-sort_ascending"></span>
-				{else}
-					<span class="cerb-sprite sprite-sort_descending"></span>
-				{/if}
+				<span class="glyphicons {if $view->renderSortAsc}glyphicons-sort-by-attributes{else}glyphicons-sort-by-attributes-alt{/if}" style="font-size:14px;{if $view->options.disable_sorting}color:rgb(80,80,80);{else}color:rgb(39,123,213);{/if}"></span>
 			{/if}
 			</th>
 		{/foreach}
@@ -1407,7 +1469,6 @@ $field_prefix = strtolower(substr($table_name,0,1));
 	<tbody style="cursor:pointer;">
 		<tr class="{$tableRowClass}">
 			<td align="center" rowspan="2" nowrap="nowrap" style="padding:5px;">
-				<input type="checkbox" name="row_id[]" value="{$result.<?php echo $field_prefix; ?>_id}" style="display:none;">
 				{include file="devblocks:cerberusweb.core::internal/watchers/context_follow_button.tpl" context=$view_context context_id=$result.<?php echo $field_prefix; ?>_id}
 			</td>
 		</tr>
@@ -1417,8 +1478,9 @@ $field_prefix = strtolower(substr($table_name,0,1));
 				{include file="devblocks:cerberusweb.core::internal/custom_fields/view/cell_renderer.tpl"}
 			{elseif $column == "<?php echo $field_prefix; ?>_name"}
 			<td>
+				<input type="checkbox" name="row_id[]" value="{$result.<?php echo $field_prefix; ?>_id}" style="display:none;">
 				<a href="{devblocks_url}c=profiles&type=<?php echo $table_name; ?>&id={$result.<?php echo $field_prefix; ?>_id}-{$result.<?php echo $field_prefix; ?>_name|devblocks_permalink}{/devblocks_url}" class="subject">{$result.<?php echo $field_prefix; ?>_name}</a>
-				<button type="button" class="peek" style="visibility:hidden;padding:1px;margin:0px 5px;" onclick="genericAjaxPopup('peek','c=internal&a=showPeekPopup&context={$view_context}&context_id={$result.<?php echo $field_prefix; ?>_id}&view_id={$view->id}',null,false,'550');"><span class="cerb-sprite2 sprite-document-search-result" style="margin-left:2px" title="{$translate->_('views.peek')}"></span></button>
+				<button type="button" class="peek" onclick="genericAjaxPopup('peek','c=internal&a=showPeekPopup&context={$view_context}&context_id={$result.<?php echo $field_prefix; ?>_id}&view_id={$view->id}',null,false,'550');"><span class="glyphicons glyphicons-new-window-alt" style="margin-left:2px" title="{$translate->_('views.peek')}"></span></button>
 			</td>
 			{elseif $column == "<?php echo $field_prefix; ?>_updated_at"}
 				<td title="{$result.$column|devblocks_date}">
@@ -1460,9 +1522,9 @@ $field_prefix = strtolower(substr($table_name,0,1));
 	
 	{if $total}
 	<div style="float:left;" id="{$view->id}_actions">
-		<button type="button" class="action-always-show action-explore" onclick="this.form.explore_from.value=$(this).closest('form').find('tbody input:checkbox:checked:first').val();this.form.action.value='viewExplore';this.form.submit();"><span class="cerb-sprite sprite-media_play_green"></span> {'common.explore'|devblocks_translate|lower}</button>
+		<button type="button" class="action-always-show action-explore" onclick="this.form.explore_from.value=$(this).closest('form').find('tbody input:checkbox:checked:first').val();this.form.action.value='viewExplore';this.form.submit();"><span class="glyphicons glyphicons-play-button"></span> {'common.explore'|devblocks_translate|lower}</button>
 		{*
-		{if $active_worker->hasPriv('calls.actions.update_all')}<button type="button" class="action-always-show action-bulkupdate" onclick="genericAjaxPopup('peek','c=profiles&a=handleSectionAction&section=<?php echo $table_name; ?>&action=showBulkPanel&view_id={$view->id}&ids=' + Devblocks.getFormEnabledCheckboxValues('viewForm{$view->id}','row_id[]'),null,false,'500');"><span class="cerb-sprite2 sprite-folder-gear"></span> {'common.bulk_update'|devblocks_translate|lower}</button>{/if}
+		{if $active_worker->hasPriv('calls.actions.update_all')}<button type="button" class="action-always-show action-bulkupdate" onclick="genericAjaxPopup('peek','c=profiles&a=handleSectionAction&section=<?php echo $table_name; ?>&action=showBulkPanel&view_id={$view->id}&ids=' + Devblocks.getFormEnabledCheckboxValues('viewForm{$view->id}','row_id[]'),null,false,'500');"><span class="glyphicons glyphicons-folder-closed"></span> {'common.bulk_update'|devblocks_translate|lower}</button>{/if}
 		*}
 	</div>
 	{/if}
@@ -1733,6 +1795,7 @@ class PageSection_Profiles<?php echo $class_name; ?> extends Extension_PageSecti
 		
 		// Loop through view and get IDs
 		$view = C4_AbstractViewLoader::getView($view_id);
+		$view->setAutoPersist(false);
 
 		// Page start
 		@$explore_from = DevblocksPlatform::importGPC($_REQUEST['explore_from'],'integer',0);
@@ -1826,7 +1889,7 @@ class PageSection_Profiles<?php echo $class_name; ?> extends Extension_PageSecti
 		{include file="devblocks:cerberusweb.core::internal/macros/display/button.tpl" context=$page_context context_id=$page_context_id macros=$macros return_url=$return_url}
 		
 		<!-- Edit -->
-		<button type="button" id="btnDisplay<?php echo $class_name; ?>Edit" title="{'common.edit'|devblocks_translate|capitalize}">&amp;nbsp;<span class="cerb-sprite2 sprite-gear"></span>&amp;nbsp;</button>
+		<button type="button" id="btnDisplay<?php echo $class_name; ?>Edit" title="{'common.edit'|devblocks_translate|capitalize}">&amp;nbsp;<span class="glyphicons glyphicons-cogwheel"></span>&amp;nbsp;</button>
 	</form>
 	
 	{if $pref_keyboard_shortcuts}
@@ -1888,28 +1951,23 @@ class PageSection_Profiles<?php echo $class_name; ?> extends Extension_PageSecti
 </div>
 <br>
 
-{$selected_tab_idx=0}
-{foreach from=$tabs item=tab_label name=tabs}
-	{if $tab_label==$tab_selected}{$selected_tab_idx = $smarty.foreach.tabs.index}{/if}
-{/foreach}
-
 <script type="text/javascript">
-	$(function() {
-		var tabOptions = Devblocks.getDefaultjQueryUiTabOptions();
-		tabOptions.active = {$selected_tab_idx};
-	
-		var tabs = $("#<?php echo $table_name; ?>Tabs").tabs(tabOptions);
-		
-		$('#btnDisplay<?php echo $class_name; ?>Edit').bind('click', function() {
-			$popup = genericAjaxPopup('peek','c=internal&a=showPeekPopup&context={$page_context}&context_id={$page_context_id}',null,false,'550');
-			$popup.one('<?php echo $table_name; ?>_save', function(event) {
-				event.stopPropagation();
-				document.location.reload();
-			});
-		});
+$(function() {
+	var tabOptions = Devblocks.getDefaultjQueryUiTabOptions();
+	tabOptions.active = Devblocks.getjQueryUiTabSelected('<?php echo $table_name; ?>Tabs');
 
-		{include file="devblocks:cerberusweb.core::internal/macros/display/menu_script.tpl" selector_button=null selector_menu=null}
+	var tabs = $("#<?php echo $table_name; ?>Tabs").tabs(tabOptions);
+	
+	$('#btnDisplay<?php echo $class_name; ?>Edit').bind('click', function() {
+		$popup = genericAjaxPopup('peek','c=internal&a=showPeekPopup&context={$page_context}&context_id={$page_context_id}',null,false,'550');
+		$popup.one('<?php echo $table_name; ?>_save', function(event) {
+			event.stopPropagation();
+			document.location.reload();
+		});
 	});
+
+	{include file="devblocks:cerberusweb.core::internal/macros/display/menu_script.tpl" selector_button=null selector_menu=null}
+});
 </script>
 
 <script type="text/javascript">

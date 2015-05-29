@@ -2,8 +2,8 @@
 <legend>{'reports.ui.ticket.top_contacts'|devblocks_translate}</legend>
 
 <form action="{devblocks_url}c=pages&page={$page->id}-{$page->name|devblocks_permalink}&report=report.tickets.top_contacts{/devblocks_url}" method="POST" id="frmRange" name="frmRange">
-{'reports.ui.date_from'|devblocks_translate} <input type="text" name="start" id="start" size="24" value="{$start}"><button type="button" onclick="devblocksAjaxDateChooser('#start','#divCal');">&nbsp;<span class="cerb-sprite sprite-calendar"></span>&nbsp;</button>
-{'reports.ui.date_to'|devblocks_translate} <input type="text" name="end" id="end" size="24" value="{$end}"><button type="button" onclick="devblocksAjaxDateChooser('#end','#divCal');">&nbsp;<span class="cerb-sprite sprite-calendar"></span>&nbsp;</button>
+{'reports.ui.date_from'|devblocks_translate} <input type="text" name="start" id="start" size="24" value="{$start}"><button type="button" onclick="devblocksAjaxDateChooser('#start','#divCal');"><span class="glyphicons glyphicons-calendar"></span></button>
+{'reports.ui.date_to'|devblocks_translate} <input type="text" name="end" id="end" size="24" value="{$end}"><button type="button" onclick="devblocksAjaxDateChooser('#end','#divCal');"><span class="glyphicons glyphicons-calendar"></span></button>
 <div id="divCal"></div>
 
 {'reports.ui.date_past'|devblocks_translate} <a href="javascript:;" onclick="$('#start').val('-1 year');$('#end').val('now');$('#btnSubmit').click();">{'reports.ui.filters.1_year'|devblocks_translate|lower}</a>
@@ -185,14 +185,6 @@ var plot1 = $.jqplot('reportChart', chartData, chartOptions);
 				<tr>
 					<td colspan="3" style="padding-left:10px;padding-right:20px;"><h3 style="margin:0px;">{$groups.$group_id->name}</h3></td>
 				</tr>
-				
-				{if !empty($count_group_buckets.0)}
-				<tr>
-					<td style="padding-left:20px;padding-right:20px;">{'common.inbox'|devblocks_translate|capitalize}</td>
-					<td align="right">{$count_group_buckets.0}</td>
-					<td></td>
-				</tr>
-				{/if}
 				
 				{foreach from=$group_buckets.$group_id key=bucket_id item=b}
 					{if !empty($count_group_buckets.$bucket_id)}

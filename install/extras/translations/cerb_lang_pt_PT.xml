@@ -133,11 +133,6 @@
 				<seg>[Mail] Pode criar novas mensagens a partir do helpdesk</seg>
 			</tuv>
 		</tu>
-		<tu tuid="acl.core.rss">
-			<tuv xml:lang="pt_PT">
-				<seg>[RSS] Pode exportar listas de RSS</seg>
-			</tuv>
-		</tu>
 		<tu tuid="acl.core.snippets.actions.create">
 			<tuv xml:lang="pt_PT">
 				<seg>[Snippets] Pode criar snippets</seg>
@@ -521,11 +516,6 @@
 		<tu tuid="activity.mail.search">
 			<tuv xml:lang="pt_PT">
 				<seg>%s está a pesquisar tickets</seg>
-			</tuv>
-		</tu>
-		<tu tuid="activity.mail.workflow">
-			<tuv xml:lang="pt_PT">
-				<seg>%s está a navegar %s no Workflow</seg>
 			</tuv>
 		</tu>
 		<tu tuid="activity.mail.workspaces">
@@ -1178,6 +1168,11 @@
 				<seg>GUID</seg>
 			</tuv>
 		</tu>
+		<tu tuid="common.history">
+			<tuv xml:lang="pt_PT">
+				<seg>histórico</seg>
+			</tuv>
+		</tu>
 		<tu tuid="common.hours">
 			<tuv xml:lang="pt_PT">
 				<seg>horas</seg>
@@ -1201,6 +1196,11 @@
 		<tu tuid="common.import.upload_csv.tip">
 			<tuv xml:lang="pt_PT">
 				<seg>(qualquer ordem da coluna; o próximo passo permitrá escolher onde será colocados os dados)</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.importance">
+			<tuv xml:lang="pt_PT">
+				<seg></seg>
 			</tuv>
 		</tu>
 		<tu tuid="common.inactive">
@@ -1371,6 +1371,11 @@
 		<tu tuid="common.no">
 			<tuv xml:lang="pt_PT">
 				<seg>não</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.no_thanks">
+			<tuv xml:lang="pt_PT">
+				<seg>não obrigado!</seg>
 			</tuv>
 		</tu>
 		<tu tuid="common.nobody">
@@ -1803,12 +1808,12 @@
 				<seg>ID do perfil:</seg>
 			</tuv>
 		</tu>
-		<tu tuid="config.mail.pop3.error_hostname">
+		<tu tuid="config.mailboxes.error_hostname">
 			<tuv xml:lang="pt_PT">
 				<seg>Erro: Hostname não indicado.</seg>
 			</tuv>
 		</tu>
-		<tu tuid="config.mail.pop3.failed">
+		<tu tuid="config.mailboxes.failed">
 			<tuv xml:lang="pt_PT">
 				<seg>Falhou ligação  caixa de correio.</seg>
 			</tuv>
@@ -2768,11 +2773,6 @@
 				<seg>(pasta actual)</seg>
 			</tuv>
 		</tu>
-		<tu tuid="display.reply.next.move.no_thanks">
-			<tuv xml:lang="pt_PT">
-				<seg>não obrigado!</seg>
-			</tuv>
-		</tu>
 		<tu tuid="display.reply.next.owner">
 			<tuv xml:lang="pt_PT">
 				<seg>A quem deverá ser atribuído?</seg>
@@ -2996,11 +2996,6 @@
 		<tu tuid="header.config">
 			<tuv xml:lang="pt_PT">
 				<seg>configuração helpdesk</seg>
-			</tuv>
-		</tu>
-		<tu tuid="header.history">
-			<tuv xml:lang="pt_PT">
-				<seg>histórico</seg>
 			</tuv>
 		</tu>
 		<tu tuid="header.last_viewed">
@@ -3286,11 +3281,6 @@
 		<tu tuid="mail.worklist.draft_in_progress">
 			<tuv xml:lang="pt_PT">
 				<seg></seg>
-			</tuv>
-		</tu>
-		<tu tuid="mail.workflow">
-			<tuv xml:lang="pt_PT">
-				<seg>Fluxos de Trabalho</seg>
 			</tuv>
 		</tu>
 		<tu tuid="mail.workspaces.create">
@@ -4048,7 +4038,7 @@
 				<seg/>
 			</tuv>
 		</tu>
-		<tu tuid="preferences.account.mail.reply_textbox_size.inelastic">
+		<tu tuid="preferences.account.mail.reply_textbox_size.auto">
 			<tuv xml:lang="pt_PT">
 				<seg/>
 			</tuv>
@@ -4473,11 +4463,6 @@ Se não solicitou esta operação, não clique no link em cima. O pedido expira 
 				<seg>Histórico do Colaborador num Intervalo de Tempo</seg>
 			</tuv>
 		</tu>
-		<tu tuid="rss.bad_feed">
-			<tuv xml:lang="pt_PT">
-				<seg>Dados da feed errados.</seg>
-			</tuv>
-		</tu>
 		<tu tuid="search.date.between">
 			<tuv xml:lang="pt_PT">
 				<seg>entre</seg>
@@ -4757,11 +4742,6 @@ Por exemplo: *recipiente*</seg>
 				<seg>Tarefas do Ticket</seg>
 			</tuv>
 		</tu>
-		<tu tuid="ticket.assignable">
-			<tuv xml:lang="pt_PT">
-				<seg>Atribuível</seg>
-			</tuv>
-		</tu>
 		<tu tuid="ticket.closed_at">
 			<tuv xml:lang="pt_PT">
 				<seg/>
@@ -4865,11 +4845,6 @@ Por exemplo: *recipiente*</seg>
 		<tu tuid="ticket.spam_training">
 			<tuv xml:lang="pt_PT">
 				<seg>Treino Spam</seg>
-			</tuv>
-		</tu>
-		<tu tuid="ticket.status">
-			<tuv xml:lang="pt_PT">
-				<seg>Estado</seg>
 			</tuv>
 		</tu>
 		<tu tuid="ticket.subject">

@@ -41,8 +41,6 @@ class PageSection_SetupPluginLibrary extends Extension_PageSection {
 		$view = C4_AbstractViewLoader::getView(self::VIEW_PLUGIN_LIBRARY, $defaults);
 		$view->name = "Compatible Plugins";
 		
-		C4_AbstractViewLoader::setView($view->id, $view);
-
 		$tpl->assign('view', $view);
 		
 		$tpl->display('devblocks:cerberusweb.core::configuration/section/plugin_library/tab.tpl');
@@ -144,7 +142,7 @@ class PageSection_SetupPluginLibrary extends Extension_PageSection {
 			
 			// Reload plugin translations
 			if(null != ($plugin_manifest = DevblocksPlatform::getPlugin($plugin->id))) {
-				$strings_xml = APP_PATH . '/' . $plugin_manifest->dir . '/strings.xml';
+				$strings_xml = $plugin_manifest->getStoragePath() . '/strings.xml';
 				if(file_exists($strings_xml)) {
 					DAO_Translation::importTmxFile($strings_xml);
 				}

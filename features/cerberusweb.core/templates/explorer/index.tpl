@@ -22,7 +22,7 @@
 		<script type="text/javascript" src="{devblocks_url}c=resource&p=devblocks.core&f=js/devblocks.js{/devblocks_url}?v={$smarty.const.APP_BUILD}"></script>
 
 		<!-- Application -->
-		<link type="text/css" rel="stylesheet" href="{devblocks_url}c=resource&p=cerberusweb.core&f=css/cerberus.css{/devblocks_url}?v={$smarty.const.APP_BUILD}">
+		<link type="text/css" rel="stylesheet" href="{devblocks_url}c=resource&p=cerberusweb.core&f=css/cerb.css{/devblocks_url}?v={$smarty.const.APP_BUILD}">
 		<script type="text/javascript" src="{devblocks_url}c=resource&p=cerberusweb.core&f=js/cerberus.js{/devblocks_url}?v={$smarty.const.APP_BUILD}"></script>
 
 		<style type="text/css">
@@ -39,14 +39,14 @@
 					<table cellpadding="0" cellspacing="0" border="0" width="100%">
 						<tr>
 							<td width="1%" nowrap="nowrap" align="left" style="padding-right:10px;padding-bottom:5px;">
-								<a href="{if !empty($return_url)}{$return_url}{else}{devblocks_url}{/devblocks_url}{/if}"><img src="{devblocks_url}c=resource&p=cerberusweb.core&f=images/wgm/powered_by_cerb6.png{/devblocks_url}?v={$smarty.const.APP_BUILD}" border="0"></span></a>
+								<a href="{if !empty($return_url)}{$return_url}{else}{devblocks_url}{/devblocks_url}{/if}"><img src="{devblocks_url}c=resource&p=cerberusweb.core&f=images/wgm/cerb_logo.png{/devblocks_url}?v={$smarty.const.APP_BUILD}" border="0" width="140" height="40"></span></a>
 							</td>
 							<td align="left" width="98%;" valign="top">
 								<h2>{$title}</h2> &nbsp;
 								{if !empty($content)}
 									<a href="{$url}" target="_blank">{$content}</a>
 								{else} 
-									<a href="{$url}" target="_blank">{$url}</a>
+									<a href="{$url}" target="_blank">{$url|truncate:100}</a>
 								{/if} 
 								<div style="margin-top:5px;">
 								{if !empty($toolbar_extension) && !empty($item) && method_exists($toolbar_extension, 'render')}
@@ -57,15 +57,15 @@
 							<td width="1%" nowrap="nowrap" align="right" valign="top" style="padding-right:10px;padding-top:10px;">
 								{if !empty($count)}
 								<form action="#" method="get">
-								{if $prev}<button id="btnExplorerPrev" type="button" onclick="this.form.action='{devblocks_url}c=explore&hash={$hashset}&p={$prev}{/devblocks_url}';this.form.submit();">&laquo;</button>{/if}
+								{if $prev}<button id="btnExplorerPrev" type="button" onclick="this.form.action='{devblocks_url}c=explore&hash={$hashset}&p={$prev}{/devblocks_url}';this.form.submit();"><span class="glyphicons glyphicons-chevron-left"></span></button>{/if}
 								<b>{$p}</b> of <b>{$count}</b> 
-								{if $next}<button id="btnExplorerNext" type="button" onclick="this.form.action='{devblocks_url}c=explore&hash={$hashset}&p={$next}{/devblocks_url}';this.form.submit();">&raquo;</button>{/if}
+								{if $next}<button id="btnExplorerNext" type="button" onclick="this.form.action='{devblocks_url}c=explore&hash={$hashset}&p={$next}{/devblocks_url}';this.form.submit();"><span class="glyphicons glyphicons-chevron-right"></span></button>{/if}
 								</form>
 								{/if}
 							</td>
 							<td style="padding-right:10px;padding-top:10px;" valign="top">
 								<form action="{if !empty($url)}{$url}{else}{$return_url}{/if}" method="get">
-								<button type="button" onclick="this.form.submit();"> X </button>
+								<button type="button" onclick="this.form.submit();"><span class="glyphicons glyphicons-circle-remove"></span></button>
 								</form>
 							</td>
 						</tr>

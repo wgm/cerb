@@ -5,21 +5,16 @@
 		{$tabs = [installed,library]}
 		{$point = 'setup.plugins.tab'}
 		
-		<li><a href="{devblocks_url}ajax.php?c=config&a=handleSectionAction&section=plugins&action=showTab&point={$point}&request={$response_uri|escape:'url'}{/devblocks_url}">Installed Plugins</a></li>
-		<li><a href="{devblocks_url}ajax.php?c=config&a=handleSectionAction&section=plugin_library&action=showTab&point={$point}&request={$response_uri|escape:'url'}{/devblocks_url}">Plugin Library</a></li>
+		<li data-alias="installed"><a href="{devblocks_url}ajax.php?c=config&a=handleSectionAction&section=plugins&action=showTab&point={$point}&request={$response_uri|escape:'url'}{/devblocks_url}">Installed Plugins</a></li>
+		<li data-alias="library"><a href="{devblocks_url}ajax.php?c=config&a=handleSectionAction&section=plugin_library&action=showTab&point={$point}&request={$response_uri|escape:'url'}{/devblocks_url}">Plugin Library</a></li>
 	</ul>
 </div> 
 <br>
 
-{$selected_tab_idx=0}
-{foreach from=$tabs item=tab_label name=tabs}
-	{if $tab_label==$selected_tab}{$selected_tab_idx = $smarty.foreach.tabs.index}{/if}
-{/foreach}
-
 <script type="text/javascript">
 $(function() {
 	var tabOptions = Devblocks.getDefaultjQueryUiTabOptions();
-	tabOptions.active = {$selected_tab_idx};
+	tabOptions.active = Devblocks.getjQueryUiTabSelected('pluginTabs', '{$tab}');
 	
 	var tabs = $("#pluginTabs").tabs(tabOptions);
 });

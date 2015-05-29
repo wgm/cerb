@@ -19,9 +19,18 @@ class PageSection_SetupPlugins extends Extension_PageSection {
 	const VIEW_PLUGINS = 'plugins_installed';
 	
 	function render() {
+		$visit = CerberusApplication::getVisit();
+		$tpl = DevblocksPlatform::getTemplateService();
 		$response = DevblocksPlatform::getHttpResponse();
-		$path = $response->path;
-
+		
+		$stack = $response->path;
+		
+		@array_shift($stack); // config
+		@array_shift($stack); // plugins
+		
+		if(false != (@$tab = array_shift($stack)))
+			$tpl->assign('tab', $tab);
+		
 		// When someone loads the plugin page, check for new or updated
 		//	 user-installed plugins on disk
 		if(DEVELOPMENT_MODE) {
@@ -29,24 +38,16 @@ class PageSection_SetupPlugins extends Extension_PageSection {
 			DAO_Platform::cleanupPluginTables();
 			
 		} else {
-			DevblocksPlatform::readPlugins(false, array('storage/plugins'));
+			DevblocksPlatform::readPlugins(false, array('plugins'));
 		}
-		
-		$tpl = DevblocksPlatform::getTemplateService();
-		$visit = CerberusApplication::getVisit();
 		
 		$visit->set(ChConfigurationPage::ID, 'plugins');
-		
-		if(isset($path[2])) {
-			$tpl->assign('selected_tab', $path[2]);
-		}
 		
 		$tpl->display('devblocks:cerberusweb.core::configuration/section/plugins/index.tpl');
 	}
 
 	function showTabAction() {
 		$tpl = DevblocksPlatform::getTemplateService();
-		$visit = CerberusApplication::getVisit();
 		
 		$defaults = new C4_AbstractViewModel();
 		$defaults->class_name = 'View_CerbPlugin';
@@ -63,8 +64,6 @@ class PageSection_SetupPlugins extends Extension_PageSection {
 			SearchFields_CerbPlugin::ID => new DevblocksSearchCriteria(SearchFields_CerbPlugin::ID, DevblocksSearchCriteria::OPER_NIN, array('devblocks.core','cerberusweb.core')),
 		));
 		
-		C4_AbstractViewLoader::setView($view->id, $view);
-
 		$tpl->assign('view', $view);
 		
 		$tpl->display('devblocks:cerberusweb.core::configuration/section/plugins/tab.tpl');
@@ -89,7 +88,7 @@ class PageSection_SetupPlugins extends Extension_PageSection {
 		$plugin = DevblocksPlatform::getPlugin($plugin_id);
 		$tpl->assign('plugin', $plugin);
 
-		$is_uninstallable = (preg_match("#^storage/plugins/#", $plugin->dir) > 0);
+		$is_uninstallable = (APP_STORAGE_PATH == substr($plugin->getStoragePath(), 0, strlen(APP_STORAGE_PATH)));
 		$tpl->assign('is_uninstallable', $is_uninstallable);
 		
 		// Check requirements
@@ -181,7 +180,7 @@ class PageSection_SetupPlugins extends Extension_PageSection {
 						}
 							
 						// Reload plugin translations
-						$strings_xml = APP_PATH . '/' . $plugin->dir . '/strings.xml';
+						$strings_xml = $plugin->getStoragePath() . '/strings.xml';
 						if(file_exists($strings_xml)) {
 							DAO_Translation::importTmxFile($strings_xml);
 						}

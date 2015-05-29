@@ -49,20 +49,6 @@
 class CerberusMail {
 	private function __construct() {}
 	
-	static function getMailerDefaults() {
-		$settings = DevblocksPlatform::getPluginSettingsService();
-
-		return array(
-			'host' => $settings->get('cerberusweb.core',CerberusSettings::SMTP_HOST,CerberusSettingsDefaults::SMTP_HOST),
-			'port' => $settings->get('cerberusweb.core',CerberusSettings::SMTP_PORT,CerberusSettingsDefaults::SMTP_PORT),
-			'auth_user' => $settings->get('cerberusweb.core',CerberusSettings::SMTP_AUTH_USER,null),
-			'auth_pass' => $settings->get('cerberusweb.core',CerberusSettings::SMTP_AUTH_PASS,null),
-			'enc' => $settings->get('cerberusweb.core',CerberusSettings::SMTP_ENCRYPTION_TYPE,CerberusSettingsDefaults::SMTP_ENCRYPTION_TYPE),
-			'max_sends' => $settings->get('cerberusweb.core',CerberusSettings::SMTP_MAX_SENDS,CerberusSettingsDefaults::SMTP_MAX_SENDS),
-			'timeout' => $settings->get('cerberusweb.core',CerberusSettings::SMTP_TIMEOUT,CerberusSettingsDefaults::SMTP_TIMEOUT),
-		);
-	}
-	
 	static function parseRfcAddresses($string) {
 		$results = array();
 		$string = rtrim(str_replace(';',',',$string),' ,');
@@ -100,7 +86,6 @@ class CerberusMail {
 	static function quickSend($to, $subject, $body, $from_addy=null, $from_personal=null, $custom_headers=array(), $format=null, $html_template_id=null) {
 		try {
 			$mail_service = DevblocksPlatform::getMailService();
-			$mailer = $mail_service->getMailer(CerberusMail::getMailerDefaults());
 			$mail = $mail_service->createMessage();
 	
 			$settings = DevblocksPlatform::getPluginSettingsService();
@@ -153,7 +138,8 @@ class CerberusMail {
 			}
 		
 			// [TODO] Report when the message wasn't sent.
-			if(!$mailer->send($mail)) {
+			// [TODO] We can use '$failedRecipients' for this
+			if(!$mail_service->send($mail)) {
 				return false;
 			}
 			
@@ -196,11 +182,17 @@ class CerberusMail {
 		if(empty($worker_id) && null != ($worker = CerberusApplication::getActiveWorker()))
 			$worker_id = $worker->id;
 
+		// Worker
 		if(!empty($worker_id))
 			$worker = DAO_Worker::get($worker_id);
 		
+		// Group
 		if(null == ($group = DAO_Group::get($group_id)))
 			return;
+		
+		// Bucket
+		if(!$bucket_id || false == ($bucket = DAO_Bucket::get($bucket_id)) || $bucket->group_id != $group->id)
+			$bucket = $group->getDefaultBucket();
 		
 		// Changing the outgoing message through a VA (global)
 		Event_MailBeforeSent::trigger($properties, null, null, $group_id);
@@ -223,8 +215,8 @@ class CerberusMail {
 		@$closed = $properties['closed'];
 		@$ticket_reopen = $properties['ticket_reopen'];
 		
-		$from_replyto = $group->getReplyTo($bucket_id);
-		$personal = $group->getReplyPersonal($bucket_id, $worker);
+		$from_replyto = $group->getReplyTo($bucket->id);
+		$personal = $group->getReplyPersonal($bucket->id, $worker);
 		
 		$mask = CerberusApplication::generateTicketMask();
 
@@ -250,7 +242,6 @@ class CerberusMail {
 		
 		try {
 			$mail_service = DevblocksPlatform::getMailService();
-			$mailer = $mail_service->getMailer(CerberusMail::getMailerDefaults());
 			$email = $mail_service->createMessage();
 
 			// To
@@ -317,7 +308,7 @@ class CerberusMail {
 			
 			switch($content_format) {
 				case 'parsedown':
-					$embedded_files = self::_generateBodyMarkdown($email, $content, $group_id, $bucket_id, $html_template_id);
+					$embedded_files = self::_generateBodyMarkdown($email, $content, $group_id, $bucket->id, $html_template_id);
 					break;
 					
 				default:
@@ -360,7 +351,7 @@ class CerberusMail {
 			}
 			
 			if(!empty($toList) && (!isset($properties['dont_send']) || empty($properties['dont_send']))) {
-				if(!@$mailer->send($email)) {
+				if(!$mail_service->send($email)) {
 					throw new Exception('Mail failed to send: unknown reason');
 				}
 			}
@@ -371,8 +362,8 @@ class CerberusMail {
 			if(empty($draft_id)) {
 				$params = array(
 					'to' => $toStr,
-					'group_id' => $group_id,
-					'bucket_id' => $bucket_id,
+					'group_id' => $group->id,
+					'bucket_id' => $bucket->id,
 				);
 				
 				if(!empty($cc))
@@ -421,6 +412,7 @@ class CerberusMail {
 			DAO_Ticket::LAST_WROTE_ID => $fromAddressId,
 			DAO_Ticket::ORG_ID => intval($org_id),
 			DAO_Ticket::LAST_ACTION_CODE => CerberusTicketActionCode::TICKET_WORKER_REPLY,
+			DAO_Ticket::IMPORTANCE => 50,
 		);
 		
 		// "Next:" [TODO] This is highly redundant with CerberusMail::reply
@@ -517,8 +509,8 @@ class CerberusMail {
 			$fields[DAO_Ticket::IS_WAITING] = 1;
 		
 		// Move last, so the event triggers properly
-		$fields[DAO_Ticket::GROUP_ID] = $group_id;
-		$fields[DAO_Ticket::BUCKET_ID] = $bucket_id;
+		$fields[DAO_Ticket::GROUP_ID] = $group->id;
+		$fields[DAO_Ticket::BUCKET_ID] = $bucket->id;
 		
 		DAO_Ticket::update($ticket_id, $fields);
 		
@@ -586,7 +578,6 @@ class CerberusMail {
 		try {
 			// objects
 			$mail_service = DevblocksPlatform::getMailService();
-			$mailer = $mail_service->getMailer(CerberusMail::getMailerDefaults());
 			$mail = $mail_service->createMessage();
 			
 			@$reply_message_id = $properties['message_id'];
@@ -596,9 +587,11 @@ class CerberusMail {
 				
 			$ticket_id = $message->ticket_id;
 			
+			// Ticket
 			if(null == ($ticket = DAO_Ticket::get($ticket_id)))
 				return;
 				
+			// Group
 			if(null == ($group = DAO_Group::get($ticket->group_id)))
 				return;
 			
@@ -830,8 +823,9 @@ class CerberusMail {
 			// If blank recipients or we're not supposed to send
 			if(empty($recipients) || (isset($properties['dont_send']) && $properties['dont_send'])) {
 				// ...do nothing
+				
 			} else { // otherwise send
-				if(!@$mailer->send($mail)) {
+				if(!$mail_service->send($mail)) {
 					throw new Exception('Mail not sent.');
 				}
 			}
@@ -1032,15 +1026,22 @@ class CerberusMail {
 			if($move_to_group_id && false != ($move_to_group = DAO_Group::get($move_to_group_id)))
 				$change_fields[DAO_Ticket::GROUP_ID] = $move_to_group_id;
 			
+			// Validate the given bucket id
+			if($move_to_bucket_id 
+				&& (false == ($move_to_bucket = DAO_Bucket::get($move_to_bucket_id)) 
+					|| $move_to_bucket->group_id != $move_to_group->id)) {
+					$move_to_bucket_id = 0;
+			}
+			
 			// Move to the new bucket if it is an inbox, or it belongs to the group
-			if(
-				empty($move_to_bucket_id)
-				|| (
-					false != ($move_to_bucket = DAO_Bucket::get($move_to_bucket_id))
-					&& $move_to_bucket->group_id == $move_to_group_id
-					)
-				)
-				$change_fields[DAO_Ticket::BUCKET_ID] = $move_to_bucket_id;
+			if(empty($move_to_bucket_id)) {
+				$move_to_bucket = $move_to_group->getDefaultBucket();
+				$move_to_bucket_id = $move_to_bucket->id;
+			}
+			
+			if($move_to_bucket) {
+				$change_fields[DAO_Ticket::BUCKET_ID] = $move_to_bucket->id;
+			}
 		}
 			
 		if(!empty($ticket_id) && !empty($change_fields)) {
@@ -1101,7 +1102,6 @@ class CerberusMail {
 	
 	static function relay($message_id, $emails, $include_attachments = false, $content = null, $actor_context = null, $actor_context_id = null) {
 		$mail_service = DevblocksPlatform::getMailService();
-		$mailer = $mail_service->getMailer(CerberusMail::getMailerDefaults());
 		$settings = DevblocksPlatform::getPluginSettingsService();
 
 		$workers = DAO_Worker::getAll();
@@ -1215,7 +1215,7 @@ class CerberusMail {
 					}
 				}
 				
-				$result = $mailer->send($mail);
+				$result = $mail_service->send($mail);
 				unset($mail);
 				
 				/*
@@ -1253,7 +1253,6 @@ class CerberusMail {
 			$message = $model->getMessage(); /* @var $message CerberusParserMessage */
 			
 			$mail_service = DevblocksPlatform::getMailService();
-			$mailer = $mail_service->getMailer(CerberusMail::getMailerDefaults()); /* @var $mailer Swift_Mailer */
 			$mail = $mail_service->createMessage();
 	
 			$mail->setTo(array($to));
@@ -1298,7 +1297,7 @@ class CerberusMail {
 				$mail->attach(Swift_Attachment::fromPath($file->tmpname)->setFilename($file_name));
 			}
 		
-			$result = $mailer->send($mail);
+			$result = $mail_service->send($mail);
 			
 			if(!$result) {
 				return false;

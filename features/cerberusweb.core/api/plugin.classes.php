@@ -24,7 +24,6 @@ class ChPageController extends DevblocksControllerExtension {
 		$page_manifests = DevblocksPlatform::getExtensions('cerberusweb.page', false);
 
 		// [TODO] This may cause problems on other pages where an active worker isn't required
-		// Check RSS/etc (was bugged on login)
 		
 		// Check worker level ACL (if set by manifest)
 		foreach($page_manifests as $idx => $page_manifest) {
@@ -167,8 +166,6 @@ class ChPageController extends DevblocksControllerExtension {
 			
 			$active_worker_memberships = $active_worker->getMemberships();
 			$tpl->assign('active_worker_memberships', $active_worker_memberships);
-			
-			DAO_Worker::logActivity($page->getActivity());
 		}
 		$tpl->assign('tour_enabled', $tour_enabled);
 		
@@ -208,6 +205,8 @@ class ChPageController extends DevblocksControllerExtension {
 		$tpl->display('devblocks:cerberusweb.core::border.tpl');
 		
 		if(!empty($active_worker)) {
+			DAO_Worker::logActivity($page->getActivity());
+			
 			$unread_notifications = DAO_Notification::getUnreadCountByWorker($active_worker->id);
 			$tpl->assign('active_worker_notify_count', $unread_notifications);
 			$tpl->display('devblocks:cerberusweb.core::badge_notifications_script.tpl');
@@ -373,205 +372,194 @@ class VaAction_HttpRequest extends Extension_DevblocksEventAction {
 };
 endif;
 
-// RSS Sources
-
-class ChRssSource_Notification extends Extension_RssSource {
-	function getSourceName() {
-		return "Notifications";
+if(class_exists('Extension_MailTransport')):
+class CerbMailTransport_Smtp extends Extension_MailTransport {
+	const ID = 'core.mail.transport.smtp';
+	
+	function renderConfig(Model_MailTransport $model) {
+		$tpl = DevblocksPlatform::getTemplateService();
+		$tpl->assign('model', $model);
+		$tpl->assign('extension', $this);
+		$tpl->display('devblocks:cerberusweb.core::internal/mail_transport/smtp/config.tpl');
 	}
 	
-	function getFeedAsRss($feed) {
-		$xmlstr = <<<XML
-		<rss version='2.0' xmlns:atom='http://www.w3.org/2005/Atom'>
-		</rss>
-XML;
-
-		$xml = new SimpleXMLElement($xmlstr);
-		$translate = DevblocksPlatform::getTranslationService();
-		$url = DevblocksPlatform::getUrlService();
-
-		// Channel
-		$channel = $xml->addChild('channel');
-		$channel->addChild('title', $feed->title);
-		$channel->addChild('link', $url->write('',true));
-		$channel->addChild('description', '');
+	function testConfig(array $params, &$error=null) {
+		@$host = $params['host'];
+		@$port = $params['port'];
+		@$encryption = $params['encryption'];
+		@$auth_enabled = $params['auth_enabled'];
+		@$auth_user = $params['auth_user'];
+		@$auth_pass = $params['auth_pass'];
+		@$timeout = $params['timeout'];
 		
-		// View
-		$view = new View_Notification();
-		$view->name = $feed->title;
-		$view->addParams($feed->params['params'], true);
-		$view->renderLimit = 100;
-		$view->renderSortBy = $feed->params['sort_by'];
-		$view->renderSortAsc = $feed->params['sort_asc'];
-
-		// Results
-		list($results, $count) = $view->getData();
-
-		foreach($results as $event) {
-			$created = intval($event[SearchFields_Notification::CREATED_DATE]);
-			if(empty($created)) $created = time();
-
-			$eItem = $channel->addChild('item');
+		if(empty($host)) {
+			$error = 'The SMTP "host" parameter is required.';
+			return false;
+		}
+		
+		if(empty($port)) {
+			$error = 'The SMTP "port" parameter is required.';
+			return false;
+		}
+		
+		// Try connecting
+		
+		$mail_service = DevblocksPlatform::getMailService();
+		
+		$options = array(
+			'host' => $host,
+			'port' => $port,
+			'enc' => $encryption,
+			'auth_user' => $auth_user,
+			'auth_pass' => $auth_pass,
+			'timeout' => $timeout,
+		);
+		
+		try {
+			$mailer = $this->_getMailer($options);
 			
+			@$transport = $mailer->getTransport();
+			@$transport->start();
+			@$transport->stop();
+			return true;
+			
+		} catch(Exception $e) {
+			$error = $e->getMessage();
+			return false;
+		}
+		
+		return true;
+	}
+	
+	/**
+	 * @param Swift_Message $message
+	 * @return boolean
+	 */
+	function send(Swift_Message $message, Model_MailTransport $model) {
+		$options = array(
+			'host' => @$model->params['host'],
+			'port' => @$model->params['port'],
+			'auth_user' => @$model->params['auth_user'],
+			'auth_pass' => @$model->params['auth_pass'],
+			'enc' => @$model->params['encryption'],
+			'max_sends' => @$model->params['max_sends'],
+			'timeout' => @$model->params['timeout'],
+		);
+		
+		if(false == ($mailer = $this->_getMailer($options)))
+			return false;
+		
+		$failed_recipients = array();
+		
+		// [TODO] Actually use failed recipients
+		
+		return $mailer->send($message, $failed_recipients);
+	}
+	
+	/**
+	 * @return Swift_Mailer
+	 */
+	private function _getMailer(array $options) {
+		static $connections = array();
+		
+		// Options
+		$smtp_host = isset($options['host']) ? $options['host'] : '127.0.0.1';
+		$smtp_port = isset($options['port']) ? $options['port'] : '25';
+		$smtp_user = isset($options['auth_user']) ? $options['auth_user'] : null;
+		$smtp_pass = isset($options['auth_pass']) ? $options['auth_pass'] : null;
+		$smtp_enc = isset($options['enc']) ? $options['enc'] : 'None';
+		$smtp_max_sends = isset($options['max_sends']) ? intval($options['max_sends']) : 20;
+		$smtp_timeout = isset($options['timeout']) ? intval($options['timeout']) : 30;
+		
+		/*
+		 * [JAS]: We'll cache connection info hashed by params and hold a persistent
+		 * connection for the request cycle.  If we ask for the same params again
+		 * we'll get the existing connection if it exists.
+		 */
 
-			if(isset($event[SearchFields_Notification::URL])) {
-				$link = $url->write('c=preferences&a=redirectRead&id='.$event[SearchFields_Notification::ID], true);
-			} else {
-				$link = $url->write('c=profiles&type=worker&who=me', true);
+		$hash = md5(json_encode(array(
+			$smtp_host,
+			$smtp_user,
+			$smtp_pass,
+			$smtp_port,
+			$smtp_enc,
+			$smtp_max_sends,
+			$smtp_timeout
+		)));
+		
+		if(!isset($connections[$hash])) {
+			// Encryption
+			switch($smtp_enc) {
+				case 'TLS':
+					$smtp_enc = 'tls';
+					break;
+					
+				case 'SSL':
+					$smtp_enc = 'ssl';
+					break;
+					
+				default:
+					$smtp_enc = null;
+					break;
 			}
 			
-			$escapedSubject = htmlspecialchars($event[SearchFields_Notification::MESSAGE],null,LANG_CHARSET_CODE);
-			$eTitle = $eItem->addChild('title', $escapedSubject);
-			$eDesc = $eItem->addChild('description', '');
-			$eLink = $eItem->addChild('link', $link);
-
-			$eDate = $eItem->addChild('pubDate', gmdate('D, d M Y H:i:s T', $created));
-			$eGuid = $eItem->addChild('guid', md5($escapedSubject . $link . $created));
-			$eGuid->addAttribute('isPermaLink', "false");
-		}
-
-		return $xml->asXML();
-	}
-};
-
-class ChRssSource_Ticket extends Extension_RssSource {
-	function getSourceName() {
-		return "Tickets";
-	}
-	
-	function getFeedAsRss($feed) {
-		$xmlstr = <<<XML
-		<rss version='2.0' xmlns:atom='http://www.w3.org/2005/Atom'>
-		</rss>
-XML;
-
-		$xml = new SimpleXMLElement($xmlstr);
-		$translate = DevblocksPlatform::getTranslationService();
-		$url = DevblocksPlatform::getUrlService();
-
-		// Channel
-		$channel = $xml->addChild('channel');
-		$channel->addChild('title', $feed->title);
-		$channel->addChild('link', $url->write('',true));
-		$channel->addChild('description', '');
-		
-		// View
-		$view = new View_Ticket();
-		$view->name = $feed->title;
-		$view->addParams($feed->params['params'], true);
-		$view->renderLimit = 100;
-		$view->renderSortBy = $feed->params['sort_by'];
-		$view->renderSortAsc = $feed->params['sort_asc'];
-
-		// Results
-		list($tickets, $count) = $view->getData();
-		
-		foreach($tickets as $ticket) {
-			$created = intval($ticket[SearchFields_Ticket::TICKET_UPDATED_DATE]);
-			if(empty($created)) $created = time();
-
-			$eItem = $channel->addChild('item');
+			$smtp = Swift_SmtpTransport::newInstance($smtp_host, $smtp_port, $smtp_enc);
+			$smtp->setTimeout($smtp_timeout);
 			
-			$escapedSubject = htmlspecialchars($ticket[SearchFields_Ticket::TICKET_SUBJECT],null,LANG_CHARSET_CODE);
-			$eTitle = $eItem->addChild('title', $escapedSubject);
-
-			$eDesc = $eItem->addChild('description', $this->_getTicketLastAction($ticket));
+			if(!empty($smtp_user)) {
+				$smtp->setUsername($smtp_user);
+				$smtp->setPassword($smtp_pass);
+			}
 			
-			$link = $url->write('c=profiles&type=ticket&id='.$ticket[SearchFields_Ticket::TICKET_MASK], true);
-			$eLink = $eItem->addChild('link', $link);
-				
-			$eDate = $eItem->addChild('pubDate', gmdate('D, d M Y H:i:s T', $created));
+			$mailer = Swift_Mailer::newInstance($smtp);
+			$mailer->registerPlugin(new Swift_Plugins_AntiFloodPlugin($smtp_max_sends, 1));
 			
-			$eGuid = $eItem->addChild('guid', md5($escapedSubject . $link . $created));
-			$eGuid->addAttribute('isPermaLink', "false");
-		}
-
-		return $xml->asXML();
-	}
-	
-	private function _getTicketLastAction($ticket) {
-		$action_code = $ticket[SearchFields_Ticket::TICKET_LAST_ACTION_CODE];
-		$output = '';
-		
-		// [TODO] Translate
-		switch($action_code) {
-			case CerberusTicketActionCode::TICKET_OPENED:
-				$output = sprintf("New from %s",
-					$ticket[SearchFields_Ticket::TICKET_LAST_WROTE]
-				);
-				break;
-			case CerberusTicketActionCode::TICKET_CUSTOMER_REPLY:
-				$output = sprintf("Incoming from %s",
-					$ticket[SearchFields_Ticket::TICKET_LAST_WROTE]
-				);
-				break;
-			case CerberusTicketActionCode::TICKET_WORKER_REPLY:
-				$output = sprintf("Outgoing from %s",
-					$ticket[SearchFields_Ticket::TICKET_LAST_WROTE]
-				);
-				break;
+			$connections[$hash] = $mailer;
 		}
 		
-		return $output;
+		if($connections[$hash])
+			return $connections[$hash];
+		
+		return null;
+	}
+}
+endif;
+
+if(class_exists('Extension_MailTransport')):
+class CerbMailTransport_Null extends Extension_MailTransport {
+	const ID = 'core.mail.transport.null';
+	
+	function renderConfig(Model_MailTransport $model) {
+		$tpl = DevblocksPlatform::getTemplateService();
+		$tpl->assign('model', $model);
+		$tpl->assign('extension', $this);
+		$tpl->display('devblocks:cerberusweb.core::internal/mail_transport/null/config.tpl');
 	}
 	
-};
-
-class ChRssSource_Task extends Extension_RssSource {
-	function getSourceName() {
-		return "Tasks";
+	function testConfig(array $params, &$error=null) {
+		return true;
 	}
 	
-	function getFeedAsRss($feed) {
-		$xmlstr = <<<XML
-		<rss version='2.0' xmlns:atom='http://www.w3.org/2005/Atom'>
-		</rss>
-XML;
-
-		$xml = new SimpleXMLElement($xmlstr);
-		$translate = DevblocksPlatform::getTranslationService();
-		$url = DevblocksPlatform::getUrlService();
-
-		// Channel
-		$channel = $xml->addChild('channel');
-		$channel->addChild('title', $feed->title);
-		$channel->addChild('link', $url->write('',true));
-		$channel->addChild('description', '');
+	/**
+	 * @param Swift_Message $message
+	 * @return boolean
+	 */
+	function send(Swift_Message $message, Model_MailTransport $model) {
+		if(false == ($mailer = $this->_getMailer()))
+			return false;
 		
-		// View
-		$view = new View_Task();
-		$view->name = $feed->title;
-		$view->addParams($feed->params['params'], true);
-		$view->renderLimit = 100;
-		$view->renderSortBy = $feed->params['sort_by'];
-		$view->renderSortAsc = $feed->params['sort_asc'];
-
-		// Results
-		list($results, $count) = $view->getData();
-
-		$task_sources = DevblocksPlatform::getExtensions('cerberusweb.task.source',true);
+		return $mailer->send($message);
+	}
+	
+	private function _getMailer() {
+		static $mailer = null;
 		
-		foreach($results as $task) {
-			$created = intval($task[SearchFields_Task::UPDATED_DATE]);
-			if(empty($created)) $created = time();
-
-			$eItem = $channel->addChild('item');
-			
-			$escapedSubject = htmlspecialchars($task[SearchFields_Task::TITLE],null,LANG_CHARSET_CODE);
-			$escapedSubject = mb_convert_encoding($escapedSubject, 'utf-8', LANG_CHARSET_CODE);
-			$eTitle = $eItem->addChild('title', $escapedSubject);
-
-			$eDesc = $eItem->addChild('description', '');
-
-			$link = $url->write('c=profiles&type=task&id='.$task[SearchFields_Task::ID], true);
-			$eLink = $eItem->addChild('link', $link);
-				
-			$eDate = $eItem->addChild('pubDate', gmdate('D, d M Y H:i:s T', $created));
-			
-			$eGuid = $eItem->addChild('guid', md5($escapedSubject . $link . $created));
-			$eGuid->addAttribute('isPermaLink', "false");
+		if(is_null($mailer)) {
+			$null = Swift_NullTransport::newInstance();
+			$mailer = Swift_Mailer::newInstance($null);
 		}
-
-		return $xml->asXML();
+		
+		return $mailer;
 	}
-};
+}
+endif;

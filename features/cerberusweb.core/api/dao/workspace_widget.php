@@ -29,7 +29,7 @@ class DAO_WorkspaceWidget extends Cerb_ORMHelper {
 		$db = DevblocksPlatform::getDatabaseService();
 		
 		$sql = "INSERT INTO workspace_widget () VALUES ()";
-		$db->Execute($sql);
+		$db->ExecuteMaster($sql);
 		$id = $db->LastInsertId();
 		
 		self::update($id, $fields);
@@ -76,7 +76,7 @@ class DAO_WorkspaceWidget extends Cerb_ORMHelper {
 			$sort_sql.
 			$limit_sql
 		;
-		$rs = $db->Execute($sql);
+		$rs = $db->ExecuteSlave($sql);
 		
 		return self::_getObjectsFromResult($rs);
 	}
@@ -86,6 +86,9 @@ class DAO_WorkspaceWidget extends Cerb_ORMHelper {
 	 * @return Model_WorkspaceWidget
 	 */
 	static function get($id) {
+		if(empty($id))
+			return null;
+		
 		// [TODO] Pull from cache
 		
 		$objects = self::getWhere(sprintf("%s = %d",
@@ -150,7 +153,7 @@ class DAO_WorkspaceWidget extends Cerb_ORMHelper {
 		
 		$ids_list = implode(',', $ids);
 		
-		$db->Execute(sprintf("DELETE FROM workspace_widget WHERE id IN (%s)", $ids_list));
+		$db->ExecuteMaster(sprintf("DELETE FROM workspace_widget WHERE id IN (%s)", $ids_list));
 		
 		// Fire event
 		/*
@@ -178,7 +181,7 @@ class DAO_WorkspaceWidget extends Cerb_ORMHelper {
 		
 		$ids_list = implode(',', $ids);
 		
-		$db->Execute(sprintf("DELETE FROM workspace_widget WHERE workspace_tab_id IN (%s)", $ids_list));
+		$db->ExecuteMaster(sprintf("DELETE FROM workspace_widget WHERE workspace_tab_id IN (%s)", $ids_list));
 	}
 	
 	public static function getSearchQueryComponents($columns, $params, $sortBy=null, $sortAsc=null) {
@@ -291,9 +294,9 @@ class DAO_WorkspaceWidget extends Cerb_ORMHelper {
 			$sort_sql;
 			
 		if($limit > 0) {
-			$rs = $db->SelectLimit($sql,$limit,$page*$limit) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs ADORecordSet */
+			$rs = $db->SelectLimit($sql,$limit,$page*$limit) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs mysqli_result */
 		} else {
-			$rs = $db->Execute($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs ADORecordSet */
+			$rs = $db->ExecuteSlave($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs mysqli_result */
 			$total = mysqli_num_rows($rs);
 		}
 		
@@ -313,7 +316,7 @@ class DAO_WorkspaceWidget extends Cerb_ORMHelper {
 					($has_multiple_values ? "SELECT COUNT(DISTINCT workspace_widget.id) " : "SELECT COUNT(workspace_widget.id) ").
 					$join_sql.
 					$where_sql;
-				$total = $db->GetOne($count_sql);
+				$total = $db->GetOneSlave($count_sql);
 			}
 		}
 		
@@ -549,7 +552,6 @@ class Context_WorkspaceWidget extends Extension_DevblocksContext {
 		$view->renderFilters = false;
 		$view->renderTemplate = 'contextlinks_chooser';
 		
-		C4_AbstractViewLoader::setView($view_id, $view);
 		return $view;
 	}
 	
@@ -576,7 +578,6 @@ class Context_WorkspaceWidget extends Extension_DevblocksContext {
 		*/
 		
 		$view->renderTemplate = 'context';
-		C4_AbstractViewLoader::setView($view_id, $view);
 		return $view;
 	}
 };

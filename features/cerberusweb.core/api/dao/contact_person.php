@@ -31,7 +31,7 @@ class DAO_ContactPerson extends Cerb_ORMHelper {
 			$fields[self::CREATED] = time();
 		
 		$sql = "INSERT INTO contact_person () VALUES ()";
-		$db->Execute($sql);
+		$db->ExecuteMaster($sql);
 		$id = $db->LastInsertId();
 		
 		self::update($id, $fields);
@@ -103,7 +103,7 @@ class DAO_ContactPerson extends Cerb_ORMHelper {
 			$sort_sql.
 			$limit_sql
 		;
-		$rs = $db->Execute($sql);
+		$rs = $db->ExecuteSlave($sql);
 		
 		return self::_getObjectsFromResult($rs);
 	}
@@ -113,6 +113,9 @@ class DAO_ContactPerson extends Cerb_ORMHelper {
 	 * @return Model_ContactPerson
 	 */
 	static function get($id) {
+		if(empty($id))
+			return null;
+		
 		$objects = self::getWhere(sprintf("%s = %d",
 			self::ID,
 			$id
@@ -168,7 +171,7 @@ class DAO_ContactPerson extends Cerb_ORMHelper {
 			// [TODO] A listener should really be handling this
 			if(is_array($address_ids) && !empty($address_ids)) {
 				$address_ids_str = implode(',', $address_ids);
-				$db->Execute(sprintf("DELETE FROM supportcenter_address_share WHERE share_address_id IN (%s) OR with_address_id IN (%s)", $address_ids_str, $address_ids_str));
+				$db->ExecuteMaster(sprintf("DELETE FROM supportcenter_address_share WHERE share_address_id IN (%s) OR with_address_id IN (%s)", $address_ids_str, $address_ids_str));
 			}
 			
 			// Release OpenIDs
@@ -177,10 +180,10 @@ class DAO_ContactPerson extends Cerb_ORMHelper {
 		}
 		
 		// Release verified email addresses
-		$db->Execute(sprintf("UPDATE address SET contact_person_id = 0 WHERE contact_person_id IN (%s)", $ids_list));
+		$db->ExecuteMaster(sprintf("UPDATE address SET contact_person_id = 0 WHERE contact_person_id IN (%s)", $ids_list));
 		
 		// Remove records
-		$db->Execute(sprintf("DELETE FROM contact_person WHERE id IN (%s)", $ids_list));
+		$db->ExecuteMaster(sprintf("DELETE FROM contact_person WHERE id IN (%s)", $ids_list));
 		
 		// Fire event
 		$eventMgr = DevblocksPlatform::getEventService();
@@ -307,7 +310,7 @@ class DAO_ContactPerson extends Cerb_ORMHelper {
 					$db = DevblocksPlatform::getDatabaseService();
 					$temp_table = sprintf("_tmp_%s", uniqid());
 					
-					$db->Execute(sprintf("CREATE TEMPORARY TABLE %s SELECT DISTINCT context_id AS id FROM comment INNER JOIN %s ON (%s.id=comment.id)",
+					$db->ExecuteSlave(sprintf("CREATE TEMPORARY TABLE %s (PRIMARY KEY (id)) SELECT DISTINCT context_id AS id FROM comment INNER JOIN %s ON (%s.id=comment.id)",
 						$temp_table,
 						$ids,
 						$ids
@@ -392,9 +395,9 @@ class DAO_ContactPerson extends Cerb_ORMHelper {
 			$sort_sql;
 			
 		if($limit > 0) {
-			$rs = $db->SelectLimit($sql,$limit,$page*$limit) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs ADORecordSet */
+			$rs = $db->SelectLimit($sql,$limit,$page*$limit) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs mysqli_result */
 		} else {
-			$rs = $db->Execute($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs ADORecordSet */
+			$rs = $db->ExecuteSlave($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs mysqli_result */
 			$total = mysqli_num_rows($rs);
 		}
 		
@@ -414,7 +417,7 @@ class DAO_ContactPerson extends Cerb_ORMHelper {
 					($has_multiple_values ? "SELECT COUNT(DISTINCT contact_person.id) " : "SELECT COUNT(contact_person.id) ").
 					$join_sql.
 					$where_sql;
-				$total = $db->GetOne($count_sql);
+				$total = $db->GetOneSlave($count_sql);
 			}
 		}
 		
@@ -428,12 +431,12 @@ class DAO_ContactPerson extends Cerb_ORMHelper {
 		$logger = DevblocksPlatform::getConsoleLog();
 		$tables = DevblocksPlatform::getDatabaseTables();
 		
-		$db->Execute("UPDATE address SET contact_person_id = 0 WHERE contact_person_id != 0 AND contact_person_id NOT IN (SELECT id FROM contact_person)");
+		$db->ExecuteMaster("UPDATE address SET contact_person_id = 0 WHERE contact_person_id != 0 AND contact_person_id NOT IN (SELECT id FROM contact_person)");
 
 		// Search indexes
 		
 		if(isset($tables['fulltext_contact'])) {
-			$db->Execute("DELETE FROM fulltext_contact WHERE id NOT IN (SELECT id FROM contact_person)");
+			$db->ExecuteMaster("DELETE FROM fulltext_contact WHERE id NOT IN (SELECT id FROM contact_person)");
 			$logger->info('[Maint] Purged ' . $db->Affected_Rows() . ' fulltext_contact records.');
 		}
 		
@@ -1437,7 +1440,6 @@ class Context_ContactPerson extends Extension_DevblocksContext implements IDevbl
 		$view->renderFilters = false;
 		$view->renderTemplate = 'contextlinks_chooser';
 		
-		C4_AbstractViewLoader::setView($view_id, $view);
 		return $view;
 	}
 	
@@ -1464,7 +1466,6 @@ class Context_ContactPerson extends Extension_DevblocksContext implements IDevbl
 		$view->addParamsRequired($params_req, true);
 		
 		$view->renderTemplate = 'context';
-		C4_AbstractViewLoader::setView($view_id, $view);
 		return $view;
 	}
 	

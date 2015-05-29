@@ -1,7 +1,7 @@
 <h2>Mail Routing</h2>
 
 <form action="{devblocks_url}{/devblocks_url}" style="margin-bottom:5px;">
-	<button type="button" onclick="genericAjaxPopup('peek','c=config&a=handleSectionAction&section=mail_routing&action=showMailRoutingRulePanel&id=0',null,false,'550');"><span class="cerb-sprite2 sprite-plus-circle"></span> {'common.add'|devblocks_translate|capitalize}</button>
+	<button type="button" onclick="genericAjaxPopup('peek','c=config&a=handleSectionAction&section=mail_routing&action=showMailRoutingRulePanel&id=0',null,false,'550');"><span class="glyphicons glyphicons-circle-plus" style="color:rgb(0,180,0);"></span> {'common.add'|devblocks_translate|capitalize}</button>
 </form>
 
 <fieldset>
@@ -13,7 +13,7 @@
 	<input type="hidden" name="section" value="mail_routing">
 	<input type="hidden" name="action" value="saveRouting">
 
-	<b>Which group inbox should receive any unrouted new mail?</b><br> 
+	<b>Which group should receive any unrouted new mail?</b><br> 
 	<select name="default_group_id">
 		<option value="0">-- None (Bounce) --
 	{if !empty($groups)}
@@ -74,7 +74,7 @@
 								<b>{$to_time[0]|string_format:"%d"}:{$to_time[1]|string_format:"%02d"}</b> 
 								<br>
 						{elseif 0==strcasecmp('cf_',substr($crit_key,0,3))}
-							{include file="devblocks:cerberusweb.core::internal/custom_fields/filters/render_criteria_list.tpl"}					
+							{include file="devblocks:cerberusweb.core::internal/custom_fields/filters/render_criteria_list.tpl"}
 						{/if}
 					{/foreach}
 					
@@ -82,11 +82,9 @@
 						{foreach from=$rule->actions item=action key=action_key}
 							{if $action_key=="move"}
 								{assign var=g_id value=$action.group_id}
-								{assign var=b_id value=$action.bucket_id}
-								{if isset($groups.$g_id) && (0==$b_id || isset($buckets.$b_id))}
+								{if isset($groups.$g_id)}
 									Move to 
-									<b>{$groups.$g_id->name}</b>:
-									<b>{if 0==$b_id}Inbox{else}{$buckets.$b_id->name}{/if}</b>
+									<b>{$groups.$g_id->name}</b>
 								{/if}
 								<br>
 							{elseif 0==strcasecmp('cf_',substr($action_key,0,3))}
@@ -106,6 +104,6 @@
 	<br>	
 	{/if}
 
-	<button type="submit"><span class="cerb-sprite2 sprite-tick-circle"></span> {'common.save_changes'|devblocks_translate|capitalize}</button>
+	<button type="submit"><span class="glyphicons glyphicons-circle-ok" style="color:rgb(0,180,0);"></span> {'common.save_changes'|devblocks_translate|capitalize}</button>
 	</form>
 </fieldset>

@@ -596,7 +596,8 @@ abstract class AbstractEvent_Ticket extends Extension_DevblocksEvent {
 				'schedule_email_recipients' => array('label' => 'Schedule email to recipients'),
 				'send_email' => array('label' => 'Send email'),
 				'send_email_recipients' => array('label' => 'Send email to recipients'),
-				'set_org' => array('label' =>'Set ticket organization'),
+				'set_importance' => array('label' =>'Set ticket importance'),
+				'set_org' => array('label' =>'Set organization'),
 				'set_owner' => array('label' =>'Set ticket owner'),
 				'set_reopen_date' => array('label' => 'Set ticket reopen date'),
 				'set_spam_training' => array('label' => 'Set ticket spam training'),
@@ -685,6 +686,10 @@ abstract class AbstractEvent_Ticket extends Extension_DevblocksEvent {
 				
 			case 'schedule_email_recipients':
 				DevblocksEventHelper::renderActionScheduleTicketReply();
+				break;
+				
+			case 'set_importance':
+				DevblocksEventHelper::renderActionSetTicketImportance($trigger);
 				break;
 				
 			case 'set_org':
@@ -806,6 +811,10 @@ abstract class AbstractEvent_Ticket extends Extension_DevblocksEvent {
 				return DevblocksEventHelper::simulateActionSendEmailRecipients($params, $dict);
 				break;
 				
+			case 'set_importance':
+				return DevblocksEventHelper::simulateActionSetTicketImportance($params, $dict, 'ticket_id', 'ticket_importance');
+				break;
+				
 			case 'set_org':
 				return DevblocksEventHelper::simulateActionSetTicketOrg($params, $dict, 'ticket_id');
 				break;
@@ -864,7 +873,7 @@ abstract class AbstractEvent_Ticket extends Extension_DevblocksEvent {
 				
 				$out = sprintf(">>> Moving to:\n%s: %s\n",
 					$groups[$group_id]->name,
-					($bucket_id ? $buckets[$bucket_id]->name : $translate->_('common.inbox'))
+					$buckets[$bucket_id]->name
 				);
 				
 				$dict->group_id = $to_group_id;
@@ -935,7 +944,11 @@ abstract class AbstractEvent_Ticket extends Extension_DevblocksEvent {
 			case 'schedule_email_recipients':
 				DevblocksEventHelper::runActionScheduleTicketReply($params, $dict, $ticket_id, $message_id);
 				break;
-				
+
+			case 'set_importance':
+				DevblocksEventHelper::runActionSetTicketImportance($params, $dict, 'ticket_id', 'ticket_importance');
+				break;
+
 			case 'send_email':
 				DevblocksEventHelper::runActionSendEmail($params, $dict);
 				break;
@@ -1095,9 +1108,12 @@ abstract class AbstractEvent_Ticket extends Extension_DevblocksEvent {
 				if(empty($to_group_id) || !isset($groups[$to_group_id]))
 					break;
 				
-				// ... or non-existent buckets
-				if(!empty($to_bucket_id) && !isset($buckets[$to_bucket_id]))
-					break;
+				// If the bucket doesn't exist, use the group's default bucket.
+				if(empty($to_bucket_id) || !isset($buckets[$to_bucket_id])) {
+					$to_group = $groups[$to_group_id]; /* @var $to_group Model_Group */
+					$to_bucket = $to_group->getDefaultBucket();
+					$to_bucket_id = $to_bucket->id;
+				}
 				
 				// Move
 				DAO_Ticket::update($ticket_id, array(
@@ -1107,41 +1123,6 @@ abstract class AbstractEvent_Ticket extends Extension_DevblocksEvent {
 				
 				$dict->group_id = $to_group_id;
 				$dict->ticket_bucket_id = $to_bucket_id;
-				
-				/* // [TODO]
-				// Pull group context + merge
-				if($to_group_id != $current_group_id) {
-					$merge_token_labels = array();
-					$merge_token_values = array();
-					$labels = $this->getLabels($trigger);
-					CerberusContexts::getContext(CerberusContexts::CONTEXT_GROUP, $to_group_id, $merge_token_labels, $merge_token_values, '', true);
-			
-					CerberusContexts::merge(
-						'group_',
-						'Group:',
-						$merge_token_labels,
-						$merge_token_values,
-						$labels,
-						$values
-					);
-				}
-				
-				if(!empty($to_bucket_id)) {
-					$merge_token_labels = array();
-					$merge_token_values = array();
-					$labels = $this->getLabels($trigger);
-					CerberusContexts::getContext(CerberusContexts::CONTEXT_BUCKET, $to_bucket_id, $merge_token_labels, $merge_token_values, '', true);
-			
-					CerberusContexts::merge(
-						'ticket_bucket_',
-						'Bucket:',
-						$merge_token_labels,
-						$merge_token_values,
-						$labels,
-						$values
-					);
-				}
-				*/
 				break;
 			
 			case 'set_links':

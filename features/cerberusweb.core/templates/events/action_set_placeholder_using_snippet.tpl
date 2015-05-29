@@ -14,7 +14,7 @@
 <b>Load this snippet:</b>
 <div style="margin-left:10px;margin-bottom:10px;">
 	<div>
-		<button type="button" class="chooser-snippet"><span class="cerb-sprite sprite-view"></span></button>
+		<button type="button" class="chooser-snippet"><span class="glyphicons glyphicons-search"></span></button>
 	</div>
 	<div class="snippet-preview">
 		{if $snippet && $snippet->id}
@@ -37,7 +37,7 @@ $(function(e) {
 	var $on = $action.find('select:first');
 	var $snippet_preview = $action.find('div.snippet-preview');
 	
-	$action.find('textarea').elastic();
+	$action.find('textarea').autosize();
 	
 	$action.find('button.chooser-snippet').on('click', function(e) {
 		var context = $action.find('select:first option:selected').attr('context');

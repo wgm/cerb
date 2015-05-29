@@ -28,7 +28,7 @@ class DAO_WorkspacePage extends Cerb_ORMHelper {
 		$db = DevblocksPlatform::getDatabaseService();
 
 		$sql = "INSERT INTO workspace_page () VALUES ()";
-		$db->Execute($sql);
+		$db->ExecuteMaster($sql);
 		$id = $db->LastInsertId();
 
 		self::update($id, $fields);
@@ -53,7 +53,9 @@ class DAO_WorkspacePage extends Cerb_ORMHelper {
 			$pages = self::getWhere(
 				null,
 				DAO_WorkspacePage::NAME,
-				true
+				true,
+				null,
+				Cerb_ORMHelper::OPT_GET_MASTER_ONLY
 			);
 			
 			$cache->save($pages, self::_CACHE_ALL);
@@ -69,7 +71,7 @@ class DAO_WorkspacePage extends Cerb_ORMHelper {
 	 * @param integer $limit
 	 * @return Model_WorkspacePage[]
 	 */
-	static function getWhere($where=null, $sortBy=null, $sortAsc=true, $limit=null) {
+	static function getWhere($where=null, $sortBy=DAO_WorkspacePage::NAME, $sortAsc=true, $limit=null, $options=null) {
 		$db = DevblocksPlatform::getDatabaseService();
 
 		list($where_sql, $sort_sql, $limit_sql) = self::_getWhereSQL($where, $sortBy, $sortAsc, $limit);
@@ -81,8 +83,13 @@ class DAO_WorkspacePage extends Cerb_ORMHelper {
 			$sort_sql.
 			$limit_sql
 			;
-			$rs = $db->Execute($sql);
 
+		if($options & Cerb_ORMHelper::OPT_GET_MASTER_ONLY) {
+			$rs = $db->ExecuteMaster($sql);
+		} else {
+			$rs = $db->ExecuteSlave($sql);
+		}
+			
 		return self::_getObjectsFromResult($rs);
 	}
 
@@ -143,6 +150,9 @@ class DAO_WorkspacePage extends Cerb_ORMHelper {
 	 * @return Model_WorkspacePage
 	 */
 	static function get($id) {
+		if(empty($id))
+			return null;
+		
 		$objects = self::getAll();
 		
 		if(isset($objects[$id]))
@@ -196,7 +206,7 @@ class DAO_WorkspacePage extends Cerb_ORMHelper {
 		DAO_WorkspaceTab::deleteByPage($ids);
 		
 		// Delete pages
-		$db->Execute(sprintf("DELETE FROM workspace_page WHERE id IN (%s)", $ids_list));
+		$db->ExecuteMaster(sprintf("DELETE FROM workspace_page WHERE id IN (%s)", $ids_list));
 
 		self::clearCache();
 		
@@ -289,9 +299,9 @@ class DAO_WorkspacePage extends Cerb_ORMHelper {
 			$sort_sql;
 
 		if($limit > 0) {
-			$rs = $db->SelectLimit($sql,$limit,$page*$limit) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs ADORecordSet */
+			$rs = $db->SelectLimit($sql,$limit,$page*$limit) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs mysqli_result */
 		} else {
-			$rs = $db->Execute($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs ADORecordSet */
+			$rs = $db->ExecuteSlave($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs mysqli_result */
 			$total = mysqli_num_rows($rs);
 		}
 
@@ -311,7 +321,7 @@ class DAO_WorkspacePage extends Cerb_ORMHelper {
 					($has_multiple_values ? "SELECT COUNT(DISTINCT workspace_page.id) " : "SELECT COUNT(workspace_page.id) ").
 					$join_sql.
 					$where_sql;
-				$total = $db->GetOne($count_sql);
+				$total = $db->GetOneSlave($count_sql);
 			}
 		}
 
@@ -358,7 +368,7 @@ class DAO_WorkspacePage extends Cerb_ORMHelper {
 		$db = DevblocksPlatform::getDatabaseService();
 		$logger = DevblocksPlatform::getConsoleLog();
 
-		$db->Execute("DELETE FROM workspace_tab WHERE workspace_page_id NOT IN (SELECT id FROM workspace_page)");
+		$db->ExecuteMaster("DELETE FROM workspace_tab WHERE workspace_page_id NOT IN (SELECT id FROM workspace_page)");
 		$logger->info('[Maint] Purged ' . $db->Affected_Rows() . ' workspace_tab records.');
 	}
 
@@ -382,7 +392,7 @@ class DAO_WorkspaceTab extends Cerb_ORMHelper {
 		$db = DevblocksPlatform::getDatabaseService();
 		
 		$sql = "INSERT INTO workspace_tab () VALUES ()";
-		$db->Execute($sql);
+		$db->ExecuteMaster($sql);
 		$id = $db->LastInsertId();
 		
 		self::update($id, $fields);
@@ -407,7 +417,9 @@ class DAO_WorkspaceTab extends Cerb_ORMHelper {
 			$tabs = self::getWhere(
 				null,
 				DAO_WorkspaceTab::POS,
-				true
+				true,
+				null,
+				Cerb_ORMHelper::OPT_GET_MASTER_ONLY
 			);
 			$cache->save($tabs, self::_CACHE_ALL);
 		}
@@ -422,7 +434,7 @@ class DAO_WorkspaceTab extends Cerb_ORMHelper {
 	 * @param integer $limit
 	 * @return Model_WorkspaceTab[]
 	 */
-	static function getWhere($where=null, $sortBy=null, $sortAsc=true, $limit=null) {
+	static function getWhere($where=null, $sortBy=DAO_WorkspaceTab::POS, $sortAsc=true, $limit=null, $options=null) {
 		$db = DevblocksPlatform::getDatabaseService();
 
 		list($where_sql, $sort_sql, $limit_sql) = self::_getWhereSQL($where, $sortBy, $sortAsc, $limit);
@@ -434,7 +446,12 @@ class DAO_WorkspaceTab extends Cerb_ORMHelper {
 			$sort_sql.
 			$limit_sql
 		;
-		$rs = $db->Execute($sql);
+
+		if($options & Cerb_ORMHelper::OPT_GET_MASTER_ONLY) {
+			$rs = $db->ExecuteMaster($sql);
+		} else {
+			$rs = $db->ExecuteSlave($sql);
+		}
 		
 		return self::_getObjectsFromResult($rs);
 	}
@@ -444,6 +461,9 @@ class DAO_WorkspaceTab extends Cerb_ORMHelper {
 	 * @return Model_WorkspaceTab
 	 */
 	static function get($id) {
+		if(empty($id))
+			return null;
+		
 		$objects = self::getAll();
 		
 		if(isset($objects[$id]))
@@ -507,9 +527,9 @@ class DAO_WorkspaceTab extends Cerb_ORMHelper {
 		
 		DAO_WorkspaceWidget::deleteByTab($ids);
 		
-		$db->Execute(sprintf("DELETE FROM workspace_list WHERE workspace_tab_id IN (%s)", $ids_list));
+		$db->ExecuteMaster(sprintf("DELETE FROM workspace_list WHERE workspace_tab_id IN (%s)", $ids_list));
 		
-		$db->Execute(sprintf("DELETE FROM workspace_tab WHERE id IN (%s)", $ids_list));
+		$db->ExecuteMaster(sprintf("DELETE FROM workspace_tab WHERE id IN (%s)", $ids_list));
 		
 		self::clearCache();
 		
@@ -528,7 +548,7 @@ class DAO_WorkspaceTab extends Cerb_ORMHelper {
 		$ids_list = implode(',', $ids);
 		
 		// Find tab IDs by given page IDs
-		$rows = $db->GetArray(sprintf("SELECT id FROM workspace_tab WHERE workspace_page_id IN (%s)", $ids_list));
+		$rows = $db->GetArrayMaster(sprintf("SELECT id FROM workspace_tab WHERE workspace_page_id IN (%s)", $ids_list));
 
 		// Loop tab IDs and delete
 		if(is_array($rows))
@@ -609,9 +629,9 @@ class DAO_WorkspaceTab extends Cerb_ORMHelper {
 			$sort_sql;
 			
 		if($limit > 0) {
-			$rs = $db->SelectLimit($sql,$limit,$page*$limit) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs ADORecordSet */
+			$rs = $db->SelectLimit($sql,$limit,$page*$limit) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs mysqli_result */
 		} else {
-			$rs = $db->Execute($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs ADORecordSet */
+			$rs = $db->ExecuteSlave($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs mysqli_result */
 			$total = mysqli_num_rows($rs);
 		}
 		
@@ -631,7 +651,7 @@ class DAO_WorkspaceTab extends Cerb_ORMHelper {
 					($has_multiple_values ? "SELECT COUNT(DISTINCT workspace_tab.id) " : "SELECT COUNT(workspace_tab.id) ").
 					$join_sql.
 					$where_sql;
-				$total = $db->GetOne($count_sql);
+				$total = $db->GetOneSlave($count_sql);
 			}
 		}
 		
@@ -644,7 +664,7 @@ class DAO_WorkspaceTab extends Cerb_ORMHelper {
 		$db = DevblocksPlatform::getDatabaseService();
 		$logger = DevblocksPlatform::getConsoleLog();
 		
-		$db->Execute("DELETE FROM workspace_list WHERE workspace_tab_id NOT IN (SELECT id FROM workspace_tab)");
+		$db->ExecuteMaster("DELETE FROM workspace_list WHERE workspace_tab_id NOT IN (SELECT id FROM workspace_tab)");
 		$logger->info('[Maint] Purged ' . $db->Affected_Rows() . ' workspace_list records.');
 	}
 
@@ -891,7 +911,7 @@ class DAO_WorkspaceList extends DevblocksORMHelper {
 		$sql = sprintf("INSERT INTO workspace_list () ".
 			"VALUES ()"
 		);
-		$db->Execute($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
+		$db->ExecuteMaster($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
 		$id = $db->LastInsertId();
 
 		self::update($id, $fields);
@@ -906,6 +926,9 @@ class DAO_WorkspaceList extends DevblocksORMHelper {
 	 * @return Model_WorkspaceList
 	 */
 	static function get($id) {
+		if(empty($id))
+			return null;
+		
 		$objects = self::getWhere(sprintf("%s = %d",
 			self::ID,
 			$id
@@ -930,7 +953,7 @@ class DAO_WorkspaceList extends DevblocksORMHelper {
 			"FROM workspace_list ".
 			(!empty($where) ? sprintf("WHERE %s ",$where) : " ").
 			"ORDER BY list_pos ASC";
-		$rs = $db->Execute($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
+		$rs = $db->ExecuteSlave($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
 
 		$objects = array();
 		
@@ -983,11 +1006,11 @@ class DAO_WorkspaceList extends DevblocksORMHelper {
 		$db = DevblocksPlatform::getDatabaseService();
 		$ids_list = implode(',', $ids);
 		
-		$db->Execute(sprintf("DELETE FROM workspace_list WHERE id IN (%s)", $ids_list)) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
+		$db->ExecuteMaster(sprintf("DELETE FROM workspace_list WHERE id IN (%s)", $ids_list)) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
 		
 		// Delete worker view prefs
 		foreach($ids as $id) {
-			$db->Execute(sprintf("DELETE FROM worker_view_model WHERE view_id = 'cust_%d'", $id));
+			$db->ExecuteMaster(sprintf("DELETE FROM worker_view_model WHERE view_id = 'cust_%d'", $id));
 		}
 	}
 };
@@ -1002,6 +1025,7 @@ class Model_WorkspaceList {
 
 class Model_WorkspaceListView {
 	public $title = 'New List';
+	public $options = array();
 	public $columns = array();
 	public $num_rows = 10;
 	public $params = array();
@@ -1448,7 +1472,6 @@ class Context_WorkspacePage extends Extension_DevblocksContext {
 		$view->renderFilters = false;
 		$view->renderTemplate = 'contextlinks_chooser';
 		
-		C4_AbstractViewLoader::setView($view_id, $view);
 		return $view;
 	}
 	
@@ -1475,7 +1498,6 @@ class Context_WorkspacePage extends Extension_DevblocksContext {
 		*/
 		
 		$view->renderTemplate = 'context';
-		C4_AbstractViewLoader::setView($view_id, $view);
 		return $view;
 	}
 };
@@ -1699,7 +1721,6 @@ class Context_WorkspaceTab extends Extension_DevblocksContext {
 		$view->renderFilters = false;
 		$view->renderTemplate = 'contextlinks_chooser';
 		
-		C4_AbstractViewLoader::setView($view_id, $view);
 		return $view;
 	}
 	
@@ -1726,7 +1747,6 @@ class Context_WorkspaceTab extends Extension_DevblocksContext {
 		*/
 		
 		$view->renderTemplate = 'context';
-		C4_AbstractViewLoader::setView($view_id, $view);
 		return $view;
 	}
 };

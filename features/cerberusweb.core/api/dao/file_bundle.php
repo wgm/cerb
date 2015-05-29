@@ -29,7 +29,7 @@ class DAO_FileBundle extends Cerb_ORMHelper {
 		$db = DevblocksPlatform::getDatabaseService();
 
 		$sql = "INSERT INTO file_bundle () VALUES ()";
-		$db->Execute($sql);
+		$db->ExecuteMaster($sql);
 		$id = $db->LastInsertId();
 
 		self::update($id, $fields);
@@ -91,7 +91,13 @@ class DAO_FileBundle extends Cerb_ORMHelper {
 		$cache = DevblocksPlatform::getCacheService();
 		
 		if($nocache || null === ($bundles = $cache->load(self::CACHE_ALL))) {
-			$bundles = self::getWhere();
+			$bundles = self::getWhere(
+				null,
+				null,
+				true,
+				null,
+				Cerb_ORMHelper::OPT_GET_MASTER_ONLY
+			);
 			$cache->save($bundles, self::CACHE_ALL);
 		}
 		
@@ -105,7 +111,7 @@ class DAO_FileBundle extends Cerb_ORMHelper {
 	 * @param integer $limit
 	 * @return Model_FileBundle[]
 	 */
-	static function getWhere($where=null, $sortBy=null, $sortAsc=true, $limit=null) {
+	static function getWhere($where=null, $sortBy=null, $sortAsc=true, $limit=null, $options=null) {
 		$db = DevblocksPlatform::getDatabaseService();
 
 		list($where_sql, $sort_sql, $limit_sql) = self::_getWhereSQL($where, $sortBy, $sortAsc, $limit);
@@ -117,9 +123,14 @@ class DAO_FileBundle extends Cerb_ORMHelper {
 			$sort_sql.
 			$limit_sql
 			;
-			$rs = $db->Execute($sql);
+		
+		if($options & Cerb_ORMHelper::OPT_GET_MASTER_ONLY) {
+			$rs = $db->ExecuteMaster($sql);
+		} else {
+			$rs = $db->ExecuteSlave($sql);
+		}
 
-			return self::_getObjectsFromResult($rs);
+		return self::_getObjectsFromResult($rs);
 	}
 
 	/**
@@ -127,6 +138,9 @@ class DAO_FileBundle extends Cerb_ORMHelper {
 	 * @return Model_FileBundle
 	 */
 	static function get($id) {
+		if(empty($id))
+			return null;
+		
 		$bundles = DAO_FileBundle::getAll();
 		
 		if(isset($bundles[$id]))
@@ -192,7 +206,7 @@ class DAO_FileBundle extends Cerb_ORMHelper {
 
 		$ids_list = implode(',', $ids);
 
-		$db->Execute(sprintf("DELETE FROM file_bundle WHERE id IN (%s)", $ids_list));
+		$db->ExecuteMaster(sprintf("DELETE FROM file_bundle WHERE id IN (%s)", $ids_list));
 
 		// Fire event
 		$eventMgr = DevblocksPlatform::getEventService();
@@ -317,7 +331,7 @@ class DAO_FileBundle extends Cerb_ORMHelper {
 					$db = DevblocksPlatform::getDatabaseService();
 					$temp_table = sprintf("_tmp_%s", uniqid());
 					
-					$db->Execute(sprintf("CREATE TEMPORARY TABLE %s SELECT DISTINCT context_id AS id FROM comment INNER JOIN %s ON (%s.id=comment.id)",
+					$db->ExecuteSlave(sprintf("CREATE TEMPORARY TABLE %s (PRIMARY KEY (id)) SELECT DISTINCT context_id AS id FROM comment INNER JOIN %s ON (%s.id=comment.id)",
 						$temp_table,
 						$ids,
 						$ids
@@ -411,9 +425,9 @@ class DAO_FileBundle extends Cerb_ORMHelper {
 			$sort_sql;
 			
 		if($limit > 0) {
-			$rs = $db->SelectLimit($sql,$limit,$page*$limit) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs ADORecordSet */
+			$rs = $db->SelectLimit($sql,$limit,$page*$limit) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs mysqli_result */
 		} else {
-			$rs = $db->Execute($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs ADORecordSet */
+			$rs = $db->ExecuteSlave($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs mysqli_result */
 			$total = mysqli_num_rows($rs);
 		}
 
@@ -433,7 +447,7 @@ class DAO_FileBundle extends Cerb_ORMHelper {
 				($has_multiple_values ? "SELECT COUNT(DISTINCT file_bundle.id) " : "SELECT COUNT(file_bundle.id) ").
 				$join_sql.
 				$where_sql;
-				$total = $db->GetOne($count_sql);
+				$total = $db->GetOneSlave($count_sql);
 			}
 		}
 
@@ -1187,7 +1201,6 @@ class Context_FileBundle extends Extension_DevblocksContext implements IDevblock
 		$view->renderFilters = false;
 		$view->renderTemplate = 'contextlinks_chooser';
 		
-		C4_AbstractViewLoader::setView($view_id, $view);
 		return $view;
 	}
 	
@@ -1212,7 +1225,6 @@ class Context_FileBundle extends Extension_DevblocksContext implements IDevblock
 		$view->addParamsRequired($params_req, true);
 		
 		$view->renderTemplate = 'context';
-		C4_AbstractViewLoader::setView($view_id, $view);
 		return $view;
 	}
 	

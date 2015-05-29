@@ -32,7 +32,7 @@ class DAO_CrmOpportunity extends Cerb_ORMHelper {
 		$sql = sprintf("INSERT INTO crm_opportunity () ".
 			"VALUES ()"
 		);
-		$db->Execute($sql);
+		$db->ExecuteMaster($sql);
 		$id = $db->LastInsertId();
 		
 		self::update($id, $fields);
@@ -189,7 +189,7 @@ class DAO_CrmOpportunity extends Cerb_ORMHelper {
 			"FROM crm_opportunity ".
 			(!empty($where) ? sprintf("WHERE %s ",$where) : "").
 			"ORDER BY id asc";
-		$rs = $db->Execute($sql);
+		$rs = $db->ExecuteSlave($sql);
 		
 		return self::_getObjectsFromResult($rs);
 	}
@@ -199,6 +199,9 @@ class DAO_CrmOpportunity extends Cerb_ORMHelper {
 	 * @return Model_CrmOpportunity
 	 */
 	static function get($id) {
+		if(empty($id))
+			return null;
+		
 		$objects = self::getWhere(sprintf("%s = %d",
 			self::ID,
 			$id
@@ -238,7 +241,7 @@ class DAO_CrmOpportunity extends Cerb_ORMHelper {
 	
 	static function getItemCount() {
 		$db = DevblocksPlatform::getDatabaseService();
-		return $db->GetOne("SELECT count(id) FROM crm_opportunity");
+		return $db->GetOneSlave("SELECT count(id) FROM crm_opportunity");
 	}
 	
 	static function maint() {
@@ -263,7 +266,7 @@ class DAO_CrmOpportunity extends Cerb_ORMHelper {
 		$ids_list = implode(',', $ids);
 		
 		// Opps
-		$db->Execute(sprintf("DELETE FROM crm_opportunity WHERE id IN (%s)", $ids_list));
+		$db->ExecuteMaster(sprintf("DELETE FROM crm_opportunity WHERE id IN (%s)", $ids_list));
 
 		// Fire event
 		$eventMgr = DevblocksPlatform::getEventService();
@@ -414,7 +417,7 @@ class DAO_CrmOpportunity extends Cerb_ORMHelper {
 					$db = DevblocksPlatform::getDatabaseService();
 					$temp_table = sprintf("_tmp_%s", uniqid());
 					
-					$db->Execute(sprintf("CREATE TEMPORARY TABLE %s SELECT DISTINCT context_id AS id FROM comment INNER JOIN %s ON (%s.id=comment.id)",
+					$db->ExecuteSlave(sprintf("CREATE TEMPORARY TABLE %s SELECT DISTINCT context_id AS id FROM comment INNER JOIN %s ON (%s.id=comment.id)",
 						$temp_table,
 						$ids,
 						$ids
@@ -492,7 +495,7 @@ class DAO_CrmOpportunity extends Cerb_ORMHelper {
 					($has_multiple_values ? "SELECT COUNT(DISTINCT o.id) " : "SELECT COUNT(o.id) ").
 					$join_sql.
 					$where_sql;
-				$total = $db->GetOne($count_sql);
+				$total = $db->GetOneSlave($count_sql);
 			}
 		}
 		
@@ -1515,7 +1518,6 @@ class Context_Opportunity extends Extension_DevblocksContext implements IDevbloc
 		$view->renderFilters = false;
 		$view->renderTemplate = 'contextlinks_chooser';
 		
-		C4_AbstractViewLoader::setView($view_id, $view);
 		return $view;
 	}
 	
@@ -1540,7 +1542,6 @@ class Context_Opportunity extends Extension_DevblocksContext implements IDevbloc
 		$view->addParamsRequired($params_req, true);
 		
 		$view->renderTemplate = 'context';
-		C4_AbstractViewLoader::setView($view_id, $view);
 		return $view;
 	}
 	

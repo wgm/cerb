@@ -1,20 +1,18 @@
 <?php
-define('APP_DB_DRIVER','');
 define('APP_DB_ENGINE','MyISAM');
-define('APP_DB_HOST','');
 define('APP_DB_DATABASE','');
-define('APP_DB_USER','');
-define('APP_DB_PASS','');
 define('APP_DB_PCONNECT',false);
 
-define('LANG_CHARSET_CODE','iso-8859-1'); // iso-8859-1, utf-8
-define('DB_CHARSET_CODE','latin1'); // latin1, utf8
+define('APP_DB_HOST','');
+define('APP_DB_USER','');
+define('APP_DB_PASS','');
 
-// Memcached (high-performance shared memory cache)
-// optional, memcached 1.2.x + extension must be enabled
-// list multiple servers comma-delimited: host1:port,host2:port
-//define('DEVBLOCKS_CACHE_PREFIX',''); // ONLY A-Z, a-z, 0-9 and underscore
-//define('DEVBLOCKS_MEMCACHED_SERVERS','127.0.0.1:11211');
+define('APP_DB_SLAVE_HOST','');
+define('APP_DB_SLAVE_USER','');
+define('APP_DB_SLAVE_PASS','');
+
+define('LANG_CHARSET_CODE','utf-8'); // utf-8, iso-8859-1
+define('DB_CHARSET_CODE','utf8'); // utf8, latin1
 
 //@ini_set('memory_limit', '64M');
 

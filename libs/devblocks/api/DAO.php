@@ -1,6 +1,7 @@
 <?php
 abstract class DevblocksORMHelper {
 	const OPT_GET_NO_CACHE = 1;
+	const OPT_GET_MASTER_ONLY = 2;
 	
 	const OPT_UPDATE_NO_FLUSH_CACHE = 1;
 	const OPT_UPDATE_NO_EVENTS = 2;
@@ -60,7 +61,7 @@ abstract class DevblocksORMHelper {
 			implode(', ', array_keys($fields)),
 			implode(', ', array_values($fields))
 		);
-		$db->Execute($sql);
+		$db->ExecuteMaster($sql);
 		
 		return $db->LastInsertId();
 	}
@@ -97,7 +98,7 @@ abstract class DevblocksORMHelper {
 			$idcol,
 			implode(',', $ids)
 		);
-		$db->Execute($sql);
+		$db->ExecuteMaster($sql);
 	}
 	
 	static protected function _updateWhere($table, $fields, $where) {
@@ -124,7 +125,7 @@ abstract class DevblocksORMHelper {
 			implode(', ', $sets),
 			$where
 		);
-		$db->Execute($sql);
+		$db->ExecuteMaster($sql);
 	}
 	
 	static protected function _parseSearchParams($params,$columns=array(),$fields,$sortBy='',$ignore_params=array()) {
@@ -135,8 +136,17 @@ abstract class DevblocksORMHelper {
 		$wheres = array();
 		
 		// Sort By
-		if(!empty($sortBy) && isset($fields[$sortBy]))
-			$tables[$fields[$sortBy]->db_table] = $fields[$sortBy]->db_table;
+		if(!empty($sortBy)) {
+			if(is_string($sortBy) && isset($fields[$sortBy])) {
+				$tables[$fields[$sortBy]->db_table] = $fields[$sortBy]->db_table;
+				
+			} elseif(is_array($sortBy)) {
+				foreach($sortBy as $sort_field) {
+					if(isset($fields[$sort_field]))
+						$tables[$fields[$sort_field]->db_table] = $fields[$sort_field]->db_table;
+				}
+			}
+		}
 		
 		// Columns
 		if(is_array($columns))
@@ -258,14 +268,14 @@ class DAO_Platform {
 			"ORDER BY p.enabled DESC, p.name ASC ",
 			$prefix
 		);
-		$results = $db->GetArray($sql);
+		$results = $db->GetArrayMaster($sql);
 
 		foreach($results as $row) {
 			$plugin = new DevblocksPluginManifest();
 			@$plugin->id = $row['id'];
 			@$plugin->dir = $row['dir'];
 			
-			if(!file_exists(APP_PATH . '/' . $plugin->dir)) {
+			if(!file_exists($plugin->getStoragePath())) {
 				$plugin->purge();
 			}
 		}
@@ -279,10 +289,10 @@ class DAO_Platform {
 		
 		$prefix = (APP_DB_PREFIX != '') ? APP_DB_PREFIX.'_' : ''; // [TODO] Cleanup
 		
-		$db->Execute(sprintf("DELETE FROM %1\$sextension WHERE plugin_id NOT IN (SELECT id FROM %1\$splugin)", $prefix));
+		$db->ExecuteMaster(sprintf("DELETE FROM %1\$sextension WHERE plugin_id NOT IN (SELECT id FROM %1\$splugin)", $prefix));
 		$logger->info('[Maint] Purged ' . $db->Affected_Rows() . ' orphaned extensions.');
 		
-		$db->Execute(sprintf("DELETE FROM %1\$sproperty_store WHERE extension_id NOT IN (SELECT id FROM %1\$sextension)", $prefix));
+		$db->ExecuteMaster(sprintf("DELETE FROM %1\$sproperty_store WHERE extension_id NOT IN (SELECT id FROM %1\$sextension)", $prefix));
 		$logger->info('[Maint] Purged ' . $db->Affected_Rows() . ' orphaned extension properties.');
 	}
 	
@@ -306,7 +316,7 @@ class DAO_Platform {
 			implode(', ', $sets),
 			$db->qstr($id)
 		);
-		$db->Execute($sql);
+		$db->ExecuteMaster($sql);
 	}
 	
 	static function deleteExtension($extension_id) {
@@ -318,14 +328,14 @@ class DAO_Platform {
 			$prefix,
 			$db->qstr($extension_id)
 		);
-		$db->Execute($sql);
+		$db->ExecuteMaster($sql);
 		
 		// Nuke cached extension properties
 		$sql = sprintf("DELETE FROM %sproperty_store WHERE extension_id = %s",
 			$prefix,
 			$db->qstr($extension_id)
 		);
-		$db->Execute($sql);
+		$db->ExecuteMaster($sql);
 	}
 
 	/**
@@ -348,7 +358,7 @@ class DAO_Platform {
 			$revision
 		);
 		
-		if($db->GetOne($sql))
+		if($db->GetOneMaster($sql))
 			 return true;
 			 
 		return false;
@@ -368,25 +378,24 @@ class DAO_Platform {
 			$revision,
 			time()
 		);
-		$db->Execute($sql);
+		$db->ExecuteMaster($sql);
 	}
 	
 	static function getClassLoaderMap() {
-		if(null == ($db = DevblocksPlatform::getDatabaseService()) || !$db->isConnected())
-			return array();
-			
-		$tables = DevblocksPlatform::getDatabaseTables();
-		if(empty($tables))
+		if(null == ($db = DevblocksPlatform::getDatabaseService()))
 			return array();
 
+		if(DevblocksPlatform::isDatabaseEmpty())
+			return array();
+		
 		$plugins = DevblocksPlatform::getPluginRegistry();
-			
+		
 		$prefix = (APP_DB_PREFIX != '') ? APP_DB_PREFIX.'_' : ''; // [TODO] Cleanup
 		$class_loader_map = array();
 		
 		$sql = sprintf("SELECT class, plugin_id, rel_path FROM %sclass_loader ORDER BY plugin_id", $prefix);
-		$results = $db->GetArray($sql);
-
+		$results = $db->GetArrayMaster($sql);
+		
 		foreach($results as $row) {
 			@$class = $row['class'];
 			@$plugin_id = $row['plugin_id'];
@@ -395,7 +404,7 @@ class DAO_Platform {
 			// Make sure the plugin is valid
 			if(isset($plugins[$plugin_id])) {
 				// Build an absolute path
-				$path = APP_PATH . DIRECTORY_SEPARATOR . $plugins[$plugin_id]->dir . DIRECTORY_SEPARATOR . $rel_path;
+				$path = $plugins[$plugin_id]->getStoragePath() . '/' . $rel_path;
 				
 				// Init the array
 				if(!isset($class_loader_map[$path]))
@@ -415,7 +424,7 @@ class DAO_Platform {
 		$uri_routing_map = array();
 	
 		$sql = sprintf("SELECT uri, plugin_id, controller_id FROM %suri_routing ORDER BY plugin_id", $prefix);
-		$results = $db->GetArray($sql);
+		$results = $db->GetArrayMaster($sql);
 
 		foreach($results as $row) {
 			@$uri = $row['uri'];
@@ -434,7 +443,7 @@ class DAO_DevblocksSetting extends DevblocksORMHelper {
 		if(false == ($db = DevblocksPlatform::getDatabaseService()))
 			return;
 		
-		$db->Execute(sprintf(
+		$db->ExecuteMaster(sprintf(
 			"REPLACE INTO devblocks_setting (plugin_id, setting, value) ".
 			"VALUES (%s,%s,%s) ",
 				$db->qstr($plugin_id),
@@ -455,7 +464,7 @@ class DAO_DevblocksSetting extends DevblocksORMHelper {
 		if(!isset($tables['devblocks_setting']))
 			return $settings;
 		
-		$results = $db->GetArray(sprintf("SELECT setting, value FROM devblocks_setting WHERE plugin_id = %s",
+		$results = $db->GetArrayMaster(sprintf("SELECT setting, value FROM devblocks_setting WHERE plugin_id = %s",
 			$db->qstr($plugin_id)
 		));
 		
@@ -500,7 +509,7 @@ class DAO_DevblocksExtensionPropertyStore extends DevblocksORMHelper {
 				"FROM %sproperty_store ",
 				$prefix
 			);
-			$results = $db->GetArray($sql);
+			$results = $db->GetArrayMaster($sql);
 			
 			foreach($results as $row) {
 				$params[$row['extension_id']][$row['property']] = $row['value'];
@@ -531,7 +540,7 @@ class DAO_DevblocksExtensionPropertyStore extends DevblocksORMHelper {
 				$prefix,
 				$db->qstr($extension_id)
 			);
-			$results = $db->GetArray($sql);
+			$results = $db->GetArrayMaster($sql);
 			
 			if(is_array($results))
 			foreach($results as $row)
@@ -553,7 +562,7 @@ class DAO_DevblocksExtensionPropertyStore extends DevblocksORMHelper {
 		$prefix = (APP_DB_PREFIX != '') ? APP_DB_PREFIX.'_' : ''; // [TODO] Cleanup
 		$cache_key = self::_getCacheKey($extension_id);
 
-		$db->Execute(sprintf(
+		$db->ExecuteMaster(sprintf(
 			"REPLACE INTO ${prefix}property_store (extension_id, property, value) ".
 			"VALUES (%s,%s,%s)",
 			$db->qstr($extension_id),
@@ -581,7 +590,7 @@ class DAO_DevblocksTemplate extends DevblocksORMHelper {
 		$sql = sprintf("INSERT INTO devblocks_template () ".
 			"VALUES ()"
 		);
-		$db->Execute($sql);
+		$db->ExecuteMaster($sql);
 		$id = $db->LastInsertId();
 		
 		self::update($id, $fields);
@@ -608,7 +617,7 @@ class DAO_DevblocksTemplate extends DevblocksORMHelper {
 			"FROM devblocks_template ".
 			(!empty($where) ? sprintf("WHERE %s ",$where) : "").
 			"ORDER BY id asc";
-		$rs = $db->Execute($sql);
+		$rs = $db->ExecuteSlave($sql);
 		
 		return self::_getObjectsFromResult($rs);
 	}
@@ -617,6 +626,9 @@ class DAO_DevblocksTemplate extends DevblocksORMHelper {
 	 * @param integer $id
 	 * @return Model_DevblocksTemplate	 */
 	static function get($id) {
+		if(empty($id))
+			return null;
+		
 		$objects = self::getWhere(sprintf("%s = %d",
 			self::ID,
 			$id
@@ -658,7 +670,7 @@ class DAO_DevblocksTemplate extends DevblocksORMHelper {
 
 		$ids_list = implode(',', $ids);
 
-		$db->Execute(sprintf("DELETE FROM devblocks_template WHERE id IN (%s)", $ids_list));
+		$db->ExecuteMaster(sprintf("DELETE FROM devblocks_template WHERE id IN (%s)", $ids_list));
 		
 		return true;
 	}
@@ -749,7 +761,7 @@ class DAO_DevblocksTemplate extends DevblocksORMHelper {
 		if($limit > 0) {
 			$rs = $db->SelectLimit($sql,$limit,$page*$limit) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
 		} else {
-			$rs = $db->Execute($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
+			$rs = $db->ExecuteSlave($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
 			$total = mysqli_num_rows($rs);
 		}
 		
@@ -769,7 +781,7 @@ class DAO_DevblocksTemplate extends DevblocksORMHelper {
 					($has_multiple_values ? "SELECT COUNT(DISTINCT devblocks_template.id) " : "SELECT COUNT(devblocks_template.id) ").
 					$join_sql.
 					$where_sql;
-				$total = $db->GetOne($count_sql);
+				$total = $db->GetOneSlave($count_sql);
 			}
 		}
 		
@@ -867,7 +879,7 @@ class DAO_Translation extends DevblocksORMHelper {
 		$sql = sprintf("INSERT INTO translation () ".
 			"VALUES ()"
 		);
-		$db->Execute($sql);
+		$db->ExecuteMaster($sql);
 		$id = $db->LastInsertId();
 		
 		self::update($id, $fields);
@@ -890,7 +902,7 @@ class DAO_Translation extends DevblocksORMHelper {
 			"FROM translation ".
 			(!empty($where) ? sprintf("WHERE %s ",$where) : "").
 			"ORDER BY string_id ASC, lang_code ASC";
-		$rs = $db->Execute($sql);
+		$rs = $db->ExecuteSlave($sql);
 		
 		return self::_getObjectsFromResult($rs);
 	}
@@ -899,6 +911,9 @@ class DAO_Translation extends DevblocksORMHelper {
 	 * @param integer $id
 	 * @return Model_TranslationDefault	 */
 	static function get($id) {
+		if(empty($id))
+			return null;
+		
 		$objects = self::getWhere(sprintf("%s = %d",
 			self::ID,
 			$id
@@ -980,7 +995,7 @@ class DAO_Translation extends DevblocksORMHelper {
 		if(is_array($plugins))
 		foreach($plugins as $plugin_id => $plugin) { /* @var $plugin DevblocksPluginManifest */
 			if($plugin->enabled) {
-				$strings_xml = APP_PATH . '/' . $plugin->dir . '/strings.xml';
+				$strings_xml = $plugin->getStoragePath() . '/strings.xml';
 				if(file_exists($strings_xml)) {
 					self::importTmxFile($strings_xml);
 				}
@@ -996,7 +1011,7 @@ class DAO_Translation extends DevblocksORMHelper {
 		
 		// Look up distinct land codes from existing translations
 		$sql = sprintf("SELECT DISTINCT lang_code FROM translation ORDER BY lang_code ASC");
-		$results = $db->GetArray($sql);
+		$results = $db->GetArraySlave($sql);
 		
 		// Languages
 		$langs = $translate->getLanguageCodes();
@@ -1089,7 +1104,7 @@ class DAO_Translation extends DevblocksORMHelper {
 		
 		$ids_list = implode(',', $ids);
 		
-		$db->Execute(sprintf("DELETE FROM translation WHERE id IN (%s)", $ids_list));
+		$db->ExecuteMaster(sprintf("DELETE FROM translation WHERE id IN (%s)", $ids_list));
 		
 		return true;
 	}
@@ -1100,7 +1115,7 @@ class DAO_Translation extends DevblocksORMHelper {
 		
 		$codes_list = implode("','", $codes);
 		
-		$db->Execute(sprintf("DELETE FROM translation WHERE lang_code IN ('%s') AND lang_code != 'en_US'", $codes_list));
+		$db->ExecuteMaster(sprintf("DELETE FROM translation WHERE lang_code IN ('%s') AND lang_code != 'en_US'", $codes_list));
 		
 		return true;
 	}
@@ -1198,7 +1213,7 @@ class DAO_Translation extends DevblocksORMHelper {
 			// We can skip counting if we have a less-than-full single page
 			if(!(0 == $page && $total < $limit)) {
 				$count_sql = "SELECT count(*) " . $join_sql . $where_sql;
-				$total = $db->GetOne($count_sql);
+				$total = $db->GetOneSlave($count_sql);
 			}
 		}
 		
@@ -1234,13 +1249,13 @@ class DAO_DevblocksStorageQueue {
 	static function getPendingProfiles() {
 		$db = DevblocksPlatform::getDatabaseService();
 		
-		return $db->GetArray("SELECT DISTINCT storage_extension, storage_profile_id, storage_namespace FROM devblocks_storage_queue_delete");
+		return $db->GetArrayMaster("SELECT DISTINCT storage_extension, storage_profile_id, storage_namespace FROM devblocks_storage_queue_delete");
 	}
 	
 	static function getKeys($storage_namespace, $storage_extension, $storage_profile_id=0, $limit=500) {
 		$db = DevblocksPlatform::getDatabaseService();
 		
-		$keys = $db->GetArray(sprintf("SELECT storage_key FROM devblocks_storage_queue_delete WHERE storage_namespace = %s AND storage_extension = %s AND storage_profile_id = %d LIMIT %d",
+		$keys = $db->GetArrayMaster(sprintf("SELECT storage_key FROM devblocks_storage_queue_delete WHERE storage_namespace = %s AND storage_extension = %s AND storage_profile_id = %d LIMIT %d",
 			$db->qstr($storage_namespace),
 			$db->qstr($storage_extension),
 			$storage_profile_id,
@@ -1255,7 +1270,7 @@ class DAO_DevblocksStorageQueue {
 	static function enqueueDelete($storage_namespace, $storage_key, $storage_extension, $storage_profile_id=0) {
 		$db = DevblocksPlatform::getDatabaseService();
 		
-		$db->Execute(sprintf("INSERT IGNORE INTO devblocks_storage_queue_delete (storage_namespace, storage_key, storage_extension, storage_profile_id) ".
+		$db->ExecuteMaster(sprintf("INSERT IGNORE INTO devblocks_storage_queue_delete (storage_namespace, storage_key, storage_extension, storage_profile_id) ".
 			"VALUES (%s, %s, %s, %d)",
 			$db->qstr($storage_namespace),
 			$db->qstr($storage_key),
@@ -1273,7 +1288,7 @@ class DAO_DevblocksStorageQueue {
 			return $db->qstr($e);
 		}, $keys);
 		
-		$db->Execute(sprintf("DELETE FROM devblocks_storage_queue_delete WHERE storage_namespace = %s AND storage_extension = %s AND storage_profile_id = %d AND storage_key IN (%s)",
+		$db->ExecuteMaster(sprintf("DELETE FROM devblocks_storage_queue_delete WHERE storage_namespace = %s AND storage_extension = %s AND storage_profile_id = %d AND storage_key IN (%s)",
 			$db->qstr($storage_namespace),
 			$db->qstr($storage_extension),
 			$storage_profile_id,
@@ -1296,7 +1311,7 @@ class DAO_DevblocksStorageProfile extends DevblocksORMHelper {
 		$sql = sprintf("INSERT INTO devblocks_storage_profile () ".
 			"VALUES ()"
 		);
-		$db->Execute($sql);
+		$db->ExecuteMaster($sql);
 		$id = $db->LastInsertId();
 		
 		self::update($id, $fields);
@@ -1341,7 +1356,7 @@ class DAO_DevblocksStorageProfile extends DevblocksORMHelper {
 			"FROM devblocks_storage_profile ".
 			(!empty($where) ? sprintf("WHERE %s ",$where) : "").
 			"ORDER BY id asc";
-		$rs = $db->Execute($sql);
+		$rs = $db->ExecuteSlave($sql);
 		
 		return self::_getObjectsFromResult($rs);
 	}
@@ -1353,7 +1368,6 @@ class DAO_DevblocksStorageProfile extends DevblocksORMHelper {
 	 * @return Model_DevblocksStorageProfile
 	 **/
 	static function get($id) {
-		
 		if(is_numeric($id)) {
 			$profiles = self::getAll();
 			if(isset($profiles[$id]))
@@ -1407,7 +1421,7 @@ class DAO_DevblocksStorageProfile extends DevblocksORMHelper {
 		
 		$ids_list = implode(',', $ids);
 		
-		$db->Execute(sprintf("DELETE FROM devblocks_storage_profile WHERE id IN (%s)", $ids_list));
+		$db->ExecuteMaster(sprintf("DELETE FROM devblocks_storage_profile WHERE id IN (%s)", $ids_list));
 		
 		self::_clearCache();
 		
@@ -1495,9 +1509,9 @@ class DAO_DevblocksStorageProfile extends DevblocksORMHelper {
 			
 		// [TODO] Could push the select logic down a level too
 		if($limit > 0) {
-			$rs = $db->SelectLimit($sql,$limit,$page*$limit) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs ADORecordSet */
+			$rs = $db->SelectLimit($sql,$limit,$page*$limit) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs mysqli_result */
 		} else {
-			$rs = $db->Execute($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs ADORecordSet */
+			$rs = $db->ExecuteSlave($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs mysqli_result */
 			$total = mysqli_num_rows($rs);
 		}
 		
@@ -1517,7 +1531,7 @@ class DAO_DevblocksStorageProfile extends DevblocksORMHelper {
 					($has_multiple_values ? "SELECT COUNT(DISTINCT devblocks_storage_profile.id) " : "SELECT COUNT(devblocks_storage_profile.id) ").
 					$join_sql.
 					$where_sql;
-				$total = $db->GetOne($count_sql);
+				$total = $db->GetOneSlave($count_sql);
 			}
 		}
 		

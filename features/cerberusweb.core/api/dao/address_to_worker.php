@@ -15,7 +15,7 @@
 |	http://www.cerbweb.com	    http://www.webgroupmedia.com/
 ***********************************************************************/
 
-class DAO_AddressToWorker { // extends DevblocksORMHelper
+class DAO_AddressToWorker extends Cerb_ORMHelper {
 	const _CACHE_ALL = 'cerb:dao:address_to_worker:all';
 	
 	const ADDRESS = 'address';
@@ -39,7 +39,7 @@ class DAO_AddressToWorker { // extends DevblocksORMHelper
 			$worker_id,
 			($is_confirmed ? 1 : 0)
 		);
-		$db->Execute($sql);
+		$db->ExecuteMaster($sql);
 
 		self::clearCache();
 		
@@ -57,7 +57,7 @@ class DAO_AddressToWorker { // extends DevblocksORMHelper
 		$sql = sprintf("DELETE FROM address_to_worker WHERE address = %s",
 			$db->qstr($address)
 		);
-		$db->Execute($sql);
+		$db->ExecuteMaster($sql);
 		
 		self::clearCache();
 	}
@@ -71,7 +71,7 @@ class DAO_AddressToWorker { // extends DevblocksORMHelper
 		$sql = sprintf("DELETE FROM address_to_worker WHERE worker_id = %d",
 			$worker_id
 		);
-		$db->Execute($sql);
+		$db->ExecuteMaster($sql);
 		
 		self::clearCache();
 	}
@@ -103,7 +103,7 @@ class DAO_AddressToWorker { // extends DevblocksORMHelper
 			self::ADDRESS,
 			implode("','", $addresses)
 		);
-		$db->Execute($sql);
+		$db->ExecuteMaster($sql);
 		
 		self::clearCache();
 	}
@@ -164,7 +164,13 @@ class DAO_AddressToWorker { // extends DevblocksORMHelper
 		$cache = DevblocksPlatform::getCacheService();
 		
 		if($nocache || null === ($results = $cache->load(self::_CACHE_ALL))) {
-			$addresses = self::getWhere();
+			$addresses = self::getWhere(
+				null,
+				null,
+				null,
+				null,
+				Cerb_ORMHelper::OPT_GET_MASTER_ONLY
+			);
 			$results = array();
 			
 			if(is_array($addresses))
@@ -187,15 +193,25 @@ class DAO_AddressToWorker { // extends DevblocksORMHelper
 		return $results;
 	}
 	
-	static function getWhere($where=null) {
+	static function getWhere($where=null, $sortBy=null, $sortAsc=null, $limit=null, $options=null) {
 		$db = DevblocksPlatform::getDatabaseService();
+
+		list($where_sql, $sort_sql, $limit_sql) = self::_getWhereSQL($where, $sortBy, $sortAsc, $limit);
 		
+		// SQL
 		$sql = "SELECT address, worker_id, is_confirmed, code, code_expire ".
 			"FROM address_to_worker ".
-			(!empty($where) ? sprintf("WHERE %s ", $where) : " ").
-			"ORDER BY address";
-		$rs = $db->Execute($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
-
+			$where_sql.
+			$sort_sql.
+			$limit_sql
+		;
+		
+		if($options & Cerb_ORMHelper::OPT_GET_MASTER_ONLY) {
+			$rs = $db->ExecuteMaster($sql);
+		} else {
+			$rs = $db->ExecuteSlave($sql);
+		}
+		
 		return self::_getObjectsFromResult($rs);
 	}
 	

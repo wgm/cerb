@@ -12,7 +12,7 @@ class DAO_CustomFieldset extends Cerb_ORMHelper {
 		$db = DevblocksPlatform::getDatabaseService();
 		
 		$sql = "INSERT INTO custom_fieldset () VALUES ()";
-		$db->Execute($sql);
+		$db->ExecuteMaster($sql);
 		$id = $db->LastInsertId();
 		
 		self::update($id, $fields);
@@ -61,15 +61,15 @@ class DAO_CustomFieldset extends Cerb_ORMHelper {
 		$temp_table = '_links_' . uniqid();
 		
 		// Generate a temporary table
-		$db->Execute(sprintf("CREATE TEMPORARY TABLE %s (context VARCHAR(128), context_id INT)", $temp_table));
+		$db->ExecuteMaster(sprintf("CREATE TEMPORARY TABLE %s (context VARCHAR(128), context_id INT)", $temp_table));
 		
 		// Find any contexts linking to it
-		$db->Execute(sprintf("INSERT IGNORE INTO %s SELECT context, context_id FROM custom_field_stringvalue WHERE field_id = %d", $temp_table, $field_id));
-		$db->Execute(sprintf("INSERT IGNORE INTO %s SELECT context, context_id FROM custom_field_numbervalue WHERE field_id = %d", $temp_table, $field_id));
-		$db->Execute(sprintf("INSERT IGNORE INTO %s SELECT context, context_id FROM custom_field_clobvalue WHERE field_id = %d", $temp_table, $field_id));
+		$db->ExecuteMaster(sprintf("INSERT IGNORE INTO %s SELECT context, context_id FROM custom_field_stringvalue WHERE field_id = %d", $temp_table, $field_id));
+		$db->ExecuteMaster(sprintf("INSERT IGNORE INTO %s SELECT context, context_id FROM custom_field_numbervalue WHERE field_id = %d", $temp_table, $field_id));
+		$db->ExecuteMaster(sprintf("INSERT IGNORE INTO %s SELECT context, context_id FROM custom_field_clobvalue WHERE field_id = %d", $temp_table, $field_id));
 		
 		// Link from the records to the fieldset
-		$db->Execute(sprintf("INSERT IGNORE INTO context_link (from_context, from_context_id, to_context, to_context_id) ".
+		$db->ExecuteMaster(sprintf("INSERT IGNORE INTO context_link (from_context, from_context_id, to_context, to_context_id) ".
 			"SELECT context, context_id, %s, %s FROM %s",
 			$db->qstr(CerberusContexts::CONTEXT_CUSTOM_FIELDSET),
 			$db->qstr($fieldset_id),
@@ -77,7 +77,7 @@ class DAO_CustomFieldset extends Cerb_ORMHelper {
 		));
 		
 		// And link back in the other direction
-		$db->Execute(sprintf("INSERT IGNORE INTO context_link (to_context, to_context_id, from_context, from_context_id) ".
+		$db->ExecuteMaster(sprintf("INSERT IGNORE INTO context_link (to_context, to_context_id, from_context, from_context_id) ".
 			"SELECT context, context_id, %s, %s FROM %s",
 			$db->qstr(CerberusContexts::CONTEXT_CUSTOM_FIELDSET),
 			$db->qstr($fieldset_id),
@@ -85,7 +85,7 @@ class DAO_CustomFieldset extends Cerb_ORMHelper {
 		));
 		
 		// Drop the temp table
-		$db->Execute(sprintf("DROP TABLE %s", $temp_table));
+		$db->ExecuteMaster(sprintf("DROP TABLE %s", $temp_table));
 		
 		return TRUE;
 	}
@@ -97,7 +97,7 @@ class DAO_CustomFieldset extends Cerb_ORMHelper {
 	 * @param integer $limit
 	 * @return Model_CustomFieldset[]
 	 */
-	static function getWhere($where=null, $sortBy=null, $sortAsc=true, $limit=null) {
+	static function getWhere($where=null, $sortBy=null, $sortAsc=true, $limit=null, $options=null) {
 		$db = DevblocksPlatform::getDatabaseService();
 
 		list($where_sql, $sort_sql, $limit_sql) = self::_getWhereSQL($where, $sortBy, $sortAsc, $limit);
@@ -109,7 +109,12 @@ class DAO_CustomFieldset extends Cerb_ORMHelper {
 			$sort_sql.
 			$limit_sql
 		;
-		$rs = $db->Execute($sql);
+
+		if($options & Cerb_ORMHelper::OPT_GET_MASTER_ONLY) {
+			$rs = $db->ExecuteMaster($sql);
+		} else {
+			$rs = $db->ExecuteSlave($sql);
+		}
 		
 		return self::_getObjectsFromResult($rs);
 	}
@@ -119,6 +124,9 @@ class DAO_CustomFieldset extends Cerb_ORMHelper {
 	 * @return Model_CustomFieldset
 	 */
 	static function get($id) {
+		if(empty($id))
+			return null;
+		
 		$objects = DAO_CustomFieldset::getAll();
 		
 		if(isset($objects[$id]))
@@ -131,7 +139,13 @@ class DAO_CustomFieldset extends Cerb_ORMHelper {
 		$cache = DevblocksPlatform::getCacheService();
 		
 		if($nocache || null === ($objects = $cache->load(self::CACHE_ALL))) {
-			$objects = DAO_CustomFieldset::getWhere(null, DAO_CustomFieldset::NAME, true);
+			$objects = DAO_CustomFieldset::getWhere(
+				null,
+				DAO_CustomFieldset::NAME,
+				true,
+				null,
+				Cerb_ORMHelper::OPT_GET_MASTER_ONLY
+			);
 			$cache->save($objects, self::CACHE_ALL);
 		}
 		
@@ -236,7 +250,7 @@ class DAO_CustomFieldset extends Cerb_ORMHelper {
 			}
 		}
 		
-		$db->Execute(sprintf("DELETE FROM custom_fieldset WHERE id IN (%s)", $ids_list));
+		$db->ExecuteMaster(sprintf("DELETE FROM custom_fieldset WHERE id IN (%s)", $ids_list));
 		
 		// Fire event
 		$eventMgr = DevblocksPlatform::getEventService();
@@ -404,9 +418,9 @@ class DAO_CustomFieldset extends Cerb_ORMHelper {
 			$sort_sql;
 			
 		if($limit > 0) {
-			$rs = $db->SelectLimit($sql,$limit,$page*$limit) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs ADORecordSet */
+			$rs = $db->SelectLimit($sql,$limit,$page*$limit) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs mysqli_result */
 		} else {
-			$rs = $db->Execute($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs ADORecordSet */
+			$rs = $db->ExecuteSlave($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs mysqli_result */
 			$total = mysqli_num_rows($rs);
 		}
 		
@@ -426,7 +440,7 @@ class DAO_CustomFieldset extends Cerb_ORMHelper {
 					($has_multiple_values ? "SELECT COUNT(DISTINCT custom_fieldset.id) " : "SELECT COUNT(custom_fieldset.id) ").
 					$join_sql.
 					$where_sql;
-				$total = $db->GetOne($count_sql);
+				$total = $db->GetOneSlave($count_sql);
 			}
 		}
 		
@@ -1168,7 +1182,6 @@ class Context_CustomFieldset extends Extension_DevblocksContext {
 		$view->renderLimit = 10;
 		$view->renderTemplate = 'contextlinks_chooser';
 		$view->renderFilters = false;
-		C4_AbstractViewLoader::setView($view_id, $view);
 		return $view;
 	}
 	
@@ -1193,7 +1206,6 @@ class Context_CustomFieldset extends Extension_DevblocksContext {
 		$view->addParamsRequired($params_req, true);
 		
 		$view->renderTemplate = 'context';
-		C4_AbstractViewLoader::setView($view_id, $view);
 		return $view;
 	}
 };

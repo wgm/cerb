@@ -16,7 +16,7 @@
 	</p>
 	
 	<p>
-		After you've configured your tab below, click the <button type="button"><span class="cerb-sprite2 sprite-plus-circle"></span> {'common.add'|devblocks_translate|capitalize}</button> button.  You can then click on the tab's label above to display it.
+		After you've configured your tab below, click the <button type="button"><span class="glyphicons glyphicons-circle-plus"></span> {'common.add'|devblocks_translate|capitalize}</button> button.  You can then click on the tab's label above to display it.
 	</p>
 </div>
 </form>
@@ -76,7 +76,7 @@
 				<!-- blank -->
 			</td>
 			<td width="99%">
-				<button type="button" class="add"><span class="cerb-sprite2 sprite-plus-circle"></span> {'common.add'|devblocks_translate|capitalize}</button>
+				<button type="button" class="add"><span class="glyphicons glyphicons-circle-plus"></span> {'common.add'|devblocks_translate|capitalize}</button>
 			</td>
 		</tr>
 		
@@ -108,7 +108,7 @@ $frm.find('input:radio[name=mode]').change(function() {
 $frm.find('button.add').click(function(e) {
 	var $this = $(this);
 	var $frm = $this.closest('form');
-	var $tabs = $('#pageTabs');
+	var $tabs = $('#pageTabs{$page->id}');
 	
 	var len = $tabs.find('.ui-tabs-nav > li').length;
 	

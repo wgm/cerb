@@ -31,7 +31,7 @@ class DAO_PluginLibrary extends Cerb_ORMHelper {
 		$db = DevblocksPlatform::getDatabaseService();
 		
 		$sql = "INSERT INTO plugin_library () VALUES ()";
-		$db->Execute($sql);
+		$db->ExecuteMaster($sql);
 		$id = $db->LastInsertId();
 		
 		self::update($id, $fields);
@@ -66,7 +66,7 @@ class DAO_PluginLibrary extends Cerb_ORMHelper {
 			$sort_sql.
 			$limit_sql
 		;
-		$rs = $db->Execute($sql);
+		$rs = $db->ExecuteSlave($sql);
 		
 		return self::_getObjectsFromResult($rs);
 	}
@@ -75,6 +75,9 @@ class DAO_PluginLibrary extends Cerb_ORMHelper {
 	 * @param integer $id
 	 * @return Model_PluginLibrary	 */
 	static function get($id) {
+		if(empty($id))
+			return null;
+		
 		$objects = self::getWhere(sprintf("%s = %d",
 			self::ID,
 			$id
@@ -124,10 +127,10 @@ class DAO_PluginLibrary extends Cerb_ORMHelper {
 		$db = DevblocksPlatform::getDatabaseService();
 		$tables = DevblocksPlatform::getDatabaseTables();
 		
-		$db->Execute("DELETE FROM plugin_library");
+		$db->ExecuteMaster("DELETE FROM plugin_library");
 		
 		if(isset($tables['fulltext_plugin_library']))
-			$db->Execute("DELETE FROM fulltext_plugin_library");
+			$db->ExecuteMaster("DELETE FROM fulltext_plugin_library");
 		
 		return true;
 	}
@@ -141,7 +144,7 @@ class DAO_PluginLibrary extends Cerb_ORMHelper {
 		
 		$ids_list = implode(',', $ids);
 		
-		$db->Execute(sprintf("DELETE FROM plugin_library WHERE id IN (%s)", $ids_list));
+		$db->ExecuteMaster(sprintf("DELETE FROM plugin_library WHERE id IN (%s)", $ids_list));
 		
 		return true;
 	}
@@ -279,9 +282,9 @@ class DAO_PluginLibrary extends Cerb_ORMHelper {
 			$sort_sql;
 			
 		if($limit > 0) {
-			$rs = $db->SelectLimit($sql,$limit,$page*$limit) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs ADORecordSet */
+			$rs = $db->SelectLimit($sql,$limit,$page*$limit) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs mysqli_result */
 		} else {
-			$rs = $db->Execute($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs ADORecordSet */
+			$rs = $db->ExecuteSlave($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs mysqli_result */
 			$total = mysqli_num_rows($rs);
 		}
 		
@@ -301,7 +304,7 @@ class DAO_PluginLibrary extends Cerb_ORMHelper {
 					($has_multiple_values ? "SELECT COUNT(DISTINCT plugin_library.id) " : "SELECT COUNT(plugin_library.id) ").
 					$join_sql.
 					$where_sql;
-				$total = $db->GetOne($count_sql);
+				$total = $db->GetOneSlave($count_sql);
 			}
 		}
 		
@@ -363,7 +366,7 @@ class DAO_PluginLibrary extends Cerb_ORMHelper {
 	}
 	
 	static function downloadUpdatedPluginsFromRepository() {
-		if(!extension_loaded("curl") || false == ($count = DAO_PluginLibrary::syncManifestsWithRepository()))
+		if(!extension_loaded("curl") || false === ($count = DAO_PluginLibrary::syncManifestsWithRepository()))
 			return false;
 		
 		$tables = DevblocksPlatform::getDatabaseTables(true);
@@ -371,7 +374,7 @@ class DAO_PluginLibrary extends Cerb_ORMHelper {
 		if(!isset($tables['plugin_library']))
 			return false;
 		
-		if(false == ($plugin_library = DAO_PluginLibrary::getWhere()))
+		if(false === ($plugin_library = DAO_PluginLibrary::getWhere()))
 			return false;
 		
 		$plugins = DevblocksPlatform::getPluginRegistry();
@@ -426,7 +429,7 @@ class DAO_PluginLibrary extends Cerb_ORMHelper {
 
 			// Don't auto-update any development plugin
 			
-			$plugin_path = APP_PATH . '/' . $local_plugin->dir;
+			$plugin_path = $local_plugin->getStoragePath();
 			if(file_exists($plugin_path . '/.git')) {
 				continue;
 			}
@@ -459,7 +462,7 @@ class DAO_PluginLibrary extends Cerb_ORMHelper {
 				$updated++;
 				
 				// Reload plugin translations
-				$strings_xml = APP_PATH . '/' . $local_plugin->dir . '/strings.xml';
+				$strings_xml = $local_plugin->getStoragePath() . '/strings.xml';
 				if(file_exists($strings_xml)) {
 					DAO_Translation::importTmxFile($strings_xml);
 				}

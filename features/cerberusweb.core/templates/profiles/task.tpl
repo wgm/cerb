@@ -22,16 +22,16 @@
 		<span>
 		{$object_watchers = DAO_ContextLink::getContextLinks($page_context, array($page_context_id), CerberusContexts::CONTEXT_WORKER)}
 		{include file="devblocks:cerberusweb.core::internal/watchers/context_follow_button.tpl" context=$page_context context_id=$page_context_id full=true}
-		</span>		
+		</span>
 
 		<!-- Macros -->
 		{devblocks_url assign=return_url full=true}c=profiles&type=task&id={$page_context_id}-{$task->title|devblocks_permalink}{/devblocks_url}
 		{include file="devblocks:cerberusweb.core::internal/macros/display/button.tpl" context=$page_context context_id=$page_context_id macros=$macros return_url=$return_url}		
 
 		<!-- Edit -->
-		<button type="button" id="btnDisplayTaskEdit" title="{'common.edit'|devblocks_translate|capitalize}">&nbsp;<span class="cerb-sprite2 sprite-gear"></span>&nbsp;</button>
+		<button type="button" id="btnDisplayTaskEdit" title="{'common.edit'|devblocks_translate|capitalize}"><span class="glyphicons glyphicons-cogwheel"></span></button>
 
-		<button type="button" title="{'common.refresh'|devblocks_translate|capitalize}" onclick="document.location='{devblocks_url}c=profiles&type=task&id={$page_context_id}-{$task->title|devblocks_permalink}{/devblocks_url}';">&nbsp;<span class="cerb-sprite sprite-refresh"></span>&nbsp;</button>
+		<button type="button" title="{'common.refresh'|devblocks_translate|capitalize}" onclick="document.location='{devblocks_url}c=profiles&type=task&id={$page_context_id}-{$task->title|devblocks_permalink}{/devblocks_url}';">&nbsp;<span class="glyphicons glyphicons-refresh"></span></a>&nbsp;</button>
 	</form>
 	
 	{if $pref_keyboard_shortcuts}
@@ -53,7 +53,7 @@
 			{if $k == 'status'}
 				<b>{'common.status'|devblocks_translate|capitalize}:</b>
 				{if $task->is_completed}
-					<span class="cerb-sprite2 sprite-tick-circle" style="vertical-align:middle;"></span> <span style="color:rgb(0,150,0);font-weight:bold;">{'task.is_completed'|devblocks_translate|capitalize}</span>
+					<span class="glyphicons glyphicons-circle-ok" style="vertical-align:middle;"></span> <span style="color:rgb(0,150,0);font-weight:bold;">{'task.is_completed'|devblocks_translate|capitalize}</span>
 				{else}
 					{'status.open'|devblocks_translate|capitalize}
 				{/if}
@@ -84,7 +84,7 @@
 {include file="devblocks:cerberusweb.core::internal/macros/behavior/scheduled_behavior_profile.tpl" context=$page_context context_id=$page_context_id}
 </div>
 
-<div id="tasksTabs">
+<div id="profileTaskTabs">
 	<ul>
 		{$tabs = [comments,activity,links]}
 
@@ -100,17 +100,12 @@
 </div> 
 <br>
 
-{$selected_tab_idx=0}
-{foreach from=$tabs item=tab_label name=tabs}
-	{if $tab_label==$selected_tab}{$selected_tab_idx = $smarty.foreach.tabs.index}{/if}
-{/foreach}
-
 <script type="text/javascript">
 $(function() {
 	var tabOptions = Devblocks.getDefaultjQueryUiTabOptions();
-	tabOptions.active = {$selected_tab_idx};
+	tabOptions.active = Devblocks.getjQueryUiTabSelected('profileTaskTabs');
 	
-	var tabs = $("#tasksTabs").tabs(tabOptions);
+	var tabs = $("#profileTaskTabs").tabs(tabOptions);
 
 	$('#btnDisplayTaskEdit').bind('click', function() {
 		$popup = genericAjaxPopup('peek','c=internal&a=showPeekPopup&context={$page_context}&context_id={$page_context_id}',null,false,'500');
@@ -149,7 +144,7 @@ $(document).keypress(function(event) {
 		case 58:  // (0) tab cycle
 			try {
 				idx = event.which-49;
-				$tabs = $("#tasksTabs").tabs();
+				$tabs = $("#profileTaskTabs").tabs();
 				$tabs.tabs('option', 'active', idx);
 			} catch(ex) { } 
 			break;

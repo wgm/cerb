@@ -52,10 +52,10 @@ class ChDisplayPage extends CerberusPageExtension {
 		$message_senders = array();
 		$message_sender_orgs = array();
 		
-		if(null != ($sender_addy = DAO_Address::get($message->address_id))) {
+		if(null != ($sender_addy = CerberusApplication::hashLookupAddress($message->address_id))) {
 			$message_senders[$sender_addy->id] = $sender_addy;
 			
-			if(null != $sender_org = DAO_ContactOrg::get($sender_addy->contact_org_id)) {
+			if(null != $sender_org = CerberusApplication::hashLookupOrg($sender_addy->contact_org_id)) {
 				$message_sender_orgs[$sender_org->id] = $sender_org;
 			}
 		}
@@ -156,6 +156,54 @@ class ChDisplayPage extends CerberusPageExtension {
 		
 		DevblocksPlatform::redirect(new DevblocksHttpResponse(array('profiles','ticket',$ticket->mask)));
 		exit;
+	}
+	
+	function showMessagePeekPopupAction() {
+		@$context_id = DevblocksPlatform::importGPC($_REQUEST['id'],'integer',0);
+		
+		$tpl = DevblocksPlatform::getTemplateService();
+		
+		if(false == ($message = DAO_Message::get($context_id)))
+			return;
+		
+		$tpl->assign('model', $message);
+		
+		$custom_fields = DAO_CustomField::getByContext(CerberusContexts::CONTEXT_MESSAGE, false);
+		$tpl->assign('custom_fields', $custom_fields);
+		
+		if(!empty($context_id)) {
+			$custom_field_values = DAO_CustomFieldValue::getValuesByContextIds(CerberusContexts::CONTEXT_MESSAGE, $context_id);
+			if(isset($custom_field_values[$context_id]))
+				$tpl->assign('custom_field_values', $custom_field_values[$context_id]);
+		}
+		
+		$tpl->display('devblocks:cerberusweb.core::internal/messages/peek.tpl');
+	}
+	
+	function saveMessagePeekPopupAction() {
+		@$view_id = DevblocksPlatform::importGPC($_REQUEST['view_id'], 'string', '');
+		
+		@$id = DevblocksPlatform::importGPC($_REQUEST['id'], 'integer', 0);
+		@$do_delete = DevblocksPlatform::importGPC($_REQUEST['do_delete'], 'string', '');
+		
+		$active_worker = CerberusApplication::getActiveWorker();
+		
+		$context_ext = Extension_DevblocksContext::get(CerberusContexts::CONTEXT_MESSAGE);
+		
+		// ACL
+		if(!$context_ext->authorize($id, $active_worker))
+			return;
+		
+		if(!empty($id) && !empty($do_delete)) { // Delete
+			if($active_worker->hasPriv('core.display.message.actions.delete'))
+				DAO_Message::delete($id);
+			
+		} else {
+			
+			// Custom fields
+			@$field_ids = DevblocksPlatform::importGPC($_REQUEST['field_ids'], 'array', array());
+			DAO_CustomFieldValue::handleFormPost(CerberusContexts::CONTEXT_MESSAGE, $id, $field_ids);
+		}
 	}
 
 	function showMergePanelAction() {
@@ -518,6 +566,10 @@ class ChDisplayPage extends CerberusPageExtension {
 		$tpl->assign('ticket',$ticket);
 		
 		// Workers
+		
+		$object_recommendations = DAO_ContextRecommendation::getByContexts(CerberusContexts::CONTEXT_TICKET, $ticket->id);
+		$tpl->assign('object_recommendations', $object_recommendations);
+		
 		$object_watchers = DAO_ContextLink::getContextLinks(CerberusContexts::CONTEXT_TICKET, array($ticket->id), CerberusContexts::CONTEXT_WORKER);
 		$tpl->assign('object_watchers', $object_watchers);
 		
@@ -1147,13 +1199,9 @@ class ChDisplayPage extends CerberusPageExtension {
 		@$point = DevblocksPlatform::importGPC($_REQUEST['point'],'string','');
 
 		$tpl = DevblocksPlatform::getTemplateService();
-		$visit = CerberusApplication::getVisit();
 
 		@$active_worker = CerberusApplication::getActiveWorker();
 		
-		if(!empty($point))
-			$visit->set($point, 'conversation');
-				
 		$tpl->assign('expand_all', $expand_all);
 		$tpl->assign('focus_ctx', $focus_ctx);
 		$tpl->assign('focus_ctx_id', $focus_ctx_id);
@@ -1206,25 +1254,27 @@ class ChDisplayPage extends CerberusPageExtension {
 		foreach($messages as $message_id => $message) { /* @var $message Model_Message */
 			$key = $message->created_date . '_m' . $message_id;
 			// build a chrono index of messages
-			$convo_timeline[$key] = array('m',$message_id);
+			$convo_timeline[$key] = array('m', $message_id);
 			
 			// If we haven't cached this sender address yet
-			if(!isset($message_senders[$message->address_id])) {
-				if(null != ($sender_addy = DAO_Address::get($message->address_id))) {
-					$message_senders[$sender_addy->id] = $sender_addy;
-
-					// If we haven't cached this sender org yet
-					if(!isset($message_sender_orgs[$sender_addy->contact_org_id])) {
-						if(null != ($sender_org = DAO_ContactOrg::get($sender_addy->contact_org_id))) {
-							$message_sender_orgs[$sender_org->id] = $sender_org;
-						}
-					}
-				}
-			}
+			if($message->address_id)
+				$message_senders[$message->address_id] = null;
 		}
 		
+		// Bulk load sender address records
+		$message_senders = CerberusApplication::hashLookupAddresses(array_keys($message_senders));
+		
+		// Bulk load org records
+		array_walk($message_senders, function($sender) use (&$message_sender_orgs) { /* @var $sender Model_Address */
+			if($sender->contact_org_id)
+				$message_sender_orgs[$sender->contact_org_id] = null;
+		});
+		$message_sender_orgs = CerberusApplication::hashLookupOrgs(array_keys($message_sender_orgs));
+
 		$tpl->assign('message_senders', $message_senders);
 		$tpl->assign('message_sender_orgs', $message_sender_orgs);
+
+		// Comments
 		
 		$comments = DAO_Comment::getByContext(CerberusContexts::CONTEXT_TICKET, $id);
 		arsort($comments);
@@ -1373,6 +1423,7 @@ class ChDisplayPage extends CerberusPageExtension {
 			DAO_Ticket::GROUP_ID => $orig_ticket->group_id,
 			DAO_Ticket::BUCKET_ID => $orig_ticket->bucket_id,
 			DAO_Ticket::ORG_ID => $orig_ticket->org_id,
+			DAO_Ticket::IMPORTANCE => $orig_ticket->importance,
 		);
 
 		$new_ticket_id = DAO_Ticket::create($fields);
@@ -1464,9 +1515,6 @@ class ChDisplayPage extends CerberusPageExtension {
 		@$ticket_id = DevblocksPlatform::importGPC($_REQUEST['ticket_id'],'integer');
 		@$point = DevblocksPlatform::importGPC($_REQUEST['point'],'string','');
 				
-		if(!empty($point))
-			$visit->set($point, 'history');
-
 		// Scope
 		$scope = $visit->get('display.history.scope', '');
 		
@@ -1478,10 +1526,7 @@ class ChDisplayPage extends CerberusPageExtension {
 		$tpl->assign('scope', $scope);
 
 		$view = DAO_Ticket::getViewForRequesterHistory('contact_history', $ticket, $scope);
-		$view->renderPage = 0;
 		$tpl->assign('view', $view);
-		
-		C4_AbstractViewLoader::setView($view->id,$view);
 		
 		$tpl->display('devblocks:cerberusweb.core::display/modules/history/index.tpl');
 	}

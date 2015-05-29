@@ -7,8 +7,10 @@ class _DevblocksClassLoadManager {
 	
 	private function __construct() {
 		$cache = _DevblocksCacheManager::getInstance();
+		
 		if(null !== ($map = $cache->load(self::CACHE_CLASS_MAP))) {
 			$this->classMap = $map;
+			
 		} else {
 			$this->_initLibs();
 			$this->_initServices();
@@ -70,10 +72,13 @@ class _DevblocksClassLoadManager {
 		$this->registerClasses(DEVBLOCKS_PATH . 'libs/swift/swift_required.php', array(
 			'Swift',
 			'Swift_Attachment',
+			'Swift_InputByteStream',
 			'Swift_Mailer',
 			'Swift_Message',
+			'Swift_OutputByteStream',
 			'Swift_Plugins_AntiFloodPlugin',
 			'Swift_SmtpTransport',
+			'Swift_Transport',
 		));
 		$this->registerClasses(DEVBLOCKS_PATH . 'libs/Twig/Autoloader.php', array(
 			'Twig_Autoloader',
@@ -97,11 +102,13 @@ class _DevblocksClassLoadManager {
 		$this->registerClasses(DEVBLOCKS_PATH . 'api/services/event/event_helper.php', array(
 			'DevblocksEventHelper',
 		));
-		$this->registerClasses(DEVBLOCKS_PATH . 'api/services/logging.php', array(
-			'_DevblocksLogManager',
-		));
 		$this->registerClasses(DEVBLOCKS_PATH . 'api/services/nlp.php', array(
 			'_DevblocksNaturalLanguageManager',
+		));
+		$this->registerClasses(DEVBLOCKS_PATH . 'api/services/nn.php', array(
+			'_DevblocksNeuralNetworkService',
+			'DevblocksNeuralNetwork',
+			'DevblocksNeuralNetworkNode',
 		));
 		$this->registerClasses(DEVBLOCKS_PATH . 'api/services/openid.php', array(
 			'_DevblocksOpenIDManager',

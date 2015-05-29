@@ -66,12 +66,12 @@
 				<fieldset style="display:inline-block;margin-bottom:0;">
 					<legend>Actions</legend>
 					{assign var=headers value=$message->getHeaders()}
-					<button name="saveDraft" type="button"><span class="cerb-sprite2 sprite-tick-circle"></span> Save Draft</button>
+					<button name="saveDraft" type="button"><span class="glyphicons glyphicons-circle-ok"></span> Save Draft</button>
 					
 					{* Virtual Attendants *}
 					{if !empty($macros)}
-					<button type="button" title="(Ctrl+Shift+B)" class="split-left" onclick="$(this).next('button').click();"><span class="cerb-sprite2 sprite-robot"></span> Virtual Attendants</button><!--  
-					--><button type="button" title="(Ctrl+Shift+B)" class="split-right" id="btnReplyMacros{$message->id}"><span class="cerb-sprite sprite-arrow-down-white"></span></button>
+					<button type="button" title="(Ctrl+Shift+B)" class="split-left" onclick="$(this).next('button').click();"><span class="glyphicons glyphicons-remote-control"></span></button><!--  
+					--><button type="button" title="(Ctrl+Shift+B)" class="split-right" id="btnReplyMacros{$message->id}"><span class="glyphicons glyphicons-chevron-down" style="font-size:12px;color:white;"></span></button>
 					<ul class="cerb-popupmenu cerb-float" id="menuReplyMacros{$message->id}">
 						<li style="background:none;">
 							<input type="text" size="32" class="input_search filter">
@@ -116,7 +116,7 @@
 					</ul>
 					{/if}
 					
-					<button id="btnInsertReplySig{$message->id}" type="button" {if $pref_keyboard_shortcuts}title="(Ctrl+Shift+G)"{/if} onclick="$('#reply_{$message->id}').insertAtCursor('#signature\n');"><span class="cerb-sprite sprite-document_edit"></span> {'display.reply.insert_sig'|devblocks_translate|capitalize}</button>
+					<button id="btnInsertReplySig{$message->id}" type="button" {if $pref_keyboard_shortcuts}title="(Ctrl+Shift+G)"{/if} onclick="$('#reply_{$message->id}').insertAtCursor('#signature\n');"><span class="glyphicons glyphicons-edit"></span> {'display.reply.insert_sig'|devblocks_translate|capitalize}</button>
 					
 					{* Plugin Toolbar *}
 					{if !empty($reply_toolbaritems)}
@@ -131,8 +131,8 @@
 					<div>
 						Insert: 
 						<input type="text" size="25" class="context-snippet autocomplete" {if $pref_keyboard_shortcuts}placeholder="(Ctrl+Shift+I)"{/if}>
-						<button type="button" onclick="ajax.chooserSnippet('chooser{$message->id}',$('#reply_{$message->id}'), { '{CerberusContexts::CONTEXT_TICKET}':'{$ticket->id}', '{CerberusContexts::CONTEXT_WORKER}':'{$active_worker->id}' });"><span class="cerb-sprite sprite-view"></span></button>
-						<button type="button" onclick="genericAjaxPopup('peek','c=internal&a=showSnippetsPeek&id=0&owner_context={CerberusContexts::CONTEXT_WORKER}&owner_context_id={$active_worker->id}&context={CerberusContexts::CONTEXT_TICKET}&context_id={$ticket->id}',null,false,'550');"><span class="cerb-sprite2 sprite-plus-circle"></span></button>
+						<button type="button" onclick="ajax.chooserSnippet('chooser{$message->id}',$('#reply_{$message->id}'), { '{CerberusContexts::CONTEXT_TICKET}':'{$ticket->id}', '{CerberusContexts::CONTEXT_WORKER}':'{$active_worker->id}' });"><span class="glyphicons glyphicons-search"></span></button>
+						<button type="button" onclick="genericAjaxPopup('peek','c=internal&a=showSnippetsPeek&id=0&owner_context={CerberusContexts::CONTEXT_WORKER}&owner_context_id={$active_worker->id}&context={CerberusContexts::CONTEXT_TICKET}&context_id={$ticket->id}',null,false,'550');"><span class="glyphicons glyphicons-circle-plus"></span></button>
 					</div>
 				</fieldset>
 			</div>
@@ -146,7 +146,7 @@
 
 {$message_content = $message->getContent()}
 {$mail_reply_html = DAO_WorkerPref::get($active_worker->id, 'mail_reply_html', 0)}
-{$mail_reply_textbox_size_inelastic = DAO_WorkerPref::get($active_worker->id, 'mail_reply_textbox_size_inelastic', 0)}
+{$mail_reply_textbox_size_auto = DAO_WorkerPref::get($active_worker->id, 'mail_reply_textbox_size_auto', 0)}
 {$mail_reply_textbox_size_px = DAO_WorkerPref::get($active_worker->id, 'mail_reply_textbox_size_px', 300)}
 
 <form id="reply{$message->id}_part2" action="{devblocks_url}{/devblocks_url}" method="POST" enctype="multipart/form-data">
@@ -221,7 +221,7 @@
 			<fieldset class="peek reply-attachments">
 				<legend>{'common.attachments'|devblocks_translate|capitalize}</legend>
 				
-				<button type="button" class="chooser_file"><span class="cerb-sprite2 sprite-plus-circle"></span></button>
+				<button type="button" class="chooser_file"><span class="glyphicons glyphicons-paperclip"></span></button>
 				<ul class="bubbles chooser-container">
 				{if $draft->params.file_ids}
 					{foreach from=$draft->params.file_ids item=file_id}
@@ -249,7 +249,14 @@
 					<tr>
 						<td nowrap="nowrap" valign="top">
 							<div style="margin-bottom:10px;">
-								{include file="devblocks:cerberusweb.core::internal/watchers/context_follow_button.tpl" object_watchers=$object_watchers context=CerberusContexts::CONTEXT_TICKET context_id=$ticket->id full=true}
+								<span>
+									{$recommend_btn_domid = uniqid()}
+									{include file="devblocks:cerberusweb.core::internal/recommendations/context_recommend_button.tpl" object_recommendations=$object_recommendations context=CerberusContexts::CONTEXT_TICKET context_id=$ticket->id full=true recommend_btn_domid=$recommend_btn_domid recommend_group_id=$ticket->group_id recommend_bucket_id=$ticket->bucket_id}
+								</span>
+								<span>
+									{$watchers_btn_domid = uniqid()}
+									{include file="devblocks:cerberusweb.core::internal/watchers/context_follow_button.tpl" object_watchers=$object_watchers context=CerberusContexts::CONTEXT_TICKET context_id=$ticket->id full=true watchers_btn_domid=$watchers_btn_domid watchers_group_id=$ticket->group_id watchers_bucket_id=$ticket->bucket_id}
+								</span>
 							</div>
 							
 							<label {if $pref_keyboard_shortcuts}title="(Ctrl+Shift+O)"{/if}><input type="radio" name="closed" value="0" class="status_open" onclick="toggleDiv('replyOpen{$message->id}','block');toggleDiv('replyClosed{$message->id}','none');" {if (empty($draft) && 'open'==$mail_status_reply) || $draft->params.closed==0}checked="checked"{/if}>{'status.open'|devblocks_translate|capitalize}</label>
@@ -275,13 +282,11 @@
 								{/foreach}
 							</select>
 							<select class="ticket-reply-bucket-options" style="display:none;">
-								<option value="0" group_id="*">{'common.inbox'|devblocks_translate|capitalize}</option>
 								{foreach from=$buckets item=bucket key=bucket_id}
 								<option value="{$bucket_id}" group_id="{$bucket->group_id}">{$bucket->name}</option>
 								{/foreach}
 							</select>
 							<select name="bucket_id">
-								<option value="0">{'common.inbox'|devblocks_translate|capitalize}</option>
 								{foreach from=$buckets item=bucket key=bucket_id}
 									{if $bucket->group_id == $ticket->group_id}
 									<option value="{$bucket_id}" {if $ticket->bucket_id == $bucket_id}selected="selected"{/if}>{$bucket->name}</option>
@@ -331,14 +336,14 @@
 	</tr>
 	<tr>
 		<td id="reply{$message->id}_buttons">
-			<button type="button" class="send split-left" onclick="$(this).closest('td').find('ul li:first a').click();" title="{if $pref_keyboard_shortcuts}(Ctrl+Shift+Enter){/if}"><span class="cerb-sprite2 sprite-tick-circle"></span> {if $is_forward}{'display.ui.forward'|devblocks_translate|capitalize}{else}{'display.ui.send_message'|devblocks_translate}{/if}</button><!--
-			--><button type="button" class="split-right" onclick="$(this).next('ul').toggle();"><span class="cerb-sprite sprite-arrow-down-white"></span></button>
+			<button type="button" class="send split-left" onclick="$(this).closest('td').find('ul li:first a').click();" title="{if $pref_keyboard_shortcuts}(Ctrl+Shift+Enter){/if}"><span class="glyphicons glyphicons-circle-ok" style="color:rgb(0,180,0);"></span> {if $is_forward}{'display.ui.forward'|devblocks_translate|capitalize}{else}{'display.ui.send_message'|devblocks_translate}{/if}</button><!--
+			--><button type="button" class="split-right" onclick="$(this).next('ul').toggle();"><span class="glyphicons glyphicons-chevron-down" style="font-size:12px;color:white;"></span></button>
 			<ul class="cerb-popupmenu cerb-float" style="margin-top:-5px;">
 				<li><a href="javascript:;" class="send">{if $is_forward}{'display.ui.forward'|devblocks_translate}{else}{'display.ui.send_message'|devblocks_translate}{/if}</a></li>
 				{if $active_worker->hasPriv('core.mail.save_without_sending')}<li><a href="javascript:;" class="save">{'display.ui.save_nosend'|devblocks_translate}</a></li>{/if}
 				<li><a href="javascript:;" class="draft">{'display.ui.continue_later'|devblocks_translate}</a></li>
 			</ul>
-			<button type="button" class="discard" onclick="window.onbeforeunload=null;if(confirm('Are you sure you want to discard this reply?')) { if(null != draftAutoSaveInterval) { clearTimeout(draftAutoSaveInterval); draftAutoSaveInterval = null; } $frm = $(this).closest('form'); genericAjaxGet('', 'c=mail&a=handleSectionAction&section=drafts&action=deleteDraft&draft_id='+escape($frm.find('input:hidden[name=draft_id]').val()), function(o) { $frm = $('#reply{$message->id}_part2'); $('#draft'+escape($frm.find('input:hidden[name=draft_id]').val())).remove(); $('#reply{$message->id}').html('');  } ); }"><span class="cerb-sprite2 sprite-cross-circle"></span> {'display.ui.discard'|devblocks_translate|capitalize}</button>
+			<button type="button" class="discard" onclick="window.onbeforeunload=null;if(confirm('Are you sure you want to discard this reply?')) { if(null != draftAutoSaveInterval) { clearTimeout(draftAutoSaveInterval); draftAutoSaveInterval = null; } $frm = $(this).closest('form'); genericAjaxGet('', 'c=mail&a=handleSectionAction&section=drafts&action=deleteDraft&draft_id='+escape($frm.find('input:hidden[name=draft_id]').val()), function(o) { $frm = $('#reply{$message->id}_part2'); $('#draft'+escape($frm.find('input:hidden[name=draft_id]').val())).remove(); $('#reply{$message->id}').html('');  } ); }"><span class="glyphicons glyphicons-circle-remove" style="color:rgb(200,0,0);"></span> {'display.ui.discard'|devblocks_translate|capitalize}</button>
 		</td>
 	</tr>
 </table>
@@ -369,8 +374,12 @@
 		ajax.emailAutoComplete('#reply{$message->id}_part1 input[name=bcc]', { multiple: true } );
 		
 		$frm.find('input:text').blur(function(event) {
-			name = event.target.name;
-			$('#reply{$message->id}_part2 input:hidden[name='+name+']').val(event.target.value);
+			var name = event.target.name;
+			
+			if(0 == name.length)
+				return;
+			
+			$('#reply{$message->id}_part2 input:hidden[name="'+name+'"]').val(event.target.value);
 		} );
 		
 		$frm.find('input:text[name=to], input:text[name=cc], input:text[name=bcc]').focus(function(event) {
@@ -406,8 +415,8 @@
 		var markitupReplyFunctions = {
 			switchToMarkdown: function(markItUp) { 
 				$content.markItUpRemove().markItUp(markitupParsedownSettings);
-				{if empty($mail_reply_textbox_size_inelastic)}
-				$content.elastic();
+				{if !empty($mail_reply_textbox_size_auto)}
+				$content.autosize();
 				{/if}
 				$content.closest('form').find('input:hidden[name=format]').val('parsedown');
 
@@ -433,8 +442,8 @@
 			
 			switchToPlaintext: function(markItUp) { 
 				$content.markItUpRemove().markItUp(markitupPlaintextSettings);
-				{if empty($mail_reply_textbox_size_inelastic)}
-				$content.elastic();
+				{if !empty($mail_reply_textbox_size_auto)}
+				$content.autosize();
 				{/if}
 				$content.closest('form').find('input:hidden[name=format]').val('');
 			}
@@ -526,7 +535,8 @@
 		$content
 			.atwho({
 				at: '#attach ',
-				{literal}tpl: '<li data-value="#attach ${tag}\n">${name} <small style="margin-left:10px;">${tag}</small></li>',{/literal}
+				{literal}displayTpl: '<li>${name} <small style="margin-left:10px;">${tag}</small></li>',{/literal}
+				{literal}insertTpl: '#attach ${tag}\n',{/literal}
 				suffix: '',
 				data: atwho_file_bundles,
 				limit: 10
@@ -534,7 +544,7 @@
 			.atwho({
 				at: '#',
 				data: [
-					'attach',
+					'attach ',
 					'comment',
 					'comment @',
 					'cut\n',
@@ -557,8 +567,10 @@
 			})
 			.atwho({
 				at: '@',
-				{literal}tpl: '<li data-value="@${at_mention}">${name} <small style="margin-left:10px;">${title}</small></li>',{/literal}
+				{literal}displayTpl: '<li>${name} <small style="margin-left:10px;">${title}</small> <small style="margin-left:10px;">@${at_mention}</small></li>',{/literal}
+				{literal}insertTpl: '@${at_mention}',{/literal}
 				data: atwho_workers,
+				searchKey: '_index',
 				limit: 10
 			})
 			;
@@ -600,8 +612,8 @@
 		
 		// Elastic
 
-		{if empty($mail_reply_textbox_size_inelastic)}
-		$content.elastic();
+		{if !empty($mail_reply_textbox_size_auto)}
+		$content.autosize();
 		{/if}
 		
 		$frm2.find('input[name=ticket_reopen]')
@@ -760,6 +772,8 @@
 				genericAjaxGet('',url,function(json) {
 					// If the content has placeholders, use that popup instead
 					if(json.has_custom_placeholders) {
+						$textarea.focus();
+						
 						var $popup_paste = genericAjaxPopup('snippet_paste', 'c=internal&a=snippetPlaceholders&id=' + encodeURIComponent(json.id) + '&context_id=' + encodeURIComponent(json.context_id),null,false,'600');
 					
 						$popup_paste.bind('snippet_paste', function(event) {

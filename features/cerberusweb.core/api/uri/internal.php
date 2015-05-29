@@ -45,8 +45,9 @@ class ChInternalController extends DevblocksControllerExtension {
 	}
 
 	function handleSectionActionAction() {
-		@$section_uri = DevblocksPlatform::importGPC($_REQUEST['section'],'string','');
-		@$action = DevblocksPlatform::importGPC($_REQUEST['action'],'string','');
+		// GET has precedence over POST
+		@$section_uri = DevblocksPlatform::importGPC(isset($_GET['section']) ? $_GET['section'] : $_REQUEST['section'],'string','');
+		@$action = DevblocksPlatform::importGPC(isset($_GET['action']) ? $_GET['action'] : $_REQUEST['action'],'string','');
 
 		$inst = Extension_PageSection::getExtensionByPageUri($this->manifest->id, $section_uri, true);
 		
@@ -135,9 +136,6 @@ class ChInternalController extends DevblocksControllerExtension {
 
 		$tpl->assign('context', $context);
 		$tpl->assign('context_id', $context_id);
-
-		if(!empty($point))
-			$visit->set($point, 'links');
 
 		// Context Links
 
@@ -655,8 +653,6 @@ class ChInternalController extends DevblocksControllerExtension {
 				}
 			}
 			
-			C4_AbstractViewLoader::setView($view->id, $view);
-			
 			$tpl->assign('view', $view);
 			$tpl->assign('single', $single);
 			
@@ -730,8 +726,6 @@ class ChInternalController extends DevblocksControllerExtension {
 			$view->setPlaceholderLabels($labels);
 			$view->setPlaceholderValues($values);
 		}
-		
-		C4_AbstractViewLoader::setView($view->id, $view);
 		
 		$tpl = DevblocksPlatform::getTemplateService();
 		$tpl->assign('context', $context);
@@ -891,16 +885,11 @@ class ChInternalController extends DevblocksControllerExtension {
 		@$context_id = DevblocksPlatform::importGPC($_REQUEST['context_id'],'integer');
 		@$point = DevblocksPlatform::importGPC($_REQUEST['point'],'string');
 		
-		$visit = CerberusApplication::getVisit();
 		$tpl = DevblocksPlatform::getTemplateService();
 
 		if(empty($context) || empty($context_id))
 			return;
 		
-		// Remember tab
-		if(!empty($point))
-			$visit->set($point, 'activity');
-
 		switch($scope) {
 			case 'target':
 				$params = array(
@@ -961,8 +950,6 @@ class ChInternalController extends DevblocksControllerExtension {
 			), true);
 			
 			$view->addParamsRequired($params, true);
-			
-			C4_AbstractViewLoader::setView($view->id, $view);
 			
 			$tpl->assign('view', $view);
 		}
@@ -1181,107 +1168,6 @@ class ChInternalController extends DevblocksControllerExtension {
 		exit;
 	}
 
-	function toggleContextWatcherAction() {
-		@$context = DevblocksPlatform::importGPC($_REQUEST['context'],'string','');
-		@$context_id = DevblocksPlatform::importGPC($_REQUEST['context_id'],'integer',0);
-		@$follow = DevblocksPlatform::importGPC($_REQUEST['follow'],'integer',0);
-		@$full = DevblocksPlatform::importGPC($_REQUEST['full'],'integer',0);
-		
-		// [TODO] Verify context + context_id
-		
-		$tpl = DevblocksPlatform::getTemplateService();
-		$active_worker = CerberusApplication::getActiveWorker();
-		
-		$tpl->assign('context', $context);
-		$tpl->assign('context_id', $context_id);
-		$tpl->assign('full', $full);
-		
-		// Add or remove watcher as current worker
-		if($follow) {
-			CerberusContexts::addWatchers($context, $context_id, $active_worker->id);
-		} else {
-			CerberusContexts::removeWatchers($context, $context_id, $active_worker->id);
-		}
-		
-		// Watchers
-		$object_watchers = DAO_ContextLink::getContextLinks($context, array($context_id), CerberusContexts::CONTEXT_WORKER);
-		$tpl->assign('object_watchers', $object_watchers);
-		
-		// Workers
-		$tpl->assign('workers', DAO_Worker::getAll());
-		
-		$tpl->display('devblocks:cerberusweb.core::internal/watchers/context_follow_button.tpl');
-		
-		$tpl->clearAssign('context');
-		$tpl->clearAssign('context_id');
-		$tpl->clearAssign('object_watchers');
-	}
-	
-	function showContextWatchersAction() {
-		@$context = DevblocksPlatform::importGPC($_REQUEST['context'],'string','');
-		@$context_id = DevblocksPlatform::importGPC($_REQUEST['context_id'],'integer',0);
-		
-		$tpl = DevblocksPlatform::getTemplateService();
-		$active_worker = CerberusApplication::getActiveWorker();
-
-		if(null != ($extension = DevblocksPlatform::getExtension($context, true))) { /* @var $extension Extension_DevblocksContext */
-			$tpl->assign('extension', $extension);
-			$meta = $extension->getMeta($context_id);
-			$tpl->assign('meta', $meta);
-		}
-		
-		$tpl->assign('context', $context);
-		$tpl->assign('context_id', $context_id);
-		
-		// Watchers
-		$object_watchers = DAO_ContextLink::getContextLinks($context, array($context_id), CerberusContexts::CONTEXT_WORKER);
-		$tpl->assign('object_watchers', $object_watchers);
-		
-		// Workers
-		$tpl->assign('workers', DAO_Worker::getAll());
-		
-		$tpl->display('devblocks:cerberusweb.core::internal/watchers/context_follow_popup.tpl');
-	}
-	
-	function addContextWatchersAction() {
-		@$context = DevblocksPlatform::importGPC($_REQUEST['context'],'string','');
-		@$context_id = DevblocksPlatform::importGPC($_REQUEST['context_id'],'integer',0);
-		@$add_worker_ids_str = DevblocksPlatform::importGPC($_REQUEST['add_worker_ids'],'string','');
-		@$delete_worker_ids_str = DevblocksPlatform::importGPC($_REQUEST['delete_worker_ids'],'string','');
-		@$full = DevblocksPlatform::importGPC($_REQUEST['full'],'integer',0);
-		
-		$add_worker_ids = DevblocksPlatform::parseCsvString($add_worker_ids_str, false, 'integer');
-		$delete_worker_ids = DevblocksPlatform::parseCsvString($delete_worker_ids_str, false, 'integer');
-		
-		$tpl = DevblocksPlatform::getTemplateService();
-		$active_worker = CerberusApplication::getActiveWorker();
-
-		$tpl->assign('context', $context);
-		$tpl->assign('context_id', $context_id);
-		$tpl->assign('full', $full);
-		
-		// Add
-		if(!empty($add_worker_ids) && $active_worker->hasPriv('core.watchers.assign'))
-			CerberusContexts::addWatchers($context, $context_id, $add_worker_ids);
-			
-		// Remove
-		if(!empty($delete_worker_ids) && $active_worker->hasPriv('core.watchers.unassign'))
-			CerberusContexts::removeWatchers($context, $context_id, $delete_worker_ids);
-		
-		// Watchers
-		$object_watchers = DAO_ContextLink::getContextLinks($context, array($context_id), CerberusContexts::CONTEXT_WORKER);
-		$tpl->assign('object_watchers', $object_watchers);
-		
-		// Workers
-		$tpl->assign('workers', DAO_Worker::getAll());
-		
-		$tpl->display('devblocks:cerberusweb.core::internal/watchers/context_follow_button.tpl');
-		
-		$tpl->clearAssign('context');
-		$tpl->clearAssign('context_id');
-		$tpl->clearAssign('object_watchers');
-	}
-	
 	// Snippets
 	
 	function showSnippetHelpPopupAction() {
@@ -1295,15 +1181,11 @@ class ChInternalController extends DevblocksControllerExtension {
 		@$context_id = DevblocksPlatform::importGPC($_REQUEST['context_id'],'integer',null);
 		
 		$active_worker = CerberusApplication::getActiveWorker();
-		$visit = CerberusApplication::getVisit();
 		$tpl = DevblocksPlatform::getTemplateService();
 
 		$tpl->assign('owner_context', $context);
 		$tpl->assign('owner_context_id', $context_id);
 		
-		// Remember the tab
-		$visit->set($point, 'snippets');
-
 		$view_id = str_replace('.','_',$point) . '_snippets';
 		
 		$view = C4_AbstractViewLoader::getView($view_id);
@@ -1323,7 +1205,6 @@ class ChInternalController extends DevblocksControllerExtension {
 			), true);
 		}
 		
-		C4_AbstractViewLoader::setView($view->id,$view);
 		$tpl->assign('view', $view);
 		
 		$tpl->display('devblocks:cerberusweb.core::internal/views/search_and_view.tpl');
@@ -1775,6 +1656,7 @@ class ChInternalController extends DevblocksControllerExtension {
 		// View
 		@$view_id = DevblocksPlatform::importGPC($_REQUEST['view_id'],'string');
 		$view = C4_AbstractViewLoader::getView($view_id);
+		$view->setAutoPersist(false);
 		
 		// Snippet fields
 		@$owner = trim(DevblocksPlatform::importGPC($_POST['owner'],'string',''));
@@ -1825,7 +1707,6 @@ class ChInternalController extends DevblocksControllerExtension {
 
 		if(null != ($view = C4_AbstractViewLoader::getView($id))) {
 			$view->doSortBy($sortBy);
-			C4_AbstractViewLoader::setView($id, $view);
 			$view->render();
 		}
 	}
@@ -1836,7 +1717,6 @@ class ChInternalController extends DevblocksControllerExtension {
 
 		if(null != ($view = C4_AbstractViewLoader::getView($id))) {
 			$view->doPage($page);
-			C4_AbstractViewLoader::setView($id, $view);
 			$view->render();
 		}
 	}
@@ -1882,7 +1762,6 @@ class ChInternalController extends DevblocksControllerExtension {
 		
 		if(null != ($view = C4_AbstractViewLoader::getView($id))) {
 			$view->renderFilters = !empty($show) ? 1 : 0;
-			C4_AbstractViewLoader::setView($view->id, $view);
 		}
 	}
 	
@@ -1928,8 +1807,6 @@ class ChInternalController extends DevblocksControllerExtension {
 		// Reset the paging when adding a filter
 		$view->renderPage = 0;
 		
-		C4_AbstractViewLoader::setView($view->id, $view);
-
 		$this->_viewRenderInlineFilters($view, $is_custom);
 	}
 
@@ -1940,8 +1817,6 @@ class ChInternalController extends DevblocksControllerExtension {
 			return;
 
 		$view->doResetCriteria();
-
-		C4_AbstractViewLoader::setView($view->id, $view);
 
 		$this->_viewRenderInlineFilters($view);
 	}
@@ -1962,8 +1837,6 @@ class ChInternalController extends DevblocksControllerExtension {
 				$view->renderSortAsc = !empty($preset->sort_asc);
 			}
 		}
-
-		C4_AbstractViewLoader::setView($view->id, $view);
 
 		$this->_viewRenderInlineFilters($view);
 	}
@@ -2031,8 +1904,30 @@ class ChInternalController extends DevblocksControllerExtension {
 		if(null == ($view = C4_AbstractViewLoader::getView($id)))
 			return;
 		
+		// Columns
+		
+		$columns = array();
+		$columns_available = $view->getColumnsAvailable();
+		
+		// Start with the currently selected columns
+		if(is_array($view->view_columns))
+		foreach($view->view_columns as $token) {
+			if(isset($columns_available[$token]) && !isset($columns[$token]))
+				$columns[$token] = $columns_available[$token];
+		}
+		
+		// Finally, append the remaining columns
+		foreach($columns_available as $token => $col) {
+			if(!isset($columns[$token]))
+				if($token && $col->db_label)
+					$columns[$token] = $col;
+		}
+		
+		$tpl->assign('columns', $columns);
+		
 		// Custom worklists
-		if('cust_' == substr($view->id,0,5)) {
+		
+		if($view->isCustom()) {
 			try {
 				$worklist_id = substr($view->id,5);
 				
@@ -2122,6 +2017,7 @@ class ChInternalController extends DevblocksControllerExtension {
 		// View params inside the list for quick render overload
 		$list_view = new Model_WorkspaceListView();
 		$list_view->title = $list_title;
+		$list_view->options = $view->options;
 		$list_view->num_rows = $view->renderLimit;
 		$list_view->columns = $view->view_columns;
 		$list_view->params = $view->getEditableParams();
@@ -2570,11 +2466,13 @@ class ChInternalController extends DevblocksControllerExtension {
 		$translate = DevblocksPlatform::getTranslationService();
 		$active_worker = CerberusApplication::getActiveWorker();
 
-		@$id = DevblocksPlatform::importGPC($_REQUEST['id']);
+		@$id = DevblocksPlatform::importGPC($_REQUEST['id'], 'string');
 		@$columns = DevblocksPlatform::importGPC($_REQUEST['columns'],'array', array());
 		@$num_rows = DevblocksPlatform::importGPC($_REQUEST['num_rows'],'integer',10);
-
-		$num_rows = max($num_rows, 1); // make 1 the minimum
+		@$options = DevblocksPlatform::importGPC($_REQUEST['options'],'array', array());
+		
+		// Sanitize
+		$num_rows = DevblocksPlatform::intClamp($num_rows, 1, 500);
 
 		// [Security] Filter custom fields
 		$custom_fields = DAO_CustomField::getAll();
@@ -2601,9 +2499,9 @@ class ChInternalController extends DevblocksControllerExtension {
 		if(null == ($view = C4_AbstractViewLoader::getView($id)))
 			return;
 		
-		$view->doCustomize($columns, $num_rows);
+		$view->doCustomize($columns, $num_rows, $options);
 
-		$is_custom = substr($id,0,5)=='cust_';
+		$is_custom = $view->isCustom();
 		$is_trigger = substr($id,0,9)=='_trigger_';
 		
 		if($is_custom || $is_trigger) {
@@ -2646,6 +2544,7 @@ class ChInternalController extends DevblocksControllerExtension {
 			// Persist Object
 			$list_view = new Model_WorkspaceListView();
 			$list_view->title = $title;
+			$list_view->options = $options;
 			$list_view->columns = $view->view_columns;
 			$list_view->num_rows = $view->renderLimit;
 			$list_view->params = array();
@@ -2664,14 +2563,13 @@ class ChInternalController extends DevblocksControllerExtension {
 			// Update any instances of this view with the new required columns + params
 			foreach($worker_views as $worker_view) { /* @var $worker_view C4_AbstractViewModel */
 				$worker_view->name = $view->name;
+				$worker_view->options = $view->options;
 				$worker_view->view_columns = $view->view_columns;
 				$worker_view->paramsRequired = $view->getParamsRequired();
 				$worker_view->renderLimit = $view->renderLimit;
 				DAO_WorkerViewModel::setView($worker_view->worker_id, $worker_view->id, $worker_view);
 			}
 		}
-
-		C4_AbstractViewLoader::setView($id, $view);
 
 		$view->render();
 	}
@@ -2730,8 +2628,6 @@ class ChInternalController extends DevblocksControllerExtension {
 			
 		}
 		
-		C4_AbstractViewLoader::setView($view->id, $view);
-
 		// If hidden, no need to draw template
 		if(empty($view->renderSubtotals) || '__'==substr($view->renderSubtotals,0,2))
 			return;
@@ -3034,16 +2930,11 @@ class ChInternalController extends DevblocksControllerExtension {
 		
 		$translate = DevblocksPlatform::getTranslationService();
 		$active_worker = CerberusApplication::getActiveWorker();
-		$visit = CerberusApplication::getVisit();
 		$tpl = DevblocksPlatform::getTemplateService();
 		
 		if(empty($context))
 			return;
 
-		// Remember tab
-		if(!empty($point))
-			$visit->set($point, 'attendants');
-		
 		$tpl->assign('owner_context', $context);
 		$tpl->assign('owner_context_id', $context_id);
 		
@@ -3066,7 +2957,6 @@ class ChInternalController extends DevblocksControllerExtension {
 			), true);
 		}
 		
-		C4_AbstractViewLoader::setView($view->id,$view);
 		$tpl->assign('view', $view);
 		
 		$tpl->display('devblocks:cerberusweb.core::internal/views/search_and_view.tpl');
@@ -3078,15 +2968,10 @@ class ChInternalController extends DevblocksControllerExtension {
 		
 		$translate = DevblocksPlatform::getTranslationService();
 		$active_worker = CerberusApplication::getActiveWorker();
-		$visit = CerberusApplication::getVisit();
 		$tpl = DevblocksPlatform::getTemplateService();
 
 		if(empty($id))
 			return;
-		
-		// Remember tab
-		if(!empty($point))
-			$visit->set($point, 'behaviors');
 		
 		if(null == ($va = DAO_VirtualAttendant::get($id)))
 			return;
@@ -4385,10 +4270,6 @@ class ChInternalController extends DevblocksControllerExtension {
 		@$point = DevblocksPlatform::importGPC($_REQUEST['point'],'string','');
 
 		$tpl = DevblocksPlatform::getTemplateService();
-		$visit = CerberusApplication::getVisit();
-
-		if(!empty($point))
-			$visit->set($point, 'comments');
 
 		$tpl->assign('context', $context);
 		$tpl->assign('context_id', $context_id);

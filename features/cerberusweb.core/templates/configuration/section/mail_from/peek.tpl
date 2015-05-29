@@ -58,7 +58,18 @@
 </fieldset>
 
 <fieldset class="peek">
-	<legend>Send HTML replies using template:</legend>
+	<legend>Send mail using this transport:</legend>
+	
+	<select name="reply_mail_transport_id">
+		<option value="0"> - {'common.default'|devblocks_translate|lower} -</option>
+		{foreach from=$mail_transports item=mail_transport}
+		<option value="{$mail_transport->id}" {if $mail_transport->id==$address->reply_mail_transport_id}selected="selected"{/if}>{$mail_transport->name}</option>
+		{/foreach}
+	</select>
+</fieldset>
+
+<fieldset class="peek">
+	<legend>Send HTML replies using this template:</legend>
 	
 	<select name="reply_html_template_id">
 		<option value="0"> - {'common.default'|devblocks_translate|lower} -</option>
@@ -80,13 +91,13 @@
 <fieldset class="delete" style="display:none;">
 	<legend>Are you sure you want to delete this reply-to address?</legend>
 	<p>Any groups or buckets using this reply-to address will be reverted to defaults.</p>
-	<button name="form_action" type="submit" value="delete" class="green"><span class="cerb-sprite2 sprite-tick-circle"></span> {'common.yes'|devblocks_translate|capitalize}</button>
-	<button name="form_action" type="button" class="red" onclick="$(this).closest('fieldset').nextAll('.toolbar').show();$(this).closest('fieldset').hide();"><span class="cerb-sprite2 sprite-cross-circle"></span> {'common.no'|devblocks_translate|capitalize}</button>
+	<button name="form_action" type="submit" value="delete" class="green"><span class="glyphicons glyphicons-circle-ok" style="color:rgb(0,180,0);"></span> {'common.yes'|devblocks_translate|capitalize}</button>
+	<button name="form_action" type="button" class="red" onclick="$(this).closest('fieldset').nextAll('.toolbar').show();$(this).closest('fieldset').hide();"><span class="glyphicons glyphicons-circle-remove" style="color:rgb(200,0,0);"></span> {'common.no'|devblocks_translate|capitalize}</button>
 </fieldset>
 
 <div class="toolbar">
-<button type="submit" value="submit"><span class="cerb-sprite2 sprite-tick-circle"></span> {'common.save_changes'|devblocks_translate}</button>
-{if $address->address_id && !$address->is_default}<button type="button" onclick="$(this).closest('.toolbar').hide();$(this).closest('form').find('fieldset.delete').show();"><span class="cerb-sprite2 sprite-cross-circle"></span> {'common.delete'|devblocks_translate|capitalize}</button>{/if}
+<button type="submit" value="submit"><span class="glyphicons glyphicons-circle-ok" style="color:rgb(0,180,0);"></span> {'common.save_changes'|devblocks_translate}</button>
+{if $address->address_id && !$address->is_default}<button type="button" onclick="$(this).closest('.toolbar').hide();$(this).closest('form').find('fieldset.delete').show();"><span class="glyphicons glyphicons-circle-remove" style="color:rgb(200,0,0);"></span> {'common.delete'|devblocks_translate|capitalize}</button>{/if}
 </div>
 
 </form>
@@ -129,16 +140,18 @@ $(function() {
 			.atwho({
 				{literal}at: '{%',{/literal}
 				limit: 20,
-				{literal}tpl: '<li data-value="${name}">${content} <small style="margin-left:10px;">${name}</small></li>',{/literal}
+				{literal}displayTpl: '<li>${content} <small style="margin-left:10px;">${name}</small></li>',{/literal}
+				{literal}insertTpl: '${name}',{/literal}
 				data: atwho_twig_commands,
 				suffix: ''
 			})
 			.atwho({
 				{literal}at: '|',{/literal}
 				limit: 20,
-				start_with_space: false,
-				search_key: "content",
-				{literal}tpl: '<li data-value="|${name}">${content} <small style="margin-left:10px;">${name}</small></li>',{/literal}
+				startWithSpace: false,
+				searchKey: "content",
+				{literal}displayTpl: '<li>${content} <small style="margin-left:10px;">${name}</small></li>',{/literal}
+				{literal}insertTpl: '|${name}',{/literal}
 				data: atwho_twig_modifiers,
 				suffix: ''
 			})

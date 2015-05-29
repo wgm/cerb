@@ -26,6 +26,7 @@ class DAO_Ticket extends Cerb_ORMHelper {
 	const BUCKET_ID = 'bucket_id';
 	const ORG_ID = 'org_id';
 	const OWNER_ID = 'owner_id';
+	const IMPORTANCE = 'importance';
 	const FIRST_MESSAGE_ID = 'first_message_id';
 	const FIRST_OUTGOING_MESSAGE_ID = 'first_outgoing_message_id';
 	const LAST_MESSAGE_ID = 'last_message_id';
@@ -58,6 +59,7 @@ class DAO_Ticket extends Cerb_ORMHelper {
 			'group_id' => $translate->_('ticket.group'),
 			'bucket_id' => $translate->_('ticket.bucket'),
 			'owner_id' => $translate->_('common.owner'),
+			'importance' => $translate->_('common.importance'),
 			'updated_date' => $translate->_('common.updated'),
 			'closed_at' => $translate->_('ticket.closed_at'),
 			'spam_training' => $translate->_('ticket.spam_training'),
@@ -81,7 +83,7 @@ class DAO_Ticket extends Cerb_ORMHelper {
 		$sql = sprintf("SELECT t.id FROM ticket t WHERE t.mask = %s",
 			$db->qstr($mask)
 		);
-		$ticket_id = $db->GetOne($sql);
+		$ticket_id = $db->GetOneSlave($sql);
 
 		// If we found a hit on a ticket record, return the ID
 		if(!empty($ticket_id)) {
@@ -92,7 +94,7 @@ class DAO_Ticket extends Cerb_ORMHelper {
 			$sql = sprintf("SELECT new_ticket_id FROM ticket_mask_forward WHERE old_mask = %s",
 				$db->qstr($mask)
 			);
-			$ticket_id = $db->GetOne($sql);
+			$ticket_id = $db->GetOneSlave($sql);
 			
 			if(!empty($ticket_id))
 				return $ticket_id;
@@ -109,7 +111,7 @@ class DAO_Ticket extends Cerb_ORMHelper {
 			$db->qstr($old_mask)
 		);
 		
-		$new_mask = $db->GetOne($sql);
+		$new_mask = $db->GetOneSlave($sql);
 		
 		if(empty($new_mask))
 			return null;
@@ -160,7 +162,7 @@ class DAO_Ticket extends Cerb_ORMHelper {
 			"WHERE mh.header_name = 'message-id' AND mh.header_value = %s",
 			$db->qstr($message_id)
 		);
-		$rs = $db->Execute($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
+		$rs = $db->ExecuteSlave($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
 		
 		if($row = mysqli_fetch_assoc($rs)) {
 			$ticket_id = intval($row['ticket_id']);
@@ -248,7 +250,25 @@ class DAO_Ticket extends Cerb_ORMHelper {
 				break;
 		}
 		
+		$view->renderPage = 0;
+		
 		return $view;
+	}
+	
+	static function getParticipants($ticket_id) {
+		$db = DevblocksPlatform::getDatabaseService();
+		
+		$sql = sprintf("SELECT %s AS context, address_id AS context_id, count(id) AS hits FROM message WHERE is_outgoing = 0 AND ticket_id = %d GROUP BY address_id ". 
+			"UNION ".
+			"SELECT %s AS context, worker_id AS context_id, count(id) FROM message WHERE is_outgoing = 1 AND worker_id > 0 AND ticket_id = %d GROUP BY worker_id",
+			$db->qstr(CerberusContexts::CONTEXT_ADDRESS),
+			$ticket_id,
+			$db->qstr(CerberusContexts::CONTEXT_WORKER),
+			$ticket_id
+		);
+		$results = $db->GetArraySlave($sql);
+		
+		return $results;
 	}
 	
 	/**
@@ -266,7 +286,7 @@ class DAO_Ticket extends Cerb_ORMHelper {
 			time(),
 			time()
 		);
-		$db->Execute($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
+		$db->ExecuteMaster($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
 		$id = $db->LastInsertId();
 		
 		self::update($id, $fields, false);
@@ -278,14 +298,14 @@ class DAO_Ticket extends Cerb_ORMHelper {
 		$db = DevblocksPlatform::getDatabaseService();
 		$logger = DevblocksPlatform::getConsoleLog();
 		
-		$db->Execute("DELETE FROM ticket_mask_forward WHERE new_ticket_id NOT IN (SELECT id FROM ticket)");
+		$db->ExecuteMaster("DELETE FROM ticket_mask_forward WHERE new_ticket_id NOT IN (SELECT id FROM ticket)");
 		$logger->info('[Maint] Purged ' . $db->Affected_Rows() . ' ticket_mask_forward records.');
 
-		$db->Execute("DELETE FROM requester WHERE ticket_id NOT IN (SELECT id FROM ticket)");
+		$db->ExecuteMaster("DELETE FROM requester WHERE ticket_id NOT IN (SELECT id FROM ticket)");
 		$logger->info('[Maint] Purged ' . $db->Affected_Rows() . ' requester records.');
 		
 		// Recover any tickets assigned to a NULL bucket
-		$db->Execute("UPDATE ticket SET bucket_id = 0 WHERE bucket_id != 0 AND bucket_id NOT IN (SELECT id FROM bucket)");
+		$db->ExecuteMaster("UPDATE ticket SET bucket_id = 0 WHERE bucket_id != 0 AND bucket_id NOT IN (SELECT id FROM bucket)");
 		$logger->info('[Maint] Fixed ' . $db->Affected_Rows() . ' tickets in missing buckets.');
 		
 		// Fire event
@@ -336,14 +356,14 @@ class DAO_Ticket extends Cerb_ORMHelper {
 				$oldest_id,
 				implode(',', $merge_ticket_ids)
 			);
-			$db->Execute($sql);
+			$db->ExecuteMaster($sql);
 			
 			// Mail queue
 			$sql = sprintf("UPDATE mail_queue SET ticket_id = %d WHERE ticket_id IN (%s)",
 				$oldest_id,
 				implode(',', $merge_ticket_ids)
 			);
-			$db->Execute($sql);
+			$db->ExecuteMaster($sql);
 			
 			// Requesters (merge)
 			$sql = sprintf("INSERT IGNORE INTO requester (address_id, ticket_id) ".
@@ -351,51 +371,51 @@ class DAO_Ticket extends Cerb_ORMHelper {
 				$oldest_id,
 				implode(',', $merge_ticket_ids)
 			);
-			$db->Execute($sql);
+			$db->ExecuteMaster($sql);
 			
 			$sql = sprintf("DELETE FROM requester WHERE ticket_id IN (%s)",
 				implode(',', $merge_ticket_ids)
 			);
-			$db->Execute($sql);
+			$db->ExecuteMaster($sql);
 
 			// Context Links
 			
-			$db->Execute(sprintf("INSERT IGNORE INTO context_link (from_context, from_context_id, to_context, to_context_id) ".
+			$db->ExecuteMaster(sprintf("INSERT IGNORE INTO context_link (from_context, from_context_id, to_context, to_context_id) ".
 				"SELECT 'cerberusweb.contexts.ticket', %d, to_context, to_context_id ".
 				"FROM context_link WHERE from_context = 'cerberusweb.contexts.ticket' AND from_context_id IN (%s)",
 				$oldest_id,
 				implode(',', $merge_ticket_ids)
 			));
 			
-			$db->Execute(sprintf("INSERT IGNORE INTO context_link (from_context, from_context_id, to_context, to_context_id) ".
+			$db->ExecuteMaster(sprintf("INSERT IGNORE INTO context_link (from_context, from_context_id, to_context, to_context_id) ".
 				"SELECT from_context, from_context_id, 'cerberusweb.contexts.ticket', %d ".
 				"FROM context_link WHERE to_context = 'cerberusweb.contexts.ticket' AND to_context_id IN (%s)",
 				$oldest_id,
 				implode(',', $merge_ticket_ids)
 			));
 			
-			$db->Execute(sprintf("DELETE FROM context_link ".
+			$db->ExecuteMaster(sprintf("DELETE FROM context_link ".
 				"WHERE (from_context = 'cerberusweb.contexts.ticket' AND from_context_id IN (%s)) ".
 				"OR (to_context = 'cerberusweb.contexts.ticket' AND to_context_id IN (%s))",
 				implode(',', $merge_ticket_ids),
 				implode(',', $merge_ticket_ids)
 			));
 			
-			$db->Execute(sprintf("DELETE FROM context_link WHERE from_context=to_context AND from_context_id=to_context_id ".
+			$db->ExecuteMaster(sprintf("DELETE FROM context_link WHERE from_context=to_context AND from_context_id=to_context_id ".
 				"AND from_context = 'cerberusweb.contexts.ticket' AND from_context_id = %d",
 				$oldest_id
 			));
 			
 			// Activity log
 			
-			$db->Execute(sprintf("UPDATE IGNORE context_activity_log ".
+			$db->ExecuteMaster(sprintf("UPDATE IGNORE context_activity_log ".
 				"SET target_context_id = %d ".
 				"WHERE target_context = 'cerberusweb.contexts.ticket' AND target_context_id IN (%s) ",
 				$oldest_id,
 				implode(',', $merge_ticket_ids)
 			));
 			
-			$db->Execute(sprintf("DELETE FROM context_activity_log ".
+			$db->ExecuteMaster(sprintf("DELETE FROM context_activity_log ".
 				"WHERE target_context = 'cerberusweb.contexts.ticket' AND target_context_id IN (%s) ",
 				implode(',', $merge_ticket_ids)
 			));
@@ -407,7 +427,7 @@ class DAO_Ticket extends Cerb_ORMHelper {
 				$db->qstr(CerberusContexts::CONTEXT_TICKET),
 				implode(',', $merge_ticket_ids)
 			);
-			$db->Execute($sql);
+			$db->ExecuteMaster($sql);
 			
 			// Comments
 			
@@ -416,7 +436,7 @@ class DAO_Ticket extends Cerb_ORMHelper {
 				$db->qstr(CerberusContexts::CONTEXT_TICKET),
 				implode(',', $merge_ticket_ids)
 			);
-			$db->Execute($sql);
+			$db->ExecuteMaster($sql);
 			
 			// Clear old ticket meta
 			$fields = array(
@@ -483,7 +503,7 @@ class DAO_Ticket extends Cerb_ORMHelper {
 					$db->qstr($new_mask),
 					$oldest_id
 				);
-				$db->Execute($sql);
+				$db->ExecuteMaster($sql);
 				
 				// If the old mask was a new_mask in a past life, change to its new destination
 				$sql = sprintf("UPDATE ticket_mask_forward SET new_mask = %s, new_ticket_id = %d WHERE new_mask = %s",
@@ -491,7 +511,7 @@ class DAO_Ticket extends Cerb_ORMHelper {
 					$oldest_id,
 					$db->qstr($ticket[SearchFields_Ticket::TICKET_MASK])
 				);
-				$db->Execute($sql);
+				$db->ExecuteMaster($sql);
 			}
 			
 			if(is_array($merged_tickets))
@@ -579,7 +599,7 @@ class DAO_Ticket extends Cerb_ORMHelper {
 
 		// Reindex the earliest close date from activity log
 		$sql = sprintf("SELECT MIN(created) FROM context_activity_log WHERE activity_point = 'ticket.status.closed' AND target_context = 'cerberusweb.contexts.ticket' AND target_context_id = %d", $id);
-		$closed_at = intval($db->GetOne($sql));
+		$closed_at = intval($db->GetOneMaster($sql));
 		$fields[DAO_Ticket::CLOSED_AT] = $closed_at;
 		
 		if(!empty($closed_at))
@@ -603,7 +623,8 @@ class DAO_Ticket extends Cerb_ORMHelper {
 	 * @return Model_Ticket
 	 */
 	static function get($id) {
-		if(empty($id)) return NULL;
+		if(empty($id))
+			return null;
 		
 		$tickets = self::getIds(array($id));
 		
@@ -618,7 +639,7 @@ class DAO_Ticket extends Cerb_ORMHelper {
 		
 		list($where_sql, $sort_sql, $limit_sql) = self::_getWhereSQL($where, $sortBy, $sortAsc, $limit);
 		
-		$sql = "SELECT id , mask, subject, is_waiting, is_closed, is_deleted, group_id, bucket_id, org_id, owner_id, first_message_id, first_outgoing_message_id, last_message_id, ".
+		$sql = "SELECT id , mask, subject, is_waiting, is_closed, is_deleted, group_id, bucket_id, org_id, owner_id, importance, first_message_id, first_outgoing_message_id, last_message_id, ".
 			"first_wrote_address_id, last_wrote_address_id, created_date, updated_date, closed_at, reopen_at, spam_training, ".
 			"spam_score, interesting_words, num_messages, elapsed_response_first, elapsed_resolution_first ".
 			"FROM ticket ".
@@ -626,7 +647,7 @@ class DAO_Ticket extends Cerb_ORMHelper {
 			$sort_sql.
 			$limit_sql
 		;
-		$rs = $db->Execute($sql);
+		$rs = $db->ExecuteSlave($sql);
 		
 		return self::_createObjectsFromResultSet($rs);
 	}
@@ -651,6 +672,7 @@ class DAO_Ticket extends Cerb_ORMHelper {
 			$object->bucket_id = intval($row['bucket_id']);
 			$object->org_id = intval($row['org_id']);
 			$object->owner_id = intval($row['owner_id']);
+			$object->importance = intval($row['importance']);
 			$object->is_waiting = intval($row['is_waiting']);
 			$object->is_closed = intval($row['is_closed']);
 			$object->is_deleted = intval($row['is_deleted']);
@@ -841,7 +863,7 @@ class DAO_Ticket extends Cerb_ORMHelper {
 					'variables' => array(
 						'target' => sprintf("[%s] %s", $model->mask, $model->subject),
 						'group' => $to_group->name,
-						'bucket' => (empty($to_bucket) ? 'Inbox' : $to_bucket->name),
+						'bucket' => $to_bucket->name,
 						),
 					'urls' => array(
 						'target' => sprintf("ctx://%s:%d/%s", CerberusContexts::CONTEXT_TICKET, $model->id, $model->mask),
@@ -944,7 +966,7 @@ class DAO_Ticket extends Cerb_ORMHelper {
 	static function updateMessageCount($id) {
 		$db = DevblocksPlatform::getDatabaseService();
 		
-		$db->Execute(sprintf("UPDATE ticket ".
+		$db->ExecuteMaster(sprintf("UPDATE ticket ".
 			"SET num_messages = (SELECT count(id) FROM message WHERE message.ticket_id = ticket.id) ".
 			"WHERE ticket.id = %d",
 			$id
@@ -966,7 +988,7 @@ class DAO_Ticket extends Cerb_ORMHelper {
 			"ORDER BY a.email ASC ",
 			$ticket_id
 		);
-		$rs = $db->Execute($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
+		$rs = $db->ExecuteSlave($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
 		 
 		while($row = mysqli_fetch_assoc($rs)) {
 			$address = new Model_Address();
@@ -1073,7 +1095,7 @@ class DAO_Ticket extends Cerb_ORMHelper {
 			}
 		}
 		
-		$db->Execute(sprintf("REPLACE INTO requester (address_id, ticket_id) ".
+		$db->ExecuteMaster(sprintf("REPLACE INTO requester (address_id, ticket_id) ".
 			"VALUES (%d, %d)",
 			$address->id,
 			$ticket_id
@@ -1092,7 +1114,7 @@ class DAO_Ticket extends Cerb_ORMHelper {
 			$id,
 			$address_id
 		);
-		$db->Execute($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
+		$db->ExecuteMaster($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
 	}
 	
 	static function analyze($params, $limit=15, $mode="senders", $mode_param=null) { // or "subjects"
@@ -1331,6 +1353,35 @@ class DAO_Ticket extends Cerb_ORMHelper {
 		if('*'==substr($sortBy,0,1) || !isset($fields[$sortBy]) || !in_array($sortBy,$columns))
 			$sortBy=null;
 		
+		if(is_string($sortBy))
+		switch($sortBy) {
+			case SearchFields_Ticket::TICKET_IMPORTANCE:
+				$sortBy = array(
+					SearchFields_Ticket::TICKET_IMPORTANCE,
+					SearchFields_Ticket::TICKET_UPDATED_DATE,
+				);
+				
+				$sortAsc = array(
+					$sortAsc,
+					!$sortAsc,
+				);
+				break;
+				
+			case SearchFields_Ticket::BUCKET_RESPONSIBILITY:
+				$sortBy = array(
+					SearchFields_Ticket::BUCKET_RESPONSIBILITY,
+					SearchFields_Ticket::TICKET_IMPORTANCE,
+					SearchFields_Ticket::TICKET_UPDATED_DATE,
+				);
+				
+				$sortAsc = array(
+					$sortAsc,
+					$sortAsc,
+					!$sortAsc,
+				);
+				break;
+		}
+		
 		$ignore_params = array(
 			SearchFields_Ticket::REQUESTER_ID,
 			SearchFields_Ticket::REQUESTER_ADDRESS,
@@ -1370,6 +1421,7 @@ class DAO_Ticket extends Cerb_ORMHelper {
 			"t.elapsed_response_first as %s, ".
 			"t.elapsed_resolution_first as %s, ".
 			"t.owner_id as %s, ".
+			"t.importance as %s, ".
 			"t.group_id as %s, ".
 			"t.bucket_id as %s, ".
 			"t.org_id as %s ",
@@ -1404,6 +1456,7 @@ class DAO_Ticket extends Cerb_ORMHelper {
 				SearchFields_Ticket::TICKET_ELAPSED_RESPONSE_FIRST,
 				SearchFields_Ticket::TICKET_ELAPSED_RESOLUTION_FIRST,
 				SearchFields_Ticket::TICKET_OWNER_ID,
+				SearchFields_Ticket::TICKET_IMPORTANCE,
 				SearchFields_Ticket::TICKET_GROUP_ID,
 				SearchFields_Ticket::TICKET_BUCKET_ID,
 				SearchFields_Ticket::TICKET_ORG_ID
@@ -1418,6 +1471,12 @@ class DAO_Ticket extends Cerb_ORMHelper {
 			(isset($tables['mh']) ? "INNER JOIN message_header mh ON (mh.message_id=t.first_message_id) " : " "). // [TODO] Choose between first message and all?
 			(isset($tables['context_link']) ? "INNER JOIN context_link ON (context_link.to_context = 'cerberusweb.contexts.ticket' AND context_link.to_context_id = t.id) " : " ")
 			;
+		if(isset($tables['wtb'])) {
+			if(false != ($active_worker = CerberusApplication::getActiveWorker())) {
+				$select_sql .= ", wtb.responsibility_level as wtb_responsibility ";
+				$join_sql .= sprintf("INNER JOIN worker_to_bucket wtb ON (wtb.bucket_id=t.bucket_id AND wtb.worker_id=%d) ", $active_worker->id);
+			}
+		}
 			
 		// Org joins
 		if(isset($tables['o'])) {
@@ -1444,11 +1503,12 @@ class DAO_Ticket extends Cerb_ORMHelper {
 		$where_sql = "".
 			(!empty($wheres) ? sprintf("WHERE %s ",implode(' AND ',$wheres)) : "WHERE 1 ");
 			
-		$sort_sql = (!empty($sortBy) ? sprintf("ORDER BY %s %s ",$sortBy,($sortAsc || is_null($sortAsc))?"ASC":"DESC") : " ");
+		$sort_sql = self::_buildSortClause($sortBy, $sortAsc);
 
 		// Translate virtual fields
 		
 		$args = array(
+			'select_sql' => &$select_sql,
 			'join_sql' => &$join_sql,
 			'where_sql' => &$where_sql,
 			'tables' => &$tables,
@@ -1536,7 +1596,7 @@ class DAO_Ticket extends Cerb_ORMHelper {
 					$db = DevblocksPlatform::getDatabaseService();
 					$temp_table = sprintf("_tmp_%s", uniqid());
 					
-					$db->Execute(sprintf("CREATE TEMPORARY TABLE %s SELECT DISTINCT context_id AS id FROM comment INNER JOIN %s ON (%s.id=comment.id)",
+					$db->ExecuteSlave(sprintf("CREATE TEMPORARY TABLE %s (PRIMARY KEY (id)) SELECT DISTINCT context_id AS id FROM comment INNER JOIN %s ON (%s.id=comment.id)",
 						$temp_table,
 						$ids,
 						$ids
@@ -1593,7 +1653,7 @@ class DAO_Ticket extends Cerb_ORMHelper {
 					$db = DevblocksPlatform::getDatabaseService();
 					$temp_table = sprintf("_tmp_%s", uniqid());
 					
-					$db->Execute(sprintf("CREATE TEMPORARY TABLE %s SELECT DISTINCT context_id AS id FROM comment INNER JOIN %s ON (%s.id=comment.id)",
+					$db->ExecuteSlave(sprintf("CREATE TEMPORARY TABLE %s (PRIMARY KEY (id)) SELECT DISTINCT context_id AS id FROM comment INNER JOIN %s ON (%s.id=comment.id)",
 						$temp_table,
 						$ids,
 						$ids
@@ -1758,15 +1818,23 @@ class DAO_Ticket extends Cerb_ORMHelper {
 				self::_searchComponentsVirtualWatchers($param, $from_context, $from_index, $args['join_sql'], $args['where_sql'], $args['tables']);
 				break;
 				
-			case SearchFields_Ticket::VIRTUAL_ASSIGNABLE:
-				$assignable_buckets = DAO_Bucket::getAssignableBuckets();
-				$assignable_bucket_ids = array_keys($assignable_buckets);
-				array_unshift($assignable_bucket_ids, 0);
-				if($param->value) { // true
-					$args['where_sql'] .= sprintf("AND t.bucket_id IN (%s) ", implode(',', $assignable_bucket_ids));
-				} else { // false
-					$args['where_sql'] .= sprintf("AND t.bucket_id NOT IN (%s) ", implode(',', $assignable_bucket_ids));
+			case SearchFields_Ticket::VIRTUAL_RECOMMENDATIONS:
+				$worker_id = $param->value;
+				
+				if(0 == $worker_id) {
+					$args['where_sql'] .= "AND t.id NOT IN (SELECT context_id FROM context_recommendation WHERE context = 'cerberusweb.contexts.ticket') ";
+					
+				} else {
+					$args['join_sql'] .= sprintf("INNER JOIN (".
+						"SELECT reco.context_id ".
+						"FROM context_recommendation reco ".
+						"WHERE reco.context = 'cerberusweb.contexts.ticket' ".
+						"AND reco.worker_id = %d ".
+						") AS virt_recommendations ON (virt_recommendations.context_id = t.id) ",
+						$worker_id
+					);
 				}
+				
 				break;
 				
 			case SearchFields_Ticket::VIRTUAL_GROUPS_OF_WORKER:
@@ -1867,7 +1935,7 @@ class DAO_Ticket extends Cerb_ORMHelper {
 		$db = DevblocksPlatform::getDatabaseService();
 		$objects = array();
 		
-		$results = $db->GetArray(sprintf("SELECT id ".
+		$results = $db->GetArraySlave(sprintf("SELECT id ".
 			"FROM ticket ".
 			"WHERE ticket.is_deleted = 0 ".
 			"AND (".
@@ -1908,7 +1976,7 @@ class DAO_Ticket extends Cerb_ORMHelper {
 			$where_sql.
 			($has_multiple_values ? 'GROUP BY t.id ' : '').
 			$sort_sql;
-
+		
 		$rs = $db->SelectLimit($sql,$limit,$page*$limit) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
 		
 		$results = array();
@@ -1927,7 +1995,7 @@ class DAO_Ticket extends Cerb_ORMHelper {
 					(($has_multiple_values) ? "SELECT COUNT(DISTINCT t.id) " : "SELECT COUNT(t.id) ").
 					$join_sql.
 					$where_sql;
-				$total = $db->GetOne($count_sql);
+				$total = $db->GetOneSlave($count_sql);
 			}
 		}
 		
@@ -1975,10 +2043,14 @@ class SearchFields_Ticket implements IDevblocksSearchFields {
 	const TICKET_BUCKET_ID = 't_bucket_id';
 	const TICKET_ORG_ID = 't_org_id';
 	const TICKET_OWNER_ID = 't_owner_id';
+	const TICKET_IMPORTANCE = 't_importance';
 	
 	const TICKET_MESSAGE_HEADER = 'mh_header_name';
 	const TICKET_MESSAGE_HEADER_VALUE = 'mh_header_value';
 
+	// Responsibilities
+	const BUCKET_RESPONSIBILITY = 'wtb_responsibility';
+	
 	// Sender
 	const SENDER_ADDRESS = 'a1_address';
 	
@@ -2003,7 +2075,6 @@ class SearchFields_Ticket implements IDevblocksSearchFields {
 	const CONTEXT_LINK_ID = 'cl_context_from_id';
 	
 	// Virtuals
-	const VIRTUAL_ASSIGNABLE = '*_assignable';
 	const VIRTUAL_ATTACHMENT_NAME = '*_attachment_name';
 	const VIRTUAL_CONTEXT_LINK = '*_context_link';
 	const VIRTUAL_GROUPS_OF_WORKER = '*_groups_of_worker';
@@ -2014,6 +2085,8 @@ class SearchFields_Ticket implements IDevblocksSearchFields {
 	const VIRTUAL_PARTICIPANT_ID = '*_participant_id';
 	const VIRTUAL_STATUS = '*_status';
 	const VIRTUAL_WATCHERS = '*_workers';
+	
+	const VIRTUAL_RECOMMENDATIONS = '*_recommendations';
 	
 	/**
 	 * @return DevblocksSearchField[]
@@ -2047,6 +2120,7 @@ class SearchFields_Ticket implements IDevblocksSearchFields {
 			
 			SearchFields_Ticket::TICKET_ORG_ID => new DevblocksSearchField(SearchFields_Ticket::TICKET_ORG_ID, 't','org_id',$translate->_('common.id')),
 			SearchFields_Ticket::TICKET_OWNER_ID => new DevblocksSearchField(SearchFields_Ticket::TICKET_OWNER_ID,'t','owner_id',$translate->_('common.owner'), Model_CustomField::TYPE_WORKER),
+			SearchFields_Ticket::TICKET_IMPORTANCE => new DevblocksSearchField(SearchFields_Ticket::TICKET_IMPORTANCE,'t','importance',$translate->_('common.importance'), Model_CustomField::TYPE_NUMBER),
 			SearchFields_Ticket::TICKET_GROUP_ID => new DevblocksSearchField(SearchFields_Ticket::TICKET_GROUP_ID,'t','group_id',$translate->_('common.group')),
 			SearchFields_Ticket::TICKET_BUCKET_ID => new DevblocksSearchField(SearchFields_Ticket::TICKET_BUCKET_ID, 't', 'bucket_id',$translate->_('common.bucket')),
 			SearchFields_Ticket::TICKET_CREATED_DATE => new DevblocksSearchField(SearchFields_Ticket::TICKET_CREATED_DATE, 't', 'created_date',$translate->_('common.created'), Model_CustomField::TYPE_DATE),
@@ -2066,6 +2140,8 @@ class SearchFields_Ticket implements IDevblocksSearchFields {
 			SearchFields_Ticket::TICKET_REOPEN_AT => new DevblocksSearchField(SearchFields_Ticket::TICKET_REOPEN_AT, 't', 'reopen_at',$translate->_('ticket.reopen_at'), Model_CustomField::TYPE_DATE),
 			SearchFields_Ticket::TICKET_FIRST_CONTACT_ORG_ID => new DevblocksSearchField(SearchFields_Ticket::TICKET_FIRST_CONTACT_ORG_ID, 'a1', 'contact_org_id'),
 			
+			SearchFields_Ticket::BUCKET_RESPONSIBILITY => new DevblocksSearchField(SearchFields_Ticket::BUCKET_RESPONSIBILITY, 'wtb', 'responsibility_level', mb_convert_case($translate->_('common.responsibility'), MB_CASE_TITLE)),
+				
 			SearchFields_Ticket::REQUESTER_ID => new DevblocksSearchField(SearchFields_Ticket::REQUESTER_ID, 'r', 'address_id', $translate->_('ticket.requester')),
 			
 			SearchFields_Ticket::SENDER_ADDRESS => new DevblocksSearchField(SearchFields_Ticket::SENDER_ADDRESS, 'a1', 'email'),
@@ -2076,16 +2152,16 @@ class SearchFields_Ticket implements IDevblocksSearchFields {
 			SearchFields_Ticket::CONTEXT_LINK => new DevblocksSearchField(SearchFields_Ticket::CONTEXT_LINK, 'context_link', 'from_context', null),
 			SearchFields_Ticket::CONTEXT_LINK_ID => new DevblocksSearchField(SearchFields_Ticket::CONTEXT_LINK_ID, 'context_link', 'from_context_id', null),
 			
-			SearchFields_Ticket::VIRTUAL_ASSIGNABLE => new DevblocksSearchField(SearchFields_Ticket::VIRTUAL_ASSIGNABLE, '*', 'assignable', $translate->_('ticket.assignable')),
 			SearchFields_Ticket::VIRTUAL_ATTACHMENT_NAME => new DevblocksSearchField(SearchFields_Ticket::VIRTUAL_ATTACHMENT_NAME, '*', 'attachment_name', $translate->_('message.search.attachment_name'), null),				
 			SearchFields_Ticket::VIRTUAL_CONTEXT_LINK => new DevblocksSearchField(SearchFields_Ticket::VIRTUAL_CONTEXT_LINK, '*', 'context_link', $translate->_('common.links'), null),
 			SearchFields_Ticket::VIRTUAL_GROUPS_OF_WORKER => new DevblocksSearchField(SearchFields_Ticket::VIRTUAL_GROUPS_OF_WORKER, '*', 'groups_of_worker', $translate->_('ticket.groups_of_worker')),
 			SearchFields_Ticket::VIRTUAL_HAS_ATTACHMENTS => new DevblocksSearchField(SearchFields_Ticket::VIRTUAL_HAS_ATTACHMENTS, '*', 'has_attachments', $translate->_('message.search.has_attachments'), Model_CustomField::TYPE_CHECKBOX),
 			SearchFields_Ticket::VIRTUAL_HAS_FIELDSET => new DevblocksSearchField(SearchFields_Ticket::VIRTUAL_HAS_FIELDSET, '*', 'has_fieldset', $translate->_('common.fieldset'), null),
-			SearchFields_Ticket::VIRTUAL_MESSAGE_HEADER => new DevblocksSearchField(SearchFields_Message::VIRTUAL_MESSAGE_HEADER, '*', 'message_header', $translate->_('message.header')),
+			SearchFields_Ticket::VIRTUAL_MESSAGE_HEADER => new DevblocksSearchField(SearchFields_Ticket::VIRTUAL_MESSAGE_HEADER, '*', 'message_header', $translate->_('message.header')),
 			SearchFields_Ticket::VIRTUAL_ORG_ID => new DevblocksSearchField(SearchFields_Ticket::VIRTUAL_ORG_ID, '*', 'org_id', null, null), // org ID
 			SearchFields_Ticket::VIRTUAL_PARTICIPANT_ID => new DevblocksSearchField(SearchFields_Ticket::VIRTUAL_PARTICIPANT_ID, '*', 'participant_id', null, null), // participant ID
-			SearchFields_Ticket::VIRTUAL_STATUS => new DevblocksSearchField(SearchFields_Ticket::VIRTUAL_STATUS, '*', 'status', $translate->_('ticket.status')),
+			SearchFields_Ticket::VIRTUAL_RECOMMENDATIONS => new DevblocksSearchField(SearchFields_Ticket::VIRTUAL_RECOMMENDATIONS, '*', 'recommendations', $translate->_('common.recommended')),
+			SearchFields_Ticket::VIRTUAL_STATUS => new DevblocksSearchField(SearchFields_Ticket::VIRTUAL_STATUS, '*', 'status', $translate->_('common.status')),
 			SearchFields_Ticket::VIRTUAL_WATCHERS => new DevblocksSearchField(SearchFields_Ticket::VIRTUAL_WATCHERS, '*', 'workers', $translate->_('common.watchers'), 'WS'),
 				
 			SearchFields_Ticket::FULLTEXT_COMMENT_CONTENT => new DevblocksSearchField(self::FULLTEXT_COMMENT_CONTENT, 'ftcc', 'content', $translate->_('comment.filters.content'), 'FT'),
@@ -2127,6 +2203,7 @@ class Model_Ticket {
 	public $bucket_id;
 	public $org_id;
 	public $owner_id = 0;
+	public $importance = 0;
 	public $first_message_id;
 	public $first_outgoing_message_id;
 	public $last_message_id;
@@ -2170,6 +2247,20 @@ class Model_Ticket {
 		return $requesters;
 	}
 	
+	function getParticipants() {
+		$results = DAO_Ticket::getParticipants($this->id);
+		$participants = array();
+		
+		foreach($results as $row) {
+			if(!isset($participants[$row['context']]))
+				$participants[$row['context']] = array();
+
+			$participants[$row['context']][$row['context_id']] = $row['hits'];
+		}
+		
+		return $participants;
+	}
+	
 	// Lazy load
 	function getOrg() {
 		if(empty($this->org_id))
@@ -2201,11 +2292,11 @@ class View_Ticket extends C4_AbstractView implements IAbstractView_Subtotals, IA
 		$this->renderSortAsc = false;
 
 		$this->view_columns = array(
+			SearchFields_Ticket::TICKET_IMPORTANCE,
 			SearchFields_Ticket::TICKET_LAST_ACTION_CODE,
 			SearchFields_Ticket::TICKET_UPDATED_DATE,
 			SearchFields_Ticket::TICKET_GROUP_ID,
 			SearchFields_Ticket::TICKET_BUCKET_ID,
-			SearchFields_Ticket::TICKET_SPAM_SCORE,
 			SearchFields_Ticket::TICKET_OWNER_ID,
 		);
 		
@@ -2222,7 +2313,6 @@ class View_Ticket extends C4_AbstractView implements IAbstractView_Subtotals, IA
 			SearchFields_Ticket::TICKET_INTERESTING_WORDS,
 			SearchFields_Ticket::TICKET_ORG_ID,
 			SearchFields_Ticket::TICKET_WAITING,
-			SearchFields_Ticket::VIRTUAL_ASSIGNABLE,
 			SearchFields_Ticket::VIRTUAL_ATTACHMENT_NAME,
 			SearchFields_Ticket::VIRTUAL_CONTEXT_LINK,
 			SearchFields_Ticket::VIRTUAL_GROUPS_OF_WORKER,
@@ -2231,6 +2321,7 @@ class View_Ticket extends C4_AbstractView implements IAbstractView_Subtotals, IA
 			SearchFields_Ticket::VIRTUAL_MESSAGE_HEADER,
 			SearchFields_Ticket::VIRTUAL_ORG_ID,
 			SearchFields_Ticket::VIRTUAL_PARTICIPANT_ID,
+			SearchFields_Ticket::VIRTUAL_RECOMMENDATIONS,
 			SearchFields_Ticket::VIRTUAL_STATUS,
 			SearchFields_Ticket::VIRTUAL_WATCHERS,
 		));
@@ -2239,7 +2330,6 @@ class View_Ticket extends C4_AbstractView implements IAbstractView_Subtotals, IA
 			SearchFields_Ticket::CONTEXT_LINK,
 			SearchFields_Ticket::CONTEXT_LINK_ID,
 			SearchFields_Ticket::REQUESTER_ID,
-			SearchFields_Ticket::TICKET_BUCKET_ID,
 			SearchFields_Ticket::TICKET_CLOSED,
 			SearchFields_Ticket::TICKET_DELETED,
 			SearchFields_Ticket::TICKET_ORG_ID,
@@ -2444,7 +2534,7 @@ class View_Ticket extends C4_AbstractView implements IAbstractView_Subtotals, IA
 			"GROUP BY group_id, bucket_id "
 		;
 		
-		$results = $db->GetArray($sql);
+		$results = $db->GetArraySlave($sql);
 
 		return $results;
 	}
@@ -2473,24 +2563,22 @@ class View_Ticket extends C4_AbstractView implements IAbstractView_Subtotals, IA
 						array(
 							'field' => SearchFields_Ticket::TICKET_GROUP_ID,
 							'oper' => DevblocksSearchCriteria::OPER_IN,
-							'values' => array('group_id[]' => $result['group_id']),
+							'values' => array('options[]' => $result['group_id']),
 						),
 					'children' => array()
 				);
 			}
 				
 			@$label = $buckets[$bucket_id]->name;
-			if(empty($label))
-				$label = mb_convert_case($translate->_('common.inbox'), MB_CASE_TITLE);
 				
 			$child = array(
 				'hits' => $hits,
 				'label' => $label,
 				'filter' =>
 					array(
-						'field' => SearchFields_Ticket::TICKET_GROUP_ID,
+						'field' => SearchFields_Ticket::TICKET_BUCKET_ID,
 						'oper' => DevblocksSearchCriteria::OPER_IN,
-						'values' => array('group_id[]' => $result['group_id'], 'bucket_id[]' => $result['bucket_id']),
+						'values' => array('options[]' => $result['bucket_id']),
 					),
 			);
 			
@@ -2503,7 +2591,7 @@ class View_Ticket extends C4_AbstractView implements IAbstractView_Subtotals, IA
 		
 		// Sort buckets by group preference
 		foreach($counts as $group_id => $data) {
-			uksort($counts[$group_id]['children'], array($this, '_sortByBucketPos'));
+			uksort($counts[$group_id]['children'], array($this, '_sortByBucketOrder'));
 		}
 		
 		return $counts;
@@ -2545,7 +2633,7 @@ class View_Ticket extends C4_AbstractView implements IAbstractView_Subtotals, IA
 			$where_sql
 		;
 		
-		$results = $db->GetArray($sql);
+		$results = $db->GetArraySlave($sql);
 
 		return $results;
 	}
@@ -2605,6 +2693,13 @@ class View_Ticket extends C4_AbstractView implements IAbstractView_Subtotals, IA
 	
 	function getQuickSearchFields() {
 		$active_worker = CerberusApplication::getActiveWorker();
+		
+		$workers = DAO_Worker::getAllActive();
+		$worker_names = array('me');
+		array_walk($workers, function($worker) use (&$worker_names) {
+			$worker_names[] = sprintf("(%s)", $worker->getName());
+		});
+		
 		$group_names = DAO_Group::getNames($active_worker);
 		
 		$fields = array(
@@ -2647,6 +2742,11 @@ class View_Ticket extends C4_AbstractView implements IAbstractView_Subtotals, IA
 				array(
 					'type' => DevblocksSearchCriteria::TYPE_NUMBER,
 					'options' => array('param_key' => SearchFields_Ticket::TICKET_ID),
+				),
+			'importance' =>
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_NUMBER,
+					'options' => array('param_key' => SearchFields_Ticket::TICKET_IMPORTANCE),
 				),
 			'mask' =>
 				array(
@@ -2706,6 +2806,12 @@ class View_Ticket extends C4_AbstractView implements IAbstractView_Subtotals, IA
 				array(
 					'type' => DevblocksSearchCriteria::TYPE_TEXT,
 					'options' => array('param_key' => SearchFields_Ticket::REQUESTER_ADDRESS, 'match' => DevblocksSearchCriteria::OPTION_TEXT_PREFIX),
+				),
+			'recommended' =>
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_VIRTUAL,
+					'options' => array('param_key' => SearchFields_Ticket::VIRTUAL_RECOMMENDATIONS),
+					'examples' => array_slice($worker_names, 0, 15),
 				),
 			'resolution.first' =>
 				array(
@@ -2959,7 +3065,7 @@ class View_Ticket extends C4_AbstractView implements IAbstractView_Subtotals, IA
 								$values[] = array($header_name, $oper, null);
 								break;
 						}
-					}					
+					}
 					
 					$params[$field_key] = new DevblocksSearchCriteria(
 						$field_key,
@@ -2968,6 +3074,54 @@ class View_Ticket extends C4_AbstractView implements IAbstractView_Subtotals, IA
 					);
 					break;
 
+				case 'recommended':
+					$field_key = SearchFields_Ticket::VIRTUAL_RECOMMENDATIONS;
+					$oper = DevblocksSearchCriteria::OPER_EQ;
+					
+					$active_worker = CerberusApplication::getActiveWorker();
+					$workers = DAO_Worker::getAllActive();
+					$patterns = DevblocksPlatform::parseCsvString($v);
+					
+					if(!is_array($patterns))
+						break;
+					
+					$worker_id = null;
+					
+					foreach($patterns as $pattern) {
+						if(!is_null($worker_id))
+							break;
+						
+						if($active_worker && 0 == strcasecmp($pattern, 'me')) {
+							$worker_id = $active_worker->id;
+							continue;
+						}
+						
+						if(in_array($pattern, array('none','noone','nobody','no','false'))) {
+							$worker_id = 0;
+							continue;
+						}
+							
+						if(is_array($workers))
+						foreach($workers as $worker) {
+							if(!is_null($worker_id))
+								break;
+							
+							if(false !== stristr(sprintf("%s %s", $worker->getName(), $worker->at_mention_name), $pattern)) {
+								$worker_id = $worker->id;
+								break;
+							}
+						}
+					}
+					
+					if(!is_null($worker_id)) {
+						$params[$field_key] = new DevblocksSearchCriteria(
+							$field_key,
+							$oper,
+							$worker_id
+						);
+					}
+					break;
+					
 				case 'spam.training':
 					$field_key = SearchFields_Ticket::TICKET_SPAM_TRAINING;
 					
@@ -3075,11 +3229,16 @@ class View_Ticket extends C4_AbstractView implements IAbstractView_Subtotals, IA
 		return strcmp($a['label'], $b['label']);
 	}
 	
-	private function _sortByBucketPos($a, $b) {
+	private function _sortByBucketOrder($a, $b) {
 		$buckets = DAO_Bucket::getAll();
-		if(0==$a) return -1; // inbox
-		if(0==$b) return 1;
-		return (intval($buckets[$a]->pos) < intval($buckets[$b]->pos)) ? -1 : 1;
+		
+		if($buckets[$a]->is_default)
+			return -1;
+		
+		if($buckets[$b]->is_default)
+			return 1;
+		
+		return strcasecmp($buckets[$a]->name, $buckets[$b]->name);
 	}
 	
 	function render() {
@@ -3098,13 +3257,13 @@ class View_Ticket extends C4_AbstractView implements IAbstractView_Subtotals, IA
 		
 		$workers = DAO_Worker::getAll();
 		$tpl->assign('workers', $workers);
-
+		
 		$groups = DAO_Group::getAll();
 		$tpl->assign('groups', $groups);
-
+		
 		$buckets = DAO_Bucket::getAll();
 		$tpl->assign('buckets', $buckets);
-
+		
 		$group_buckets = DAO_Bucket::getGroups();
 		$tpl->assign('group_buckets', $group_buckets);
 
@@ -3137,6 +3296,11 @@ class View_Ticket extends C4_AbstractView implements IAbstractView_Subtotals, IA
 		$tpl->clearAssign('group_buckets');
 		$tpl->clearAssign('timestamp_now');
 	}
+	
+	function renderCustomizeOptions() {
+		$tpl = DevblocksPlatform::getTemplateService();
+		$tpl->display('devblocks:cerberusweb.core::internal/views/options/ticket.tpl');
+	}
 
 	function renderCriteria($field) {
 		$tpl = DevblocksPlatform::getTemplateService();
@@ -3161,6 +3325,7 @@ class View_Ticket extends C4_AbstractView implements IAbstractView_Subtotals, IA
 			case SearchFields_Ticket::TICKET_FIRST_WROTE_SPAM:
 			case SearchFields_Ticket::TICKET_FIRST_WROTE_NONSPAM:
 			case SearchFields_Ticket::TICKET_ID:
+			case SearchFields_Ticket::TICKET_IMPORTANCE:
 			case SearchFields_Ticket::TICKET_NUM_MESSAGES:
 				$tpl->display('devblocks:cerberusweb.core::internal/views/criteria/__number.tpl');
 				break;
@@ -3173,7 +3338,6 @@ class View_Ticket extends C4_AbstractView implements IAbstractView_Subtotals, IA
 			case SearchFields_Ticket::TICKET_WAITING:
 			case SearchFields_Ticket::TICKET_DELETED:
 			case SearchFields_Ticket::TICKET_CLOSED:
-			case SearchFields_Ticket::VIRTUAL_ASSIGNABLE:
 			case SearchFields_Ticket::VIRTUAL_HAS_ATTACHMENTS:
 				$tpl->display('devblocks:cerberusweb.core::internal/views/criteria/__bool.tpl');
 				break;
@@ -3213,12 +3377,19 @@ class View_Ticket extends C4_AbstractView implements IAbstractView_Subtotals, IA
 
 			case SearchFields_Ticket::TICKET_GROUP_ID:
 				$groups = DAO_Group::getAll();
+				$tpl->assign('options', $groups);
+				
+				$tpl->display('devblocks:cerberusweb.core::internal/views/criteria/__list.tpl');
+				break;
+				
+			case SearchFields_Ticket::TICKET_BUCKET_ID:
+				$groups = DAO_Group::getAll();
 				$tpl->assign('groups', $groups);
 
 				$group_buckets = DAO_Bucket::getGroups();
 				$tpl->assign('group_buckets', $group_buckets);
 
-				$tpl->display('devblocks:cerberusweb.core::tickets/search/criteria/ticket_group.tpl');
+				$tpl->display('devblocks:cerberusweb.core::tickets/search/criteria/ticket_bucket.tpl');
 				break;
 
 			case SearchFields_Ticket::TICKET_OWNER_ID:
@@ -3254,6 +3425,12 @@ class View_Ticket extends C4_AbstractView implements IAbstractView_Subtotals, IA
 				
 			case SearchFields_Ticket::VIRTUAL_MESSAGE_HEADER:
 				$tpl->display('devblocks:cerberusweb.core::messages/criteria_message_header.tpl');
+				break;
+				
+			case SearchFields_Ticket::VIRTUAL_RECOMMENDATIONS:
+				$workers = DAO_Worker::getAllActive();
+				$tpl->assign('workers', $workers);
+				$tpl->display('devblocks:cerberusweb.core::internal/views/criteria/__recommendations.tpl');
 				break;
 				
 			case SearchFields_Ticket::VIRTUAL_WATCHERS:
@@ -3327,14 +3504,6 @@ class View_Ticket extends C4_AbstractView implements IAbstractView_Subtotals, IA
 				);
 				break;
 			
-			case SearchFields_Ticket::VIRTUAL_ASSIGNABLE:
-				if(empty($param->value)) {
-					echo "Tickets <b>are not assignable</b>";
-				} else {
-					echo "Tickets <b>are assignable</b>";
-				}
-				break;
-				
 			case SearchFields_Ticket::VIRTUAL_CONTEXT_LINK:
 				$this->_renderVirtualContextLinks($param);
 				break;
@@ -3405,8 +3574,8 @@ class View_Ticket extends C4_AbstractView implements IAbstractView_Subtotals, IA
 			case SearchFields_Ticket::VIRTUAL_GROUPS_OF_WORKER:
 				$worker_name = $param->value;
 				
-				if(is_numeric($param->value)) {
-					if(null == ($worker = DAO_Worker::get($param->value)))
+				if(is_numeric($worker_name)) {
+					if(null == ($worker = DAO_Worker::get($worker_name)))
 						break;
 					
 					$worker_name = $worker->getName();
@@ -3421,6 +3590,25 @@ class View_Ticket extends C4_AbstractView implements IAbstractView_Subtotals, IA
 				
 			case SearchFields_Ticket::VIRTUAL_PARTICIPANT_ID:
 				echo sprintf("Participant is %d", $param->value);
+				break;
+				
+			case SearchFields_Ticket::VIRTUAL_RECOMMENDATIONS:
+				$worker_name = $param->value;
+				
+				if(is_numeric($worker_name) && 0 == $worker_name) {
+					echo sprintf("<b>Not</b> recommended to anybody");
+					
+				} else if(is_numeric($worker_name)) {
+					if(null == ($worker = DAO_Worker::get($worker_name)))
+						break;
+					
+					$worker_name = $worker->getName();
+					echo sprintf("Recommended for <b>%s</b>", $worker_name);
+					
+				} else {
+					echo sprintf("Recommended for <b>%s</b>", $worker_name);
+				}
+				
 				break;
 				
 			case SearchFields_Ticket::VIRTUAL_STATUS:
@@ -3475,7 +3663,6 @@ class View_Ticket extends C4_AbstractView implements IAbstractView_Subtotals, IA
 			case SearchFields_Ticket::TICKET_WAITING:
 			case SearchFields_Ticket::TICKET_DELETED:
 			case SearchFields_Ticket::TICKET_CLOSED:
-			case SearchFields_Ticket::VIRTUAL_ASSIGNABLE:
 				$this->_renderCriteriaParamBoolean($param);
 				break;
 			
@@ -3501,12 +3688,12 @@ class View_Ticket extends C4_AbstractView implements IAbstractView_Subtotals, IA
 				$strings = array();
 
 				foreach($values as $val) {
-					if(0==$val) {
-						$strings[] = mb_convert_case($translate->_('common.inbox'), MB_CASE_TITLE);
-					} elseif(!isset($buckets[$val])) {
+					if(!isset($buckets[$val])) {
 						continue;
+						
 					} else {
-						$strings[] = $buckets[$val]->name;
+						if(false != ($group = $buckets[$val]->getGroup()))
+							$strings[] = $group->name . ': ' . $buckets[$val]->name;
 					}
 				}
 				echo implode(", ", $strings);
@@ -3587,7 +3774,6 @@ class View_Ticket extends C4_AbstractView implements IAbstractView_Subtotals, IA
 			case SearchFields_Ticket::TICKET_WAITING:
 			case SearchFields_Ticket::TICKET_DELETED:
 			case SearchFields_Ticket::TICKET_CLOSED:
-			case SearchFields_Ticket::VIRTUAL_ASSIGNABLE:
 			case SearchFields_Ticket::VIRTUAL_HAS_ATTACHMENTS:
 				@$bool = DevblocksPlatform::importGPC($_REQUEST['bool'],'integer',1);
 				$criteria = new DevblocksSearchCriteria($field,$oper,$bool);
@@ -3596,6 +3782,7 @@ class View_Ticket extends C4_AbstractView implements IAbstractView_Subtotals, IA
 			case SearchFields_Ticket::TICKET_FIRST_WROTE_SPAM:
 			case SearchFields_Ticket::TICKET_FIRST_WROTE_NONSPAM:
 			case SearchFields_Ticket::TICKET_ID:
+			case SearchFields_Ticket::TICKET_IMPORTANCE:
 			case SearchFields_Ticket::TICKET_NUM_MESSAGES:
 				$criteria = new DevblocksSearchCriteria($field,$oper,$value);
 				break;
@@ -3631,21 +3818,25 @@ class View_Ticket extends C4_AbstractView implements IAbstractView_Subtotals, IA
 				break;
 
 			case SearchFields_Ticket::TICKET_GROUP_ID:
-				@$group_ids = DevblocksPlatform::importGPC($_REQUEST['group_id'],'array');
-				@$bucket_ids = DevblocksPlatform::importGPC($_REQUEST['bucket_id'],'array');
+				@$group_ids = DevblocksPlatform::importGPC($_REQUEST['options'],'array');
 
 				// Groups
 				if(!empty($group_ids)) {
 					$this->addParam(new DevblocksSearchCriteria(SearchFields_Ticket::TICKET_GROUP_ID,$oper,$group_ids));
+				} else {
+					$this->removeParam(SearchFields_Ticket::TICKET_GROUP_ID);
 				}
-					
+				break;
+				
+			case SearchFields_Ticket::TICKET_BUCKET_ID:
+				@$bucket_ids = DevblocksPlatform::importGPC($_REQUEST['options'],'array');
+
 				// Buckets
 				if(!empty($bucket_ids)) {
 					$this->addParam(new DevblocksSearchCriteria(SearchFields_Ticket::TICKET_BUCKET_ID,$oper,$bucket_ids));
 				} else { // clear if no buckets provided
 					$this->removeParam(SearchFields_Ticket::TICKET_BUCKET_ID);
 				}
-
 				break;
 				
 			case SearchFields_Ticket::FULLTEXT_COMMENT_CONTENT:
@@ -3678,10 +3869,16 @@ class View_Ticket extends C4_AbstractView implements IAbstractView_Subtotals, IA
 				$criteria = new DevblocksSearchCriteria($field,DevblocksSearchCriteria::OPER_IN,$options);
 				break;
 				
-			case SearchFields_Message::VIRTUAL_MESSAGE_HEADER:
+			case SearchFields_Ticket::VIRTUAL_MESSAGE_HEADER:
 				@$name = DevblocksPlatform::importGPC($_REQUEST['name'],'string','');
 				@$value = DevblocksPlatform::importGPC($_REQUEST['value'],'string','');
 				$criteria = new DevblocksSearchCriteria($field, $oper, array(array($name,$oper,$value)));
+				break;
+				
+			case SearchFields_Ticket::VIRTUAL_RECOMMENDATIONS:
+				@$worker_id = DevblocksPlatform::importGPC($_REQUEST['worker_id'],'string','');
+				$oper = DevblocksSearchCriteria::OPER_EQ;
+				$criteria = new DevblocksSearchCriteria($field, $oper, $worker_id);
 				break;
 				
 			case SearchFields_Ticket::VIRTUAL_WATCHERS:
@@ -3735,6 +3932,9 @@ class View_Ticket extends C4_AbstractView implements IAbstractView_Subtotals, IA
 				case 'move':
 					$change_fields[DAO_Ticket::GROUP_ID] = $v['group_id'];
 					$change_fields[DAO_Ticket::BUCKET_ID] = $v['bucket_id'];
+					break;
+				case 'importance':
+					$change_fields[DAO_Ticket::IMPORTANCE] = $v['importance'];
 					break;
 				case 'owner':
 					$change_fields[DAO_Ticket::OWNER_ID] = $v['worker_id'];
@@ -4131,11 +4331,12 @@ class Context_Ticket extends Extension_DevblocksContext implements IDevblocksCon
 		$token_labels = array(
 			'_label' => $prefix,
 			'created' => $prefix.$translate->_('common.created'),
-			'id' => $prefix.$translate->_('common.id'),
-			'mask' => $prefix.$translate->_('ticket.mask'),
-			'num_messages' => $prefix.$translate->_('ticket.num_messages'),
 			'elapsed_response_first' => $prefix.$translate->_('ticket.elapsed_response_first'),
 			'elapsed_resolution_first' => $prefix.$translate->_('ticket.elapsed_resolution_first'),
+			'id' => $prefix.$translate->_('common.id'),
+			'importance' => $prefix.$translate->_('common.importance'),
+			'mask' => $prefix.$translate->_('ticket.mask'),
+			'num_messages' => $prefix.$translate->_('ticket.num_messages'),
 			'reopen_date' => $prefix.$translate->_('ticket.reopen_at'),
 			'spam_score' => $prefix.$translate->_('ticket.spam_score'),
 			'spam_training' => $prefix.$translate->_('ticket.spam_training'),
@@ -4149,11 +4350,12 @@ class Context_Ticket extends Extension_DevblocksContext implements IDevblocksCon
 		$token_types = array(
 			'_label' => 'context_url',
 			'created' => Model_CustomField::TYPE_DATE,
-			'id' => 'id',
-			'mask' => Model_CustomField::TYPE_SINGLE_LINE,
-			'num_messages' => Model_CustomField::TYPE_NUMBER,
 			'elapsed_response_first' => 'time_secs',
 			'elapsed_resolution_first' => 'time_secs',
+			'id' => 'id',
+			'importance' => Model_CustomField::TYPE_NUMBER,
+			'mask' => Model_CustomField::TYPE_SINGLE_LINE,
+			'num_messages' => Model_CustomField::TYPE_NUMBER,
 			'reopen_date' => Model_CustomField::TYPE_DATE,
 			'spam_score' => 'percent',
 			'spam_training' => null,
@@ -4181,19 +4383,20 @@ class Context_Ticket extends Extension_DevblocksContext implements IDevblocksCon
 		if(null != $ticket) {
 			$token_values['_loaded'] = true;
 			$token_values['_label'] = sprintf("[#%s] %s", $ticket->mask, $ticket->subject);
+			$token_values['closed_at'] = $ticket->closed_at;
 			$token_values['created'] = $ticket->created_date;
-			$token_values['id'] = $ticket->id;
-			$token_values['mask'] = $ticket->mask;
-			$token_values['num_messages'] = $ticket->num_messages;
 			$token_values['elapsed_response_first'] = $ticket->elapsed_response_first;
 			$token_values['elapsed_resolution_first'] = $ticket->elapsed_resolution_first;
+			$token_values['id'] = $ticket->id;
+			$token_values['importance'] = $ticket->importance;
+			$token_values['mask'] = $ticket->mask;
+			$token_values['num_messages'] = $ticket->num_messages;
+			$token_values['org_id'] = $ticket->org_id;
 			$token_values['reopen_date'] = $ticket->reopen_at;
 			$token_values['spam_score'] = $ticket->spam_score;
 			$token_values['spam_training'] = $ticket->spam_training;
 			$token_values['subject'] = $ticket->subject;
 			$token_values['updated'] = $ticket->updated_date;
-			$token_values['closed_at'] = $ticket->closed_at;
-			$token_values['org_id'] = $ticket->org_id;
 			
 			// Status
 			@$is_closed = intval($ticket->is_closed);
@@ -4565,7 +4768,6 @@ class Context_Ticket extends Extension_DevblocksContext implements IDevblocksCon
 		$view->renderLimit = 10;
 		$view->renderFilters = false;
 		$view->renderTemplate = 'contextlinks_chooser';
-		C4_AbstractViewLoader::setView($view_id, $view);
 		return $view;
 	}
 	
@@ -4590,7 +4792,6 @@ class Context_Ticket extends Extension_DevblocksContext implements IDevblocksCon
 		$view->addParamsRequired($params_req, true);
 		
 		$view->renderTemplate = 'context';
-		C4_AbstractViewLoader::setView($view_id, $view);
 		return $view;
 	}
 	
@@ -4660,6 +4861,10 @@ class Context_Ticket extends Extension_DevblocksContext implements IDevblocksCon
 			}
 		}
 		
+		// If we still don't have a default group, use the first group
+		if(empty($defaults['group_id']))
+			$defaults['group_id'] = key($groups);
+		
 		$tpl->assign('defaults', $defaults);
 		
 		// Custom fields
@@ -4692,14 +4897,16 @@ class Context_Ticket extends Extension_DevblocksContext implements IDevblocksCon
 			$messages = $ticket->getMessages();
 		}
 		
-		// Permissions
+		if(false == ($group = $ticket->getGroup()))
+			return;
 
+		// Permissions
+		
 		$active_worker = CerberusApplication::getActiveWorker();
-		$active_worker_memberships = $active_worker->getMemberships();
 		$translate = DevblocksPlatform::getTranslationService();
 		
 		// Check group membership ACL
-		if(!isset($active_worker_memberships[$ticket->group_id])) {
+		if(!$group->isReadableByWorker($active_worker)) {
 			echo $translate->_('common.access_denied');
 			return;
 		}
@@ -4763,7 +4970,8 @@ class Context_Ticket extends Extension_DevblocksContext implements IDevblocksCon
 		$comments = array_reverse($comments, true);
 		$tpl->assign('comments', $comments);
 		
-		// Display
+		// Template
+		
 		$tpl->display('devblocks:cerberusweb.core::tickets/peek.tpl');
 	}
 	
@@ -4806,6 +5014,11 @@ class Context_Ticket extends Extension_DevblocksContext implements IDevblocksCon
 				'label' => 'Owner',
 				'type' => 'ctx_' . CerberusContexts::CONTEXT_WORKER,
 				'param' => SearchFields_Ticket::TICKET_OWNER_ID,
+			),
+			'importance' => array(
+				'label' => 'Importance',
+				'type' => Model_CustomField::TYPE_NUMBER,
+				'param' => SearchFields_Ticket::TICKET_IMPORTANCE,
 			),
 			'_watchers' => array(
 				'label' => 'Watchers',

@@ -133,11 +133,6 @@
 				<seg>[Email] Kann neue Nachrichten aus dem Helpdesk verfassen</seg>
 			</tuv>
 		</tu>
-		<tu tuid="acl.core.rss">
-			<tuv xml:lang="de_DE">
-				<seg>[RSS] Kann Listen als RSS Feeds exportieren</seg>
-			</tuv>
-		</tu>
 		<tu tuid="acl.core.snippets.actions.create">
 			<tuv xml:lang="de_DE">
 				<seg/>
@@ -521,11 +516,6 @@
 		<tu tuid="activity.mail.search">
 			<tuv xml:lang="de_DE">
 				<seg>% durchsucht Tickets</seg>
-			</tuv>
-		</tu>
-		<tu tuid="activity.mail.workflow">
-			<tuv xml:lang="de_DE">
-				<seg>%s schaut sich %s im Arbeitsablauf an</seg>
 			</tuv>
 		</tu>
 		<tu tuid="activity.mail.workspaces">
@@ -1178,6 +1168,11 @@
 				<seg/>
 			</tuv>
 		</tu>
+		<tu tuid="common.history">
+			<tuv xml:lang="de_DE">
+				<seg>Historie</seg>
+			</tuv>
+		</tu>
 		<tu tuid="common.hours">
 			<tuv xml:lang="de_DE">
 				<seg>Stunden</seg>
@@ -1201,6 +1196,11 @@
 		<tu tuid="common.import.upload_csv.tip">
 			<tuv xml:lang="de_DE">
 				<seg>(jede Spaltenreihenfolge; im nächsten Schritt wird das Ziel der Daten festgelegt)</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.importance">
+			<tuv xml:lang="de_DE">
+				<seg></seg>
 			</tuv>
 		</tu>
 		<tu tuid="common.inactive">
@@ -1371,6 +1371,11 @@
 		<tu tuid="common.no">
 			<tuv xml:lang="de_DE">
 				<seg>nein</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.no_thanks">
+			<tuv xml:lang="de_DE">
+				<seg>nein danke!</seg>
 			</tuv>
 		</tu>
 		<tu tuid="common.nobody">
@@ -1803,12 +1808,12 @@
 				<seg>Profil ID</seg>
 			</tuv>
 		</tu>
-		<tu tuid="config.mail.pop3.error_hostname">
+		<tu tuid="config.mailboxes.error_hostname">
 			<tuv xml:lang="de_DE">
 				<seg>Fehler: Server nicht angegeben</seg>
 			</tuv>
 		</tu>
-		<tu tuid="config.mail.pop3.failed">
+		<tu tuid="config.mailboxes.failed">
 			<tuv xml:lang="de_DE">
 				<seg>Verbindung zur Mailbox fehlgeschlagen</seg>
 			</tuv>
@@ -2768,11 +2773,6 @@
 				<seg>(-&gt; aktueller Ordner)</seg>
 			</tuv>
 		</tu>
-		<tu tuid="display.reply.next.move.no_thanks">
-			<tuv xml:lang="de_DE">
-				<seg>nein danke!</seg>
-			</tuv>
-		</tu>
 		<tu tuid="display.reply.next.owner">
 			<tuv xml:lang="de_DE">
 				<seg/>
@@ -2996,11 +2996,6 @@
 		<tu tuid="header.config">
 			<tuv xml:lang="de_DE">
 				<seg>Einrichtung</seg>
-			</tuv>
-		</tu>
-		<tu tuid="header.history">
-			<tuv xml:lang="de_DE">
-				<seg>Historie</seg>
 			</tuv>
 		</tu>
 		<tu tuid="header.last_viewed">
@@ -3286,11 +3281,6 @@
 		<tu tuid="mail.worklist.draft_in_progress">
 			<tuv xml:lang="de_DE">
 				<seg></seg>
-			</tuv>
-		</tu>
-		<tu tuid="mail.workflow">
-			<tuv xml:lang="de_DE">
-				<seg>Arbeitsablauf</seg>
 			</tuv>
 		</tu>
 		<tu tuid="mail.workspaces.create">
@@ -4048,7 +4038,7 @@
 				<seg/>
 			</tuv>
 		</tu>
-		<tu tuid="preferences.account.mail.reply_textbox_size.inelastic">
+		<tu tuid="preferences.account.mail.reply_textbox_size.auto">
 			<tuv xml:lang="de_DE">
 				<seg/>
 			</tuv>
@@ -4473,11 +4463,6 @@ Wenn Sie dies nich angefordert haben, klicken Sie den o.g. Link nicht. Die Anfor
 				<seg>Mitarbeiter-Historie</seg>
 			</tuv>
 		</tu>
-		<tu tuid="rss.bad_feed">
-			<tuv xml:lang="de_DE">
-				<seg>Unzulässige Eingabe-Daten</seg>
-			</tuv>
-		</tu>
 		<tu tuid="search.date.between">
 			<tuv xml:lang="de_DE">
 				<seg>zwischen</seg>
@@ -4754,11 +4739,6 @@ login</seg>
 				<seg>Ticket-Aufgaben</seg>
 			</tuv>
 		</tu>
-		<tu tuid="ticket.assignable">
-			<tuv xml:lang="de_DE">
-				<seg>zuweisbar</seg>
-			</tuv>
-		</tu>
 		<tu tuid="ticket.closed_at">
 			<tuv xml:lang="de_DE">
 				<seg/>
@@ -4862,11 +4842,6 @@ login</seg>
 		<tu tuid="ticket.spam_training">
 			<tuv xml:lang="de_DE">
 				<seg>Spam-Training</seg>
-			</tuv>
-		</tu>
-		<tu tuid="ticket.status">
-			<tuv xml:lang="de_DE">
-				<seg>Status</seg>
 			</tuv>
 		</tu>
 		<tu tuid="ticket.subject">

@@ -673,8 +673,6 @@ class DevblocksEventHelper {
 		if(null == ($view = DevblocksEventHelper::getViewFromAbstractJson($token, $params, $trigger, $context)))
 			return;
 		
-		C4_AbstractViewLoader::setView($view->id, $view);
-		
 		$tpl->assign('context', $context);
 		$tpl->assign('params', $params);
 		$tpl->assign('view', $view);
@@ -975,7 +973,7 @@ class DevblocksEventHelper {
 						$sql = sprintf("SELECT COUNT(id) AS hits, owner_id FROM ticket WHERE is_closed = 0 AND is_deleted = 0 AND is_waiting = 0 AND owner_id != 0 AND owner_id IN (%s) GROUP BY owner_id",
 							implode(',', array_keys($possible_workers))
 						);
-						$results = $db->GetArray($sql);
+						$results = $db->GetArraySlave($sql);
 						
 						if(!empty($results))
 						foreach($results as $row) {
@@ -2418,6 +2416,61 @@ class DevblocksEventHelper {
 	}
 
 	/*
+	 * Action: Set Ticket Importance
+	 */
+	
+	static function renderActionSetTicketImportance($trigger) {
+		$tpl = DevblocksPlatform::getTemplateService();
+		$tpl->display('devblocks:cerberusweb.core::internal/decisions/actions/_set_number.tpl');
+	}
+	
+	static function simulateActionSetTicketImportance($params, DevblocksDictionaryDelegate $dict, $default_on, $key) {
+		$tpl_builder = DevblocksPlatform::getTemplateBuilder();
+		@$ticket_id = $dict->$default_on;
+		
+		// Importance
+		
+		@$importance = intval(
+			$tpl_builder->build(
+				DevblocksPlatform::importVar($params['value'], 'string', ''),
+				$dict
+			)
+		);
+		
+		$importance = DevblocksPlatform::intClamp($importance, 0, 100);
+		
+		$out = sprintf(">>> Setting importance to %d\n", $importance);
+
+		// Update dictionary
+		$dict->$key = $importance;
+		
+		return $out;
+	}
+	
+	static function runActionSetTicketImportance($params, DevblocksDictionaryDelegate $dict, $default_on, $key) {
+		$tpl_builder = DevblocksPlatform::getTemplateBuilder();
+		@$ticket_id = $dict->$default_on;
+		
+		// Importance
+		
+		@$importance = intval(
+			$tpl_builder->build(
+				DevblocksPlatform::importVar($params['value'], 'string', ''),
+				$dict
+			)
+		);
+		
+		$importance = DevblocksPlatform::intClamp($importance, 0, 100);
+
+		DAO_Ticket::update($ticket_id, array(
+			DAO_Ticket::IMPORTANCE => $importance,
+		));
+		
+		// Update dictionary
+		$dict->$key = $importance;
+	}
+	
+	/*
 	 * Action: Set Ticket Org
 	 */
 	
@@ -2902,44 +2955,48 @@ class DevblocksEventHelper {
 
 			if(is_array($on_objects))
 			foreach($on_objects as $on_object) {
-					$notify_contexts[] = array($on_object->_context, $on_object->id);
+					$notify_contexts[] = array($on_object->_context, $on_object->id, $on_object->_label);
 			}
 		}
 		
 		// Send notifications
 		
-		if(is_array($notify_worker_ids))
-		foreach($notify_worker_ids as $notify_worker_id) {
-			if(!empty($notify_contexts)) {
-				if(is_array($notify_contexts))
-				foreach($notify_contexts as $notify_context_data) {
+		if(!empty($notify_contexts)) {
+			if(is_array($notify_contexts))
+			foreach($notify_contexts as $notify_context_data) {
+				$entry = array(
+					//{{message}}
+					'message' => 'activities.custom.other',
+					'variables' => array(
+						'message' => $content,
+						),
+					'urls' => array(
+						'message' => sprintf("ctx://%s:%d", $notify_context_data[0], $notify_context_data[1]),
+						)
+				);
+				
+				if(is_array($notify_worker_ids))
+				foreach($notify_worker_ids as $notify_worker_id) {
 					$fields = array(
 						DAO_Notification::CONTEXT => $notify_context_data[0],
 						DAO_Notification::CONTEXT_ID => $notify_context_data[1],
 						DAO_Notification::WORKER_ID => $notify_worker_id,
 						DAO_Notification::CREATED_DATE => time(),
-						DAO_Notification::MESSAGE => $content,
-						DAO_Notification::URL => '',
+						DAO_Notification::ACTIVITY_POINT => 'custom.other',
+						DAO_Notification::ENTRY_JSON => json_encode($entry),
 					);
 					$notification_id = DAO_Notification::create($fields);
 				}
-				
-			} else {
-				$fields = array(
-					DAO_Notification::CONTEXT => null,
-					DAO_Notification::CONTEXT_ID => null,
-					DAO_Notification::WORKER_ID => $notify_worker_id,
-					DAO_Notification::CREATED_DATE => time(),
-					DAO_Notification::MESSAGE => $content,
-					DAO_Notification::URL => $url,
-				);
-				$notification_id = DAO_Notification::create($fields);
 			}
-			
-			DAO_Notification::clearCountCache($notify_worker_id);
 		}
 		
+		// Clear notification cache
+		if(is_array($notify_worker_ids))
+		foreach($notify_worker_ids as $notify_worker_id) {
+			DAO_Notification::clearCountCache($notify_worker_id);
+		
 		return isset($notification_id) ? $notification_id : false;
+		}
 	}
 	
 	/*
@@ -4030,7 +4087,6 @@ class DevblocksEventHelper {
 		$logger = DevblocksPlatform::getConsoleLog('Attendant');
 		$tpl_builder = DevblocksPlatform::getTemplateBuilder();
 		$mail_service = DevblocksPlatform::getMailService();
-		$mailer = $mail_service->getMailer(CerberusMail::getMailerDefaults());
 		$settings = DevblocksPlatform::getPluginSettingsService();
 		
 		$relay_spoof_from = $settings->get('cerberusweb.core', CerberusSettings::RELAY_SPOOF_FROM, CerberusSettingsDefaults::RELAY_SPOOF_FROM);
@@ -4124,7 +4180,7 @@ class DevblocksEventHelper {
 					
 				}
 				
-				$result = $mailer->send($mail);
+				$result = $mail_service->send($mail);
 				unset($mail);
 				
 				/*
@@ -4327,7 +4383,9 @@ class DevblocksEventHelper {
 		
 		// Load values and ignore _labels and _types
 		$view->setPlaceholderValues($dict->getDictionary(null, false));
-		C4_AbstractViewLoader::setView($view->id, $view);
+
+		$view->persist();
+		$view->setAutoPersist(false);
 		
 		// Save the generated view_id in the dictionary for reuse (paging, etc)
 		$var_view_id_key = sprintf("%s_view_id", $token);

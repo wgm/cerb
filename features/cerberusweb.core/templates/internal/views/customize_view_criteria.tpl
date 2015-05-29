@@ -11,7 +11,7 @@
 <tbody class="summary">
 <tr>
 	<td colspan="2">
-		<div class="badge badge-lightgray filters" style="font-weight:bold;color:rgb(80,80,80);cursor:pointer;">{'common.filters'|devblocks_translate|capitalize}:<span class="cerb-sprite sprite-arrow-down-black"></span></div>
+		<div class="badge badge-lightgray filters" style="font-weight:bold;color:rgb(80,80,80);cursor:pointer;">{'common.filters'|devblocks_translate|capitalize}: <span class="glyphicons glyphicons-chevron-down" style="font-size:12px;"></span></div>
 		<ul class="cerb-popupmenu cerb-float" style="margin-top:-2px;">
 			<li><a href="javascript:;" onclick="$frm=$(this).closest('form');genericAjaxGet('','c=internal&a=viewToggleFilters&id={$view->id}&show=' + ($frm.find('tbody.full').toggle().is(':hidden')?'0':'1'));$(this).closest('ul.cerb-popupmenu').hide();">Toggle Advanced</a></li>
 			<li><a href="javascript:;" onclick="$('#{$parent_div}').find('select[name=_preset]').val('reset').trigger('change');">{'common.reset'|devblocks_translate|capitalize}</a></li>
@@ -62,7 +62,7 @@
 <tbody class="full" style="width:100%;display:{if $is_custom || $view->renderFilters};{else}none;{/if}">
 <tr>
 	<td width="60%" valign="top">
-		<fieldset>
+		<fieldset class="black">
 			<legend>{'common.filters'|devblocks_translate|capitalize}</legend>
 			
 			{include file="devblocks:cerberusweb.core::internal/views/criteria_list_params.tpl" params=$view_params}
@@ -102,7 +102,7 @@
 					<input type="text" name="_preset_name" size="32" value="">
 					<br>
 					<br>
-					<button type="button" onclick="var $form_id = $(this).closest('form').attr('id'); if(0==$form_id.length)return;genericAjaxPost($form_id,'{$parent_div}','c=internal&a=viewAddPreset');"><span class="cerb-sprite2 sprite-tick-circle"></span> {'common.save_changes'|devblocks_translate|capitalize}</button>
+					<button type="button" onclick="var $form_id = $(this).closest('form').attr('id'); if(0==$form_id.length)return;genericAjaxPost($form_id,'{$parent_div}','c=internal&a=viewAddPreset');"><span class="glyphicons glyphicons-circle-ok" style="color:rgb(0,180,0);"></span> {'common.save_changes'|devblocks_translate|capitalize}</button>
 					<a href="javascript:;" onclick="$(this).closest('div').fadeOut();"> {'common.cancel'|devblocks_translate|lower}</a>
 				</div>
 				<div id="divRemovePresets{$view->id}" class="block" style="display:none;margin:5px;">
@@ -111,7 +111,7 @@
 					<label><input type="checkbox" name="_preset_del[]" value="{$preset_id}"> {$preset->name}</label><br>
 					{/foreach}
 					<br>
-					<button type="button" onclick="var $form_id = $(this).closest('form').attr('id'); if(0==$form_id.length)return;genericAjaxPost($form_id,'{$parent_div}','c=internal&a=viewEditPresets');"><span class="cerb-sprite2 sprite-tick-circle"></span> {'common.save_changes'|devblocks_translate|capitalize}</button>
+					<button type="button" onclick="var $form_id = $(this).closest('form').attr('id'); if(0==$form_id.length)return;genericAjaxPost($form_id,'{$parent_div}','c=internal&a=viewEditPresets');"><span class="glyphicons glyphicons-circle-ok" style="color:rgb(0,180,0);"></span> {'common.save_changes'|devblocks_translate|capitalize}</button>
 					<a href="javascript:;" onclick="$(this).closest('div').fadeOut();"> {'common.cancel'|devblocks_translate|lower}</a>
 				</div>
 				{/if}
@@ -120,10 +120,10 @@
 	</td>
 	
 	<td valign="top" width="40%">
-		<fieldset>
+		<fieldset class="black">
 			<legend>Add Filter</legend>
 			
-			<b>{'common.field'|devblocks_translate|capitalize}:</b><br>
+			<b>{'common.filter'|devblocks_translate|capitalize}:</b><br>
 			<blockquote style="margin:5px;">
 				{$searchable_fields = $view->getParamsAvailable(true)}
 				{$has_custom = false}
@@ -155,7 +155,7 @@
 			</blockquote>
 		
 			<div id="add{$parent_div}" style="background-color:rgb(255,255,255);"></div>
-			<button type="button" onclick="$form_id = $(this).closest('form').attr('id'); if(0==$form_id.length)return;genericAjaxPost($form_id,'{$parent_div}','c=internal&a=viewAddFilter{if $is_custom}&is_custom=1{/if}');"><span class="cerb-sprite2 sprite-plus-circle"></span> Add Filter</button>
+			<button type="button" onclick="$form_id = $(this).closest('form').attr('id'); if(0==$form_id.length)return;genericAjaxPost($form_id,'{$parent_div}','c=internal&a=viewAddFilter{if $is_custom}&is_custom=1{/if}');"><span class="glyphicons glyphicons-circle-plus"></span> Add Filter</button>
 		</fieldset>
 	</td>
 </tr>

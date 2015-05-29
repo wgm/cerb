@@ -44,6 +44,7 @@ class ChTicketsPage extends CerberusPageExtension {
 		
 		// Loop through view and get IDs
 		$view = C4_AbstractViewLoader::getView($view_id);
+		$view->setAutoPersist(false);
 
 		// Page start
 		@$explore_from = DevblocksPlatform::importGPC($_REQUEST['explore_from'],'integer',0);
@@ -115,6 +116,7 @@ class ChTicketsPage extends CerberusPageExtension {
 		
 		// Loop through view and get IDs
 		$view = C4_AbstractViewLoader::getView($view_id);
+		$view->setAutoPersist(false);
 
 		// Page start
 		@$explore_from = DevblocksPlatform::importGPC($_REQUEST['explore_from'],'integer',0);
@@ -192,7 +194,7 @@ class ChTicketsPage extends CerberusPageExtension {
 
 		$last_action->ticket_ids[$id] = array(
 			DAO_Ticket::SPAM_TRAINING => CerberusTicketSpamTraining::BLANK,
-			DAO_Ticket::SPAM_SCORE => 0.5000, // [TODO] Fix
+			DAO_Ticket::SPAM_SCORE => 0.5000,
 			DAO_Ticket::IS_CLOSED => 0,
 			DAO_Ticket::IS_DELETED => 0
 		);
@@ -222,6 +224,7 @@ class ChTicketsPage extends CerberusPageExtension {
 
 		$visit = CerberusApplication::getVisit();
 		$view = C4_AbstractViewLoader::getView($view_id);
+		$view->setAutoPersist(false);
 		$tpl->assign('view', $view);
 		
 		if(!empty($last_action) && !is_null($last_action->ticket_ids)) {
@@ -233,6 +236,7 @@ class ChTicketsPage extends CerberusPageExtension {
 	}
 	
 	// [TODO] Refactor for group-based signatures
+	
 	function getLogTicketSignatureAction() {
 		@$email = DevblocksPlatform::importGPC($_REQUEST['email'],'string','');
 		
@@ -260,6 +264,7 @@ class ChTicketsPage extends CerberusPageExtension {
 		@$org_id = DevblocksPlatform::importGPC($_REQUEST['org_id'],'integer',0);
 		@$org_name = DevblocksPlatform::importGPC($_REQUEST['org_name'],'string','');
 		@$closed = DevblocksPlatform::importGPC($_REQUEST['closed'],'integer',0);
+		@$importance = DevblocksPlatform::importGPC($_REQUEST['importance'],'integer',0);
 		@$owner_id = DevblocksPlatform::importGPC($_REQUEST['owner_id'],'integer',0);
 		@$group_id = DevblocksPlatform::importGPC($_REQUEST['group_id'],'integer',0);
 		@$bucket_id = DevblocksPlatform::importGPC($_REQUEST['bucket_id'],'integer',0);
@@ -328,6 +333,10 @@ class ChTicketsPage extends CerberusPageExtension {
 				$fields[DAO_Ticket::ORG_ID] = $org_lookup_id;
 			}
 		}
+		
+		// Importance
+		$importance = DevblocksPlatform::intClamp($importance, 0, 100);
+		$fields[DAO_Ticket::IMPORTANCE] = $importance;
 		
 		// Spam Training
 		if(!empty($spam_training)) {
@@ -667,6 +676,7 @@ class ChTicketsPage extends CerberusPageExtension {
 		$visit = CerberusApplication::getVisit(); /* @var $visit CerberusVisit */
 
 		$view = C4_AbstractViewLoader::getView($view_id);
+		$view->setAutoPersist(false);
 		
 		$tpl->assign('view_id', $view_id);
 		$tpl->assign('mode', $mode);
@@ -704,7 +714,9 @@ class ChTicketsPage extends CerberusPageExtension {
 		@$view_id = DevblocksPlatform::importGPC($_POST['view_id'],'string');
 
 		$visit = CerberusApplication::getVisit(); /* @var $visit CerberusVisit */
+		
 		$view = C4_AbstractViewLoader::getView($view_id);
+		$view->setAutoPersist(false);
 
 		$buckets = DAO_Bucket::getAll();
 		
@@ -734,18 +746,8 @@ class ChTicketsPage extends CerberusPageExtension {
 			$doActions = array();
 			
 			switch(strtolower(substr($moveto,0,1))) {
-				// Group/Bucket Move
-				case 't':
-					$g_id = intval(substr($moveto,1));
-					$doActions = array(
-						'move' => array(
-							'group_id' => $g_id,
-							'bucket_id' => 0,
-						)
-					);
-					break;
-					
-				case 'c':
+				// Group/bucket
+				case 'm':
 					$b_id = intval(substr($moveto,1));
 					@$g_id = intval($buckets[$b_id]->group_id);
 					
@@ -865,7 +867,6 @@ class ChTicketsPage extends CerberusPageExtension {
 
 		$view->renderPage = 0; // Reset the paging since we may have reduced our list size
 		$view->removeParam('tmpMemberships'); // Remove our filter
-		C4_AbstractViewLoader::setView($view_id,$view);
 
 		$view->render();
 	}
@@ -878,6 +879,7 @@ class ChTicketsPage extends CerberusPageExtension {
 		
 		if(empty($ticket_ids)) {
 			$view = C4_AbstractViewLoader::getView($view_id);
+			$view->setAutoPersist(false);
 			$view->render();
 			return;
 		}
@@ -922,6 +924,7 @@ class ChTicketsPage extends CerberusPageExtension {
 		}
 		
 		$view = C4_AbstractViewLoader::getView($view_id);
+		$view->setAutoPersist(false);
 		$view->render();
 		return;
 	}
@@ -946,6 +949,7 @@ class ChTicketsPage extends CerberusPageExtension {
 		}
 		
 		$view = C4_AbstractViewLoader::getView($view_id);
+		$view->setAutoPersist(false);
 		$view->render();
 		return;
 	}
@@ -987,6 +991,7 @@ class ChTicketsPage extends CerberusPageExtension {
 		}
 		
 		$view = C4_AbstractViewLoader::getView($view_id);
+		$view->setAutoPersist(false);
 		$view->render();
 		return;
 	}
@@ -1027,6 +1032,7 @@ class ChTicketsPage extends CerberusPageExtension {
 		}
 		
 		$view = C4_AbstractViewLoader::getView($view_id);
+		$view->setAutoPersist(false);
 		$view->render();
 		return;
 	}
@@ -1067,6 +1073,7 @@ class ChTicketsPage extends CerberusPageExtension {
 		}
 		
 		$view = C4_AbstractViewLoader::getView($view_id);
+		$view->setAutoPersist(false);
 		$view->render();
 		return;
 	}
@@ -1117,6 +1124,7 @@ class ChTicketsPage extends CerberusPageExtension {
 		}
 		
 		$view = C4_AbstractViewLoader::getView($view_id);
+		$view->setAutoPersist(false);
 		$view->render();
 		return;
 	}
@@ -1167,6 +1175,7 @@ class ChTicketsPage extends CerberusPageExtension {
 		}
 		
 		$view = C4_AbstractViewLoader::getView($view_id);
+		$view->setAutoPersist(false);
 		$view->render();
 		return;
 	}
@@ -1209,6 +1218,7 @@ class ChTicketsPage extends CerberusPageExtension {
 		}
 		
 		$view = C4_AbstractViewLoader::getView($view_id);
+		$view->setAutoPersist(false);
 		$view->render();
 		return;
 	}
@@ -1221,6 +1231,7 @@ class ChTicketsPage extends CerberusPageExtension {
 		if($clear || empty($last_action)) {
 			View_Ticket::setLastAction($view_id,null);
 			$view = C4_AbstractViewLoader::getView($view_id);
+			$view->setAutoPersist(false);
 			$view->render();
 			return;
 		}
@@ -1235,6 +1246,7 @@ class ChTicketsPage extends CerberusPageExtension {
 		$visit->set(CerberusVisit::KEY_VIEW_LAST_ACTION,null);
 		
 		$view = C4_AbstractViewLoader::getView($view_id);
+		$view->setAutoPersist(false);
 		$view->render();
 		return;
 	}
@@ -1341,7 +1353,9 @@ class ChTicketsPage extends CerberusPageExtension {
 		@$subjects = DevblocksPlatform::importGPC($_REQUEST['subjects'],'string','');
 		
 		@$view_id = DevblocksPlatform::importGPC($_REQUEST['view_id'],'string');
+		
 		$view = C4_AbstractViewLoader::getView($view_id);
+		$view->setAutoPersist(false);
 
 		$subjects = DevblocksPlatform::parseCrlfString($subjects);
 		$senders = DevblocksPlatform::parseCrlfString($senders);
@@ -1354,13 +1368,11 @@ class ChTicketsPage extends CerberusPageExtension {
 		$do = array();
 		
 		// Move to Group/Bucket
-		// [TODO] This logic is repeated in several places -- try to condense (like custom field form handlers)
-		@$move_code = DevblocksPlatform::importGPC($_REQUEST['do_move'],'string',null);
-		if(0 != strlen($move_code)) {
-			list($g_id, $b_id) = CerberusApplication::translateGroupBucketCode($move_code);
+		@$bucket_id = DevblocksPlatform::importGPC($_REQUEST['do_move'],'string',null);
+		if(0 != strlen($bucket_id) && false != ($bucket = DAO_Bucket::get($bucket_id))) {
 			$do['move'] = array(
-				'group_id' => intval($g_id),
-				'bucket_id' => intval($b_id),
+				'group_id' => $bucket->group_id,
+				'bucket_id' => $bucket->id,
 			);
 		}
 		
@@ -1504,7 +1516,9 @@ class ChTicketsPage extends CerberusPageExtension {
 		
 		$active_worker = CerberusApplication::getActiveWorker();
 		$tpl_builder = DevblocksPlatform::getTemplateBuilder();
+		
 		$view = C4_AbstractViewLoader::getView($view_id);
+		$view->setAutoPersist(false);
 
 		$tpl = DevblocksPlatform::getTemplateService();
 		
@@ -1600,52 +1614,4 @@ class ChTicketsPage extends CerberusPageExtension {
 		}
 	}
 	
-	// ajax
-	function showViewRssAction() {
-		@$view_id = DevblocksPlatform::importGPC($_REQUEST['view_id'],'string','');
-		@$source = DevblocksPlatform::importGPC($_REQUEST['source'],'string','');
-		
-		$view = C4_AbstractViewLoader::getView($view_id);
-		
-		$tpl = DevblocksPlatform::getTemplateService();
-		$tpl->assign('view_id', $view_id);
-		$tpl->assign('view', $view);
-		$tpl->assign('source', $source);
-		
-		$tpl->display('devblocks:cerberusweb.core::internal/views/view_rss_builder.tpl');
-	}
-	
-	// post
-	// [TODO] Move to 'internal'
-	function viewBuildRssAction() {
-		@$view_id = DevblocksPlatform::importGPC($_POST['view_id']);
-		@$source = DevblocksPlatform::importGPC($_POST['source']);
-		@$title = DevblocksPlatform::importGPC($_POST['title']);
-		$active_worker = CerberusApplication::getActiveWorker();
-
-		$view = C4_AbstractViewLoader::getView($view_id);
-		
-		$hash = md5($title.$view_id.$active_worker->id.time());
-		
-		// Restrict to current worker groups
-		$active_worker = CerberusApplication::getActiveWorker();
-		
-		$params = array(
-			'params' => $view->getParams(),
-			'sort_by' => $view->renderSortBy,
-			'sort_asc' => $view->renderSortAsc
-		);
-		
-		$fields = array(
-			DAO_ViewRss::TITLE => $title,
-			DAO_ViewRss::HASH => $hash,
-			DAO_ViewRss::CREATED => time(),
-			DAO_ViewRss::WORKER_ID => $active_worker->id,
-			DAO_ViewRss::SOURCE_EXTENSION => $source,
-			DAO_ViewRss::PARAMS => serialize($params),
-		);
-		$feed_id = DAO_ViewRss::create($fields);
-				
-		DevblocksPlatform::redirect(new DevblocksHttpResponse(array('preferences','rss')));
-	}
 };

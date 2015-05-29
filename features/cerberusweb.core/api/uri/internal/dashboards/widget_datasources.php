@@ -28,9 +28,7 @@ class WorkspaceWidgetDatasource_Worklist extends Extension_WorkspaceWidgetDataso
 			(!is_null($series_idx) ? intval($series_idx) : '')
 		);
 		
-		if(null != ($view = Extension_WorkspaceWidget::getViewFromParams($widget, $params, $view_id))) {
-			C4_AbstractViewLoader::setView($view->id, $view);
-		}
+		$view = Extension_WorkspaceWidget::getViewFromParams($widget, $params, $view_id);
 		
 		// Worklists
 		
@@ -87,8 +85,6 @@ class WorkspaceWidgetDatasource_Worklist extends Extension_WorkspaceWidgetDataso
 
 		if(null == ($dao_class = @$context_ext->manifest->params['dao_class']))
 			return;
-		
-		C4_AbstractViewLoader::setView($view->id, $view);
 		
 		$view->renderPage = 0;
 		$view->renderLimit = 1;
@@ -158,11 +154,11 @@ class WorkspaceWidgetDatasource_Worklist extends Extension_WorkspaceWidgetDataso
 			str_replace('%','%%',$query_parts['where']),
 			$select_func
 		);
-
+		
 		switch($widget->extension_id) {
 			case 'core.workspace.widget.counter':
 			case 'core.workspace.widget.gauge':
-				$params['metric_value'] = $db->GetOne($sql);
+				$params['metric_value'] = $db->GetOneSlave($sql);
 				break;
 		}
 		
@@ -174,7 +170,7 @@ class WorkspaceWidgetDatasource_Worklist extends Extension_WorkspaceWidgetDataso
 		$db = DevblocksPlatform::getDatabaseService();
 		
 		// Use the worker's timezone for MySQL date functions
-		$db->Execute(sprintf("SET time_zone = %s", $db->qstr($date->formatTime('P', time()))));
+		$db->ExecuteSlave(sprintf("SET time_zone = %s", $db->qstr($date->formatTime('P', time()))));
 		
 		$series_idx = $this->_getSeriesIdxFromPrefix($params_prefix);
 		
@@ -197,10 +193,8 @@ class WorkspaceWidgetDatasource_Worklist extends Extension_WorkspaceWidgetDataso
 		if(null == ($dao_class = @$context_ext->manifest->params['dao_class']))
 			continue;
 			
-		C4_AbstractViewLoader::setView($view->id, $view);
-		
 		$data = array();
-			
+		
 		$view->renderPage = 0;
 		$view->renderLimit = 30;
 			
@@ -357,7 +351,7 @@ class WorkspaceWidgetDatasource_Worklist extends Extension_WorkspaceWidgetDataso
 					'ORDER BY histo ASC'
 					;
 					
-					$results = $db->GetArray($sql);
+					$results = $db->GetArraySlave($sql);
 					
 					// Find the first and last date
 					@$xaxis_param = array_shift(C4_AbstractView::findParam($xaxis_field->token, $view->getParams()));
@@ -523,7 +517,7 @@ class WorkspaceWidgetDatasource_Worklist extends Extension_WorkspaceWidgetDataso
 						$order_by
 					);
 
-					$results = $db->GetArray($sql);
+					$results = $db->GetArraySlave($sql);
 					$data = array();
 
 					// echo $sql,"<br>\n";

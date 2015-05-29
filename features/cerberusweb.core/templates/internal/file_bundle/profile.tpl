@@ -27,7 +27,7 @@
 		
 		<!-- Edit -->
 		{if $file_bundle->isWriteableByActor($active_worker)}
-		<button type="button" id="btnDisplayFileBundleEdit" title="{'common.edit'|devblocks_translate|capitalize}">&nbsp;<span class="cerb-sprite2 sprite-gear"></span>&nbsp;</button>
+		<button type="button" id="btnDisplayFileBundleEdit" title="{'common.edit'|devblocks_translate|capitalize}"><span class="glyphicons glyphicons-cogwheel"></span></button>
 		{/if}
 	</form>
 	
@@ -103,15 +103,10 @@
 </div>
 <br>
 
-{$selected_tab_idx=0}
-{foreach from=$tabs item=tab_label name=tabs}
-	{if $tab_label==$tab_selected}{$selected_tab_idx = $smarty.foreach.tabs.index}{/if}
-{/foreach}
-
 <script type="text/javascript">
 	$(function() {
 		var tabOptions = Devblocks.getDefaultjQueryUiTabOptions();
-		tabOptions.active = {$selected_tab_idx};
+		tabOptions.active = Devblocks.getjQueryUiTabSelected('file_bundleTabs');
 	
 		var tabs = $("#file_bundleTabs").tabs(tabOptions);
 		

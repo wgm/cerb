@@ -47,6 +47,11 @@ class PageSection_SetupWorkers extends Extension_PageSection {
 		
 		$active_worker = CerberusApplication::getActiveWorker();
 		
+		if(!$active_worker->is_superuser) {
+			$tpl->assign('error_message', "Only administrators can edit worker records.");
+			$tpl->display('devblocks:cerberusweb.core::internal/peek/peek_error.tpl');
+		}
+		
 		$tpl->assign('view_id', $view_id);
 		
 		if(false == ($worker = DAO_Worker::get($id))) {
@@ -145,7 +150,6 @@ class PageSection_SetupWorkers extends Extension_PageSection {
 					
 					try {
 						$mail_service = DevblocksPlatform::getMailService();
-						$mailer = $mail_service->getMailer(CerberusMail::getMailerDefaults());
 						$mail = $mail_service->createMessage();
 						
 						$mail->setTo(array($email => $first_name . ' ' . $last_name));
@@ -174,7 +178,7 @@ class PageSection_SetupWorkers extends Extension_PageSection {
 						
 						$mail->setBody($body);
 	
-						if(!$mailer->send($mail)) {
+						if(!$mail_service->send($mail)) {
 							throw new Exception('Password notification email failed to send.');
 						}
 						
@@ -333,6 +337,7 @@ class PageSection_SetupWorkers extends Extension_PageSection {
 		// View
 		@$view_id = DevblocksPlatform::importGPC($_REQUEST['view_id'],'string');
 		$view = C4_AbstractViewLoader::getView($view_id);
+		$view->setAutoPersist(false);
 		
 		// Worker fields
 		@$is_disabled = trim(DevblocksPlatform::importGPC($_POST['is_disabled'],'string',''));

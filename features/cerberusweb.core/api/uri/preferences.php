@@ -74,12 +74,6 @@ class ChPreferencesPage extends CerberusPageExtension {
 				break;
 
 			default:
-				// Remember the last tab/URL
-				if(null == ($selected_tab = @$response->path[1])) {
-					$selected_tab = $visit->get(Extension_PreferenceTab::POINT, '');
-				}
-				$tpl->assign('selected_tab', $selected_tab);
-
 				$tpl->assign('tab', $section);
 				$tpl->display('devblocks:cerberusweb.core::preferences/index.tpl');
 				break;
@@ -90,12 +84,9 @@ class ChPreferencesPage extends CerberusPageExtension {
 	function showTabAction() {
 		@$ext_id = DevblocksPlatform::importGPC($_REQUEST['ext_id'],'string','');
 
-		$visit = CerberusApplication::getVisit();
-
 		if(null != ($tab_mft = DevblocksPlatform::getExtension($ext_id))
 			&& null != ($inst = $tab_mft->createInstance())
 			&& $inst instanceof Extension_PreferenceTab) {
-				$visit->set(Extension_PreferenceTab::POINT, $inst->manifest->params['uri']);
 				$inst->showTab();
 		}
 	}
@@ -130,11 +121,7 @@ class ChPreferencesPage extends CerberusPageExtension {
 	
 	function showWatcherTabAction() {
 		$active_worker = CerberusApplication::getActiveWorker();
-		$visit = CerberusApplication::getVisit();
 		$tpl = DevblocksPlatform::getTemplateService();
-		
-		// Remember tab
-		$visit->set(Extension_PreferenceTab::POINT, 'watcher');
 		
 		// Activities
 		$activities = DevblocksPlatform::getActivityPointRegistry();
@@ -161,11 +148,7 @@ class ChPreferencesPage extends CerberusPageExtension {
 	function showMyNotificationsTabAction() {
 		$translate = DevblocksPlatform::getTranslationService();
 		$active_worker = CerberusApplication::getActiveWorker();
-		$visit = CerberusApplication::getVisit();
 		$tpl = DevblocksPlatform::getTemplateService();
-
-		// Remember tab
-		$visit->set('cerberusweb.profiles.worker.'.$active_worker->id, 'notifications');
 
 		// My Events
 		$defaults = new C4_AbstractViewModel();
@@ -195,13 +178,6 @@ class ChPreferencesPage extends CerberusPageExtension {
 		$myNotificationsView->addParamsRequired(array(
 			SearchFields_Notification::WORKER_ID => new DevblocksSearchCriteria(SearchFields_Notification::WORKER_ID,'=',$active_worker->id),
 		), true);
-
-		/*
-		 * [TODO] This doesn't need to save every display, but it was possible to
-		 * lose the params in the saved version of the view in the DB w/o recovery.
-		 * This should be moved back into the if(null==...) check in a later build.
-		 */
-		C4_AbstractViewLoader::setView($myNotificationsView->id, $myNotificationsView);
 
 		$tpl->assign('view', $myNotificationsView);
 		$tpl->display('devblocks:cerberusweb.core::preferences/tabs/notifications/index.tpl');
@@ -234,6 +210,7 @@ class ChPreferencesPage extends CerberusPageExtension {
 		// View
 		@$view_id = DevblocksPlatform::importGPC($_REQUEST['view_id'],'string');
 		$view = C4_AbstractViewLoader::getView($view_id);
+		$view->setAutoPersist(false);
 
 		// Task fields
 		$is_read = trim(DevblocksPlatform::importGPC($_POST['is_read'],'string',''));
@@ -315,6 +292,7 @@ class ChPreferencesPage extends CerberusPageExtension {
 
 		// Loop through view and get IDs
 		$view = C4_AbstractViewLoader::getView($view_id);
+		$view->setAutoPersist(false);
 
 		// Page start
 		@$explore_from = DevblocksPlatform::importGPC($_REQUEST['explore_from'],'integer',0);
@@ -341,37 +319,19 @@ class ChPreferencesPage extends CerberusPageExtension {
 				if($event_id==$explore_from)
 					$orig_pos = $pos;
 
-				$content = $row[SearchFields_Notification::MESSAGE];
+				$entry = json_decode($row[SearchFields_Notification::ENTRY_JSON], true);
+				
+				$content = CerberusContexts::formatActivityLogEntry($entry, 'text');
 				$context = $row[SearchFields_Notification::CONTEXT];
 				$context_id = $row[SearchFields_Notification::CONTEXT_ID];
-				$url = $row[SearchFields_Notification::URL];
 				
 				// Composite key
 				$key = $row[SearchFields_Notification::WORKER_ID]
 					. '_' . $context
 					. '_' . $context_id
 					;
-
-				if(empty($url) && !empty($context)) {
-					if(!isset($contexts[$context])) {
-						if(null != ($ctx = DevblocksPlatform::getExtension($context, true, false))) {
-						 	$contexts[$context] = $ctx;
-						}
-					}
 					
-					@$ctx = $contexts[$context]; /* @var $ctx Extension_DevblocksContext */
-					
-					if(!empty($ctx) && null != ($meta = $ctx->getMeta($context_id))) {
-						if(isset($meta['name']) && !empty($meta['name']))
-							$content = $meta['name'];
-						if(isset($meta['permalink']))
-							$url = $meta['permalink'];
-					}
-					
-				} else {
-					$url = $url_writer->write(sprintf("c=preferences&a=redirectRead&id=%d", $row[SearchFields_Notification::ID]));
-					
-				}
+				$url = $url_writer->write(sprintf("c=preferences&a=redirectRead&id=%d", $row[SearchFields_Notification::ID]));
 				
 				if(empty($url))
 					continue;
@@ -468,9 +428,6 @@ class ChPreferencesPage extends CerberusPageExtension {
 	function showGeneralTabAction() {
 		$date_service = DevblocksPlatform::getDateService();
 		$tpl = DevblocksPlatform::getTemplateService();
-		$visit = CerberusApplication::getVisit();
-
-		$visit->set(Extension_PreferenceTab::POINT, 'general');
 
 		$worker = CerberusApplication::getActiveWorker();
 		$tpl->assign('worker', $worker);
@@ -479,10 +436,11 @@ class ChPreferencesPage extends CerberusPageExtension {
 		$prefs['assist_mode'] = intval(DAO_WorkerPref::get($worker->id, 'assist_mode', 1));
 		$prefs['keyboard_shortcuts'] = intval(DAO_WorkerPref::get($worker->id, 'keyboard_shortcuts', 1));
 		$prefs['availability_calendar_id'] = intval($worker->calendar_id);
+		$prefs['mail_disable_html_display'] = DAO_WorkerPref::get($worker->id,'mail_disable_html_display',0);
 		$prefs['mail_always_show_all'] = DAO_WorkerPref::get($worker->id,'mail_always_show_all',0);
 		$prefs['mail_display_inline_log'] = DAO_WorkerPref::get($worker->id,'mail_display_inline_log',0);
 		$prefs['mail_reply_html'] = DAO_WorkerPref::get($worker->id,'mail_reply_html',0);
-		$prefs['mail_reply_textbox_size_inelastic'] = DAO_WorkerPref::get($worker->id,'mail_reply_textbox_size_inelastic',0);
+		$prefs['mail_reply_textbox_size_auto'] = DAO_WorkerPref::get($worker->id,'mail_reply_textbox_size_auto',0);
 		$prefs['mail_reply_textbox_size_px'] = DAO_WorkerPref::get($worker->id,'mail_reply_textbox_size_px',300);
 		$prefs['mail_reply_button'] = DAO_WorkerPref::get($worker->id,'mail_reply_button',0);
 		$prefs['mail_status_compose'] = DAO_WorkerPref::get($worker->id,'compose.status','waiting');
@@ -515,9 +473,6 @@ class ChPreferencesPage extends CerberusPageExtension {
 
 	function showSecurityTabAction() {
 		$tpl = DevblocksPlatform::getTemplateService();
-		$visit = CerberusApplication::getVisit();
-		
-		$visit->set(Extension_PreferenceTab::POINT, 'security');
 
 		$worker = CerberusApplication::getActiveWorker();
 		$tpl->assign('worker', $worker);
@@ -563,9 +518,6 @@ class ChPreferencesPage extends CerberusPageExtension {
 	
 	function showSessionsTabAction() {
 		$tpl = DevblocksPlatform::getTemplateService();
-		$visit = CerberusApplication::getVisit();
-		
-		$visit->set(Extension_PreferenceTab::POINT, 'sessions');
 
 		$worker = CerberusApplication::getActiveWorker();
 		$tpl->assign('worker', $worker);
@@ -586,26 +538,11 @@ class ChPreferencesPage extends CerberusPageExtension {
 		
 		$view->addParamsHidden(array(SearchFields_DevblocksSession::USER_ID));
 		
-		C4_AbstractViewLoader::setView($view->id, $view);
-		
 		$tpl->assign('view', $view);
 		
 		$tpl->display('devblocks:cerberusweb.core::internal/views/search_and_view.tpl');
 	}
 	
-	function showRssTabAction() {
-		$tpl = DevblocksPlatform::getTemplateService();
-		$active_worker = CerberusApplication::getActiveWorker();
-		$visit = CerberusApplication::getVisit();
-
-		$visit->set(Extension_PreferenceTab::POINT, 'rss');
-
-		$feeds = DAO_ViewRss::getByWorker($active_worker->id);
-		$tpl->assign('feeds', $feeds);
-
-		$tpl->display('devblocks:cerberusweb.core::preferences/modules/rss.tpl');
-	}
-
 	function saveDefaultsAction() {
 		@$timezone = DevblocksPlatform::importGPC($_REQUEST['timezone'],'string');
 		@$lang_code = DevblocksPlatform::importGPC($_REQUEST['lang_code'],'string','en_US');
@@ -650,6 +587,9 @@ class ChPreferencesPage extends CerberusPageExtension {
 		@$keyboard_shortcuts = DevblocksPlatform::importGPC($_REQUEST['keyboard_shortcuts'],'integer',0);
 		DAO_WorkerPref::set($worker->id, 'keyboard_shortcuts', $keyboard_shortcuts);
 
+		@$mail_disable_html_display = DevblocksPlatform::importGPC($_REQUEST['mail_disable_html_display'],'integer',0);
+		DAO_WorkerPref::set($worker->id, 'mail_disable_html_display', $mail_disable_html_display);
+		
 		@$mail_always_show_all = DevblocksPlatform::importGPC($_REQUEST['mail_always_show_all'],'integer',0);
 		DAO_WorkerPref::set($worker->id, 'mail_always_show_all', $mail_always_show_all);
 		
@@ -662,8 +602,8 @@ class ChPreferencesPage extends CerberusPageExtension {
 		@$mail_reply_textbox_size_px = DevblocksPlatform::importGPC($_REQUEST['mail_reply_textbox_size_px'],'integer',0);
 		DAO_WorkerPref::set($worker->id, 'mail_reply_textbox_size_px', max(100, min(2000, $mail_reply_textbox_size_px)));
 		
-		@$mail_reply_textbox_size_inelastic = DevblocksPlatform::importGPC($_REQUEST['mail_reply_textbox_size_inelastic'],'integer',0);
-		DAO_WorkerPref::set($worker->id, 'mail_reply_textbox_size_inelastic', $mail_reply_textbox_size_inelastic);
+		@$mail_reply_textbox_size_auto = DevblocksPlatform::importGPC($_REQUEST['mail_reply_textbox_size_auto'],'integer',0);
+		DAO_WorkerPref::set($worker->id, 'mail_reply_textbox_size_auto', $mail_reply_textbox_size_auto);
 		
 		@$mail_reply_button = DevblocksPlatform::importGPC($_REQUEST['mail_reply_button'],'integer',0);
 		DAO_WorkerPref::set($worker->id, 'mail_reply_button', $mail_reply_button);
@@ -754,15 +694,4 @@ class ChPreferencesPage extends CerberusPageExtension {
 		$tpl->assign('pref_success', $output);
 	}
 
-	// Post [TODO] This should probably turn into Extension_PreferenceTab
-	function saveRssAction() {
-		@$id = DevblocksPlatform::importGPC($_POST['id']);
-		$active_worker = CerberusApplication::getActiveWorker();
-
-		if(null != ($feed = DAO_ViewRss::getId($id)) && $feed->worker_id == $active_worker->id) {
-			DAO_ViewRss::delete($id);
-		}
-
-		DevblocksPlatform::setHttpResponse(new DevblocksHttpResponse(array('preferences','rss')));
-	}
 };

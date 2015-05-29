@@ -30,7 +30,7 @@ class DAO_MailHtmlTemplate extends Cerb_ORMHelper {
 		$db = DevblocksPlatform::getDatabaseService();
 		
 		$sql = "INSERT INTO mail_html_template () VALUES ()";
-		$db->Execute($sql);
+		$db->ExecuteMaster($sql);
 		$id = $db->LastInsertId();
 		
 		self::update($id, $fields);
@@ -68,7 +68,7 @@ class DAO_MailHtmlTemplate extends Cerb_ORMHelper {
 	 * @param integer $limit
 	 * @return Model_MailHtmlTemplate[]
 	 */
-	static function getWhere($where=null, $sortBy='name', $sortAsc=true, $limit=null) {
+	static function getWhere($where=null, $sortBy=DAO_MailHtmlTemplate::NAME, $sortAsc=true, $limit=null, $options=null) {
 		$db = DevblocksPlatform::getDatabaseService();
 
 		list($where_sql, $sort_sql, $limit_sql) = self::_getWhereSQL($where, $sortBy, $sortAsc, $limit);
@@ -80,8 +80,13 @@ class DAO_MailHtmlTemplate extends Cerb_ORMHelper {
 			$sort_sql.
 			$limit_sql
 		;
-		$rs = $db->Execute($sql);
-		
+
+		if($options & Cerb_ORMHelper::OPT_GET_MASTER_ONLY) {
+			$rs = $db->ExecuteMaster($sql);
+		} else {
+			$rs = $db->ExecuteSlave($sql);
+		}
+
 		return self::_getObjectsFromResult($rs);
 	}
 
@@ -90,6 +95,9 @@ class DAO_MailHtmlTemplate extends Cerb_ORMHelper {
 	 * @return Model_MailHtmlTemplate
 	 */
 	static function get($id) {
+		if(empty($id))
+			return null;
+		
 		$objects = DAO_MailHtmlTemplate::getAll();
 		
 		if(isset($objects[$id]))
@@ -106,7 +114,13 @@ class DAO_MailHtmlTemplate extends Cerb_ORMHelper {
 	static function getAll($nocache=false) {
 		$cache = DevblocksPlatform::getCacheService();
 		if($nocache || null === ($html_templates = $cache->load(self::_CACHE_ALL))) {
-			$html_templates = self::getWhere(null, 'name', true);
+			$html_templates = self::getWhere(
+				null,
+				DAO_MailHtmlTemplate::NAME,
+				true,
+				null,
+				Cerb_ORMHelper::OPT_GET_MASTER_ONLY
+			);
 			$cache->save($html_templates, self::_CACHE_ALL);
 		}
 		
@@ -150,17 +164,17 @@ class DAO_MailHtmlTemplate extends Cerb_ORMHelper {
 		
 		$ids_list = implode(',', $ids);
 		
-		$db->Execute(sprintf("DELETE FROM mail_html_template WHERE id IN (%s)", $ids_list));
+		$db->ExecuteMaster(sprintf("DELETE FROM mail_html_template WHERE id IN (%s)", $ids_list));
 		
 		// Clear the template setting if used on a group, bucket, or reply-to
 
-		$db->Execute(sprintf("UPDATE worker_group SET reply_html_template_id=0 WHERE reply_html_template_id IN (%s)", $ids_list));
+		$db->ExecuteMaster(sprintf("UPDATE worker_group SET reply_html_template_id=0 WHERE reply_html_template_id IN (%s)", $ids_list));
 		DAO_Group::clearCache();
 		
-		$db->Execute(sprintf("UPDATE bucket SET reply_html_template_id=0 WHERE reply_html_template_id IN (%s)", $ids_list));
+		$db->ExecuteMaster(sprintf("UPDATE bucket SET reply_html_template_id=0 WHERE reply_html_template_id IN (%s)", $ids_list));
 		DAO_Bucket::clearCache();
 		
-		$db->Execute(sprintf("UPDATE address_outgoing SET reply_html_template_id=0 WHERE reply_html_template_id IN (%s)", $ids_list));
+		$db->ExecuteMaster(sprintf("UPDATE address_outgoing SET reply_html_template_id=0 WHERE reply_html_template_id IN (%s)", $ids_list));
 		DAO_AddressOutgoing::clearCache();
 		
 		// Fire event
@@ -279,7 +293,7 @@ class DAO_MailHtmlTemplate extends Cerb_ORMHelper {
 					$db = DevblocksPlatform::getDatabaseService();
 					$temp_table = sprintf("_tmp_%s", uniqid());
 					
-					$db->Execute(sprintf("CREATE TEMPORARY TABLE %s SELECT DISTINCT context_id AS id FROM comment INNER JOIN %s ON (%s.id=comment.id)",
+					$db->ExecuteSlave(sprintf("CREATE TEMPORARY TABLE %s (PRIMARY KEY (id)) SELECT DISTINCT context_id AS id FROM comment INNER JOIN %s ON (%s.id=comment.id)",
 						$temp_table,
 						$ids,
 						$ids
@@ -341,9 +355,9 @@ class DAO_MailHtmlTemplate extends Cerb_ORMHelper {
 			$sort_sql;
 			
 		if($limit > 0) {
-			$rs = $db->SelectLimit($sql,$limit,$page*$limit) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs ADORecordSet */
+			$rs = $db->SelectLimit($sql,$limit,$page*$limit) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs mysqli_result */
 		} else {
-			$rs = $db->Execute($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs ADORecordSet */
+			$rs = $db->ExecuteSlave($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs mysqli_result */
 			$total = mysqli_num_rows($rs);
 		}
 		
@@ -363,7 +377,7 @@ class DAO_MailHtmlTemplate extends Cerb_ORMHelper {
 					($has_multiple_values ? "SELECT COUNT(DISTINCT mail_html_template.id) " : "SELECT COUNT(mail_html_template.id) ").
 					$join_sql.
 					$where_sql;
-				$total = $db->GetOne($count_sql);
+				$total = $db->GetOneSlave($count_sql);
 			}
 		}
 		
@@ -1085,7 +1099,6 @@ class Context_MailHtmlTemplate extends Extension_DevblocksContext implements IDe
 		$view->renderFilters = false;
 		$view->renderTemplate = 'contextlinks_chooser';
 		
-		C4_AbstractViewLoader::setView($view_id, $view);
 		return $view;
 	}
 	
@@ -1110,7 +1123,6 @@ class Context_MailHtmlTemplate extends Extension_DevblocksContext implements IDe
 		$view->addParamsRequired($params_req, true);
 		
 		$view->renderTemplate = 'context';
-		C4_AbstractViewLoader::setView($view_id, $view);
 		return $view;
 	}
 	

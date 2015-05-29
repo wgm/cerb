@@ -21,6 +21,7 @@ class DAO_AddressOutgoing extends DevblocksORMHelper {
 	const REPLY_PERSONAL = 'reply_personal';
 	const REPLY_SIGNATURE = 'reply_signature';
 	const REPLY_HTML_TEMPLATE_ID = 'reply_html_template_id';
+	const REPLY_MAIL_TRANSPORT_ID = 'reply_mail_transport_id';
 	
 	const _CACHE_ALL = 'dao_address_outgoing_all';
 	
@@ -36,7 +37,7 @@ class DAO_AddressOutgoing extends DevblocksORMHelper {
 			"VALUES (%d)",
 			$id
 		);
-		$db->Execute($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
+		$db->ExecuteMaster($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
 		
 		self::update($id, $fields);
 		
@@ -48,6 +49,12 @@ class DAO_AddressOutgoing extends DevblocksORMHelper {
 		self::clearCache();
 	}
 	
+	/**
+	 * Cache from master
+	 * 
+	 * @param boolean $nocache
+	 * @return Model_AddressOutgoing[]
+	 */
 	static function getAll($nocache=false) {
 		$cache = DevblocksPlatform::getCacheService();
 
@@ -55,12 +62,12 @@ class DAO_AddressOutgoing extends DevblocksORMHelper {
 			$db = DevblocksPlatform::getDatabaseService();
 			$froms = array();
 			
-			$sql = "SELECT address_outgoing.address_id, address.email, address_outgoing.is_default, address_outgoing.reply_personal, address_outgoing.reply_signature, address_outgoing.reply_html_template_id ".
-				"FROM address_outgoing ".
-				"INNER JOIN address ON (address.id=address_outgoing.address_id) ".
-				"ORDER BY address.email ASC "
+			$sql = "SELECT ao.address_id, a.email, ao.is_default, ao.reply_personal, ao.reply_signature, ao.reply_html_template_id, ao.reply_mail_transport_id ".
+				"FROM address_outgoing AS ao ".
+				"INNER JOIN address AS a ON (a.id=ao.address_id) ".
+				"ORDER BY a.email ASC "
 				;
-			$rs = $db->Execute($sql);
+			$rs = $db->ExecuteMaster($sql);
 			
 			$froms = self::_getObjectsFromResultSet($rs);
 			
@@ -102,8 +109,8 @@ class DAO_AddressOutgoing extends DevblocksORMHelper {
 	
 	static public function setDefault($address_id) {
 		$db = DevblocksPlatform::getDatabaseService();
-		$db->Execute("UPDATE address_outgoing SET is_default = 0");
-		$db->Execute(sprintf("UPDATE address_outgoing SET is_default = 1 WHERE address_id = %d", $address_id));
+		$db->ExecuteMaster("UPDATE address_outgoing SET is_default = 0");
+		$db->ExecuteMaster(sprintf("UPDATE address_outgoing SET is_default = 1 WHERE address_id = %d", $address_id));
 		
 		self::clearCache();
 	}
@@ -122,6 +129,26 @@ class DAO_AddressOutgoing extends DevblocksORMHelper {
 		return null;
 	}
 	
+	/**
+	 * 
+	 * @param string $email
+	 * @return Model_AddressOutgoing|false
+	 */
+	static public function getByEmail($email, $with_default=true) {
+		$addresses = DAO_AddressOutgoing::getAll();
+		
+		foreach($addresses as $address) {
+			if(0 == strcasecmp($address->email, $email))
+				return $address;
+		}
+		
+		if($with_default) {
+			return DAO_AddressOutgoing::getDefault();
+		} else {
+			return false;
+		}
+	}
+	
 	static private function _getObjectsFromResultSet($rs) {
 		$objects = array();
 		
@@ -132,7 +159,8 @@ class DAO_AddressOutgoing extends DevblocksORMHelper {
 			$object->is_default = intval($row['is_default']);
 			$object->reply_personal = $row['reply_personal'];
 			$object->reply_signature = $row['reply_signature'];
-			$object->reply_html_template_id = $row['reply_html_template_id'];
+			$object->reply_html_template_id = intval($row['reply_html_template_id']);
+			$object->reply_mail_transport_id = intval($row['reply_mail_transport_id']);
 			$objects[$object->address_id] = $object;
 		}
 		
@@ -173,13 +201,13 @@ class DAO_AddressOutgoing extends DevblocksORMHelper {
 		$db = DevblocksPlatform::getDatabaseService();
 		
 		// Delete this address_outgoing row
-		$db->Execute(sprintf("DELETE FROM address_outgoing WHERE address_id IN (%s)", $ids_list));
+		$db->ExecuteMaster(sprintf("DELETE FROM address_outgoing WHERE address_id IN (%s)", $ids_list));
 		
 		// Reset groups
-		$db->Execute(sprintf("UPDATE worker_group SET reply_address_id=0 WHERE reply_address_id IN (%s)", $ids_list));
+		$db->ExecuteMaster(sprintf("UPDATE worker_group SET reply_address_id=0 WHERE reply_address_id IN (%s)", $ids_list));
 		
 		// Reset buckets
-		$db->Execute(sprintf("UPDATE bucket SET reply_address_id=0 WHERE reply_address_id IN (%s)", $ids_list));
+		$db->ExecuteMaster(sprintf("UPDATE bucket SET reply_address_id=0 WHERE reply_address_id IN (%s)", $ids_list));
 		
 		self::clearCache();
 		
@@ -202,7 +230,13 @@ class Model_AddressOutgoing {
 	public $reply_personal = '';
 	public $reply_signature = '';
 	public $reply_html_template_id = 0;
+	public $reply_mail_transport_id = 0;
 	
+	/**
+	 * 
+	 * @param Model_Worker|NULL $worker_model
+	 * @return string
+	 */
 	function getReplyPersonal($worker_model=null) {
 		$tpl_builder = DevblocksPlatform::getTemplateBuilder();
 		$token_labels = array();
@@ -211,6 +245,10 @@ class Model_AddressOutgoing {
 		return $tpl_builder->build($this->reply_personal, $token_values);
 	}
 	
+	/**
+	 * 
+	 * @return Model_MailHtmlTemplate|NULL
+	 */
 	function getReplyHtmlTemplate() {
 		if($this->reply_html_template_id && false != ($html_template = DAO_MailHtmlTemplate::get($this->reply_html_template_id)))
 			return $html_template;
@@ -223,6 +261,11 @@ class Model_AddressOutgoing {
 		return null;
 	}
 	
+	/**
+	 * 
+	 * @param Model_Worker|NULL $worker_model
+	 * @return string
+	 */
 	function getReplySignature($worker_model=null) {
 		$sig = '';
 		
@@ -247,5 +290,30 @@ class Model_AddressOutgoing {
 			CerberusContexts::getContext(CerberusContexts::CONTEXT_WORKER, $worker_model, $token_labels, $token_values);
 			return $tpl_builder->build($sig, $token_values);
 		}
+	}
+	
+	/**
+	 * 
+	 * @return Model_MailTransport|NULL
+	 */
+	function getReplyMailTransport() {
+		// If this reply-to has an explicit mail transport set
+		if($this->reply_mail_transport_id && false != ($mail_transport = DAO_MailTransport::get($this->reply_mail_transport_id))) {
+			return $mail_transport;
+		}
+		
+		// Otherwise, if this isn't the default reply-to then check the default
+		if(!$this->is_default 
+			&& false != ($replyto_default = DAO_AddressOutgoing::getDefault())
+			&& false != ($mail_transport = $replyto_default->getReplyMailTransport())) {
+				return $mail_transport;
+		}
+
+		// Lastly, just use the default reply-to
+		if(false !== ($mail_transport = DAO_MailTransport::getDefault())) {
+			return $mail_transport;
+		}
+		
+		return null;
 	}
 };

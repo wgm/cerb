@@ -133,11 +133,6 @@
 				<seg/>
 			</tuv>
 		</tu>
-		<tu tuid="acl.core.rss">
-			<tuv xml:lang="it_IT">
-				<seg/>
-			</tuv>
-		</tu>
 		<tu tuid="acl.core.snippets.actions.create">
 			<tuv xml:lang="it_IT">
 				<seg/>
@@ -519,11 +514,6 @@
 			</tuv>
 		</tu>
 		<tu tuid="activity.mail.search">
-			<tuv xml:lang="it_IT">
-				<seg/>
-			</tuv>
-		</tu>
-		<tu tuid="activity.mail.workflow">
 			<tuv xml:lang="it_IT">
 				<seg/>
 			</tuv>
@@ -1178,6 +1168,11 @@
 				<seg/>
 			</tuv>
 		</tu>
+		<tu tuid="common.history">
+			<tuv xml:lang="it_IT">
+				<seg>storia</seg>
+			</tuv>
+		</tu>
 		<tu tuid="common.hours">
 			<tuv xml:lang="it_IT">
 				<seg/>
@@ -1201,6 +1196,11 @@
 		<tu tuid="common.import.upload_csv.tip">
 			<tuv xml:lang="it_IT">
 				<seg/>
+			</tuv>
+		</tu>
+		<tu tuid="common.importance">
+			<tuv xml:lang="it_IT">
+				<seg></seg>
 			</tuv>
 		</tu>
 		<tu tuid="common.inactive">
@@ -1371,6 +1371,11 @@
 		<tu tuid="common.no">
 			<tuv xml:lang="it_IT">
 				<seg/>
+			</tuv>
+		</tu>
+		<tu tuid="common.no_thanks">
+			<tuv xml:lang="it_IT">
+				<seg>no grazie!</seg>
 			</tuv>
 		</tu>
 		<tu tuid="common.nobody">
@@ -1605,7 +1610,7 @@
 		</tu>
 		<tu tuid="common.status">
 			<tuv xml:lang="it_IT">
-				<seg/>
+				<seg>Stato</seg>
 			</tuv>
 		</tu>
 		<tu tuid="common.subtotals">
@@ -1803,12 +1808,12 @@
 				<seg/>
 			</tuv>
 		</tu>
-		<tu tuid="config.mail.pop3.error_hostname">
+		<tu tuid="config.mailboxes.error_hostname">
 			<tuv xml:lang="it_IT">
 				<seg/>
 			</tuv>
 		</tu>
-		<tu tuid="config.mail.pop3.failed">
+		<tu tuid="config.mailboxes.failed">
 			<tuv xml:lang="it_IT">
 				<seg/>
 			</tuv>
@@ -2768,11 +2773,6 @@
 				<seg>(cartella corrente)</seg>
 			</tuv>
 		</tu>
-		<tu tuid="display.reply.next.move.no_thanks">
-			<tuv xml:lang="it_IT">
-				<seg>no grazie!</seg>
-			</tuv>
-		</tu>
 		<tu tuid="display.reply.next.owner">
 			<tuv xml:lang="it_IT">
 				<seg/>
@@ -2996,11 +2996,6 @@
 		<tu tuid="header.config">
 			<tuv xml:lang="it_IT">
 				<seg>helpdesk setup </seg>
-			</tuv>
-		</tu>
-		<tu tuid="header.history">
-			<tuv xml:lang="it_IT">
-				<seg>storia</seg>
 			</tuv>
 		</tu>
 		<tu tuid="header.last_viewed">
@@ -3286,11 +3281,6 @@
 		<tu tuid="mail.worklist.draft_in_progress">
 			<tuv xml:lang="it_IT">
 				<seg></seg>
-			</tuv>
-		</tu>
-		<tu tuid="mail.workflow">
-			<tuv xml:lang="it_IT">
-				<seg/>
 			</tuv>
 		</tu>
 		<tu tuid="mail.workspaces.create">
@@ -4048,7 +4038,7 @@
 				<seg/>
 			</tuv>
 		</tu>
-		<tu tuid="preferences.account.mail.reply_textbox_size.inelastic">
+		<tu tuid="preferences.account.mail.reply_textbox_size.auto">
 			<tuv xml:lang="it_IT">
 				<seg/>
 			</tuv>
@@ -4468,11 +4458,6 @@
 				<seg/>
 			</tuv>
 		</tu>
-		<tu tuid="rss.bad_feed">
-			<tuv xml:lang="it_IT">
-				<seg/>
-			</tuv>
-		</tu>
 		<tu tuid="search.date.between">
 			<tuv xml:lang="it_IT">
 				<seg/>
@@ -4728,11 +4713,6 @@
 				<seg/>
 			</tuv>
 		</tu>
-		<tu tuid="ticket.assignable">
-			<tuv xml:lang="it_IT">
-				<seg/>
-			</tuv>
-		</tu>
 		<tu tuid="ticket.closed_at">
 			<tuv xml:lang="it_IT">
 				<seg/>
@@ -4836,11 +4816,6 @@
 		<tu tuid="ticket.spam_training">
 			<tuv xml:lang="it_IT">
 				<seg>Spam Training </seg>
-			</tuv>
-		</tu>
-		<tu tuid="ticket.status">
-			<tuv xml:lang="it_IT">
-				<seg>Stato</seg>
 			</tuv>
 		</tu>
 		<tu tuid="ticket.subject">

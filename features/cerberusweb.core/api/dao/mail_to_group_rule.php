@@ -34,7 +34,7 @@ class DAO_MailToGroupRule extends DevblocksORMHelper {
 			"VALUES (%d)",
 			time()
 		);
-		$db->Execute($sql);
+		$db->ExecuteMaster($sql);
 		$id = $db->LastInsertId();
 		
 		self::update($id, $fields);
@@ -52,7 +52,13 @@ class DAO_MailToGroupRule extends DevblocksORMHelper {
 		$cache = DevblocksPlatform::getCacheService();
 		
 		if($nocache || null === ($results = $cache->load(self::_CACHE_ALL))) {
-			$results = self::getWhere();
+			$results = self::getWhere(
+				null,
+				array(DAO_MailToGroupRule::IS_STICKY, DAO_MailToGroupRule::STICKY_ORDER, DAO_MailToGroupRule::POS),
+				array(false, true, false),
+				null,
+				Cerb_ORMHelper::OPT_GET_MASTER_ONLY
+			);
 			$cache->save($results, self::_CACHE_ALL, array(), 1200); // 20 mins
 		}
 		
@@ -63,14 +69,24 @@ class DAO_MailToGroupRule extends DevblocksORMHelper {
 	 * @param string $where
 	 * @return Model_MailToGroupRule[]
 	 */
-	static function getWhere($where=null) {
+	static function getWhere($where=null, $sortBy=null, $sortAsc=true, $limit=null, $options=null) {
 		$db = DevblocksPlatform::getDatabaseService();
 		
+		list($where_sql, $sort_sql, $limit_sql) = self::_getWhereSQL($where, $sortBy, $sortAsc, $limit);
+		
+		// SQL
 		$sql = "SELECT id, pos, created, name, criteria_ser, actions_ser, is_sticky, sticky_order ".
 			"FROM mail_to_group_rule ".
-			(!empty($where) ? sprintf("WHERE %s ",$where) : "").
-			"ORDER BY is_sticky DESC, sticky_order ASC, pos DESC";
-		$rs = $db->Execute($sql);
+			$where_sql .
+			$sort_sql .
+			$limit_sql 
+			;
+			
+		if($options & Cerb_ORMHelper::OPT_GET_MASTER_ONLY) {
+			$rs = $db->ExecuteMaster($sql);
+		} else {
+			$rs = $db->ExecuteSlave($sql);
+		}
 		
 		return self::_getObjectsFromResult($rs);
 	}
@@ -80,6 +96,9 @@ class DAO_MailToGroupRule extends DevblocksORMHelper {
 	 * @return Model_MailToGroupRule
 	 */
 	static function get($id) {
+		if(empty($id))
+			return null;
+		
 		$objects = self::getAll();
 		
 		if(isset($objects[$id]))
@@ -127,7 +146,7 @@ class DAO_MailToGroupRule extends DevblocksORMHelper {
 		
 		$ids_list = implode(',', $ids);
 		
-		$db->Execute(sprintf("DELETE FROM mail_to_group_rule WHERE id IN (%s)", $ids_list));
+		$db->ExecuteMaster(sprintf("DELETE FROM mail_to_group_rule WHERE id IN (%s)", $ids_list));
 		
 		self::clearCache();
 		
@@ -141,7 +160,7 @@ class DAO_MailToGroupRule extends DevblocksORMHelper {
 	 */
 	static function increment($id, $by=1) {
 		$db = DevblocksPlatform::getDatabaseService();
-		$db->Execute(sprintf("UPDATE mail_to_group_rule SET pos = pos + %d WHERE id = %d",
+		$db->ExecuteMaster(sprintf("UPDATE mail_to_group_rule SET pos = pos + %d WHERE id = %d",
 			$by,
 			$id
 		));
@@ -461,13 +480,8 @@ class Model_MailToGroupRule {
 		foreach($this->actions as $action => $params) {
 			switch($action) {
 				case 'move':
-					if(isset($params['group_id']) && isset($params['bucket_id'])) {
-						$g_id = intval($params['group_id']);
-						$b_id = intval($params['bucket_id']);
-						
-						if(isset($groups[$g_id]) && (0==$b_id || isset($buckets[$b_id]))) {
-							$model->setGroupId($g_id);
-						}
+					if(isset($params['group_id']) && isset($groups[$params['group_id']])) {
+						$model->setGroupId($params['group_id']);
 					}
 					
 				default:

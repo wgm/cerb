@@ -1,16 +1,16 @@
-{assign var=headers value=$message->getHeaders()}
+{$headers = $message->getHeaders()}
 <div class="block" style="margin-bottom:10px;">
 <table style="text-align: left; width: 98%;table-layout: fixed;" border="0" cellpadding="2" cellspacing="0">
   <tbody>
 	<tr>
 	  <td>
-		{assign var=sender_id value=$message->address_id}
+		{$sender_id = $message->address_id}
 		{if isset($message_senders.$sender_id)}
-			{assign var=sender value=$message_senders.$sender_id}
-			{assign var=sender_org_id value=$sender->contact_org_id}
-			{assign var=sender_org value=$message_sender_orgs.$sender_org_id}
-			{assign var=is_outgoing value=$message->is_outgoing}
-			{assign var=is_not_sent value=$message->is_not_sent}
+			{$sender = $message_senders.$sender_id}
+			{$sender_org_id = $sender->contact_org_id}
+			{$sender_org = $message_sender_orgs.$sender_org_id}
+			{$is_outgoing = $message->is_outgoing}
+			{$is_not_sent = $message->is_not_sent}
 
 			<div class="toolbar-minmax" style="display:none;float:right;">
 				<button id="btnMsgMax{$message->id}" style="display:none;visibility:hidden;" onclick="genericAjaxGet('{$message->id}t','c=display&a=getMessage&id={$message->id}');"></button>
@@ -47,7 +47,7 @@
 			&nbsp;
 			
 			{if $sender_org_id}
-				<a href="javascript:;" onclick="genericAjaxPopup('peek','c=internal&a=showPeekPopup&context={CerberusContexts::CONTEXT_ORG}&context_id={$sender_org_id}', null, false, '500', function() { C4_ReloadMessageOnSave('{$message->id}',{if $expanded}true{else}false{/if}); } );">{$sender_org->name}</a>
+				<a href="javascript:;" onclick="genericAjaxPopup('peek','c=internal&a=showPeekPopup&context={CerberusContexts::CONTEXT_ORG}&context_id={$sender_org_id}', null, false, '600', function() { C4_ReloadMessageOnSave('{$message->id}',{if $expanded}true{else}false{/if}); } );">{$sender_org->name}</a>
 			{else}{* No org *}
 				{if $active_worker->hasPriv('core.addybook.addy.actions.update')}<a href="javascript:;" onclick="genericAjaxPopup('peek','c=internal&a=showPeekPopup&context={CerberusContexts::CONTEXT_ADDRESS}&context_id={$sender_id}', null, false, '500', function() { C4_ReloadMessageOnSave('{$message->id}', {if $expanded}true{else}false{/if}); } );"><span style="background-color:rgb(255,255,194);">{'display.convo.set_org'|devblocks_translate|lower}</span></a>{/if}
 			{/if}
@@ -62,18 +62,17 @@
 	  
 	  <div id="{$message->id}sh" style="display:block;">
 	  {if isset($headers.from)}<b>{'message.header.from'|devblocks_translate|capitalize}:</b> {$headers.from|escape|nl2br nofilter}<br>{/if}
-	  {if isset($headers.to)}<b>{'message.header.to'|devblocks_translate|capitalize}:</b> {$headers.to|escape|nl2br nofilter}<br>{/if}
-	  {if isset($headers.cc)}<b>{'message.header.cc'|devblocks_translate|capitalize}:</b> {$headers.cc|escape|nl2br nofilter}<br>{/if}
-	  {if isset($headers.bcc)}<b>{'message.header.bcc'|devblocks_translate|capitalize}:</b> {$headers.bcc|escape|nl2br nofilter}<br>{/if}	  
+	  {if isset($headers.to)}<b>{'message.header.to'|devblocks_translate|capitalize}:</b> {$headers.to|truncate:255|escape|nl2br nofilter}<br>{/if}
+	  {if isset($headers.cc)}<b>{'message.header.cc'|devblocks_translate|capitalize}:</b> {$headers.cc|truncate:255|escape|nl2br nofilter}<br>{/if}
+	  {if isset($headers.bcc)}<b>{'message.header.bcc'|devblocks_translate|capitalize}:</b> {$headers.bcc|truncate|escape|nl2br nofilter}<br>{/if}	  
 	  {if isset($headers.subject)}<b>{'message.header.subject'|devblocks_translate|capitalize}:</b> {$headers.subject|escape|nl2br nofilter}<br>{/if}
-	  {if isset($headers.date)}
-	  	<b>{'message.header.date'|devblocks_translate|capitalize}:</b> {$message->created_date|devblocks_date} (<abbr title="{$headers.date}">{$message->created_date|devblocks_prettytime}</abbr>)
+
+  	<b>{'message.header.date'|devblocks_translate|capitalize}:</b> {$message->created_date|devblocks_date} (<abbr title="{$headers.date}">{$message->created_date|devblocks_prettytime}</abbr>)
 	  	
 		{if !empty($message->response_time)}
 			<span style="margin-left:10px;color:rgb(100,140,25);">Replied in {$message->response_time|devblocks_prettysecs:2}</span>
 		{/if}
-	  	<br>
-	  {/if}
+  	<br>
 	  </div>
 
 	  <div id="{$message->id}h" style="display:none;">
@@ -93,21 +92,38 @@
 	  </div>
 	  {/if}
 	  
-  	{if $expanded}
-	  <div style="clear:both;display:block;padding-top:10px;">
-		  	<pre class="emailbody">{$message->getContent()|trim|escape|devblocks_hyperlinks|devblocks_hideemailquotes nofilter}</pre>
+		{if $expanded}
+		<div style="clear:both;display:block;padding-top:10px;">
+				{if DAO_WorkerPref::get($active_worker->id, 'mail_disable_html_display', 0)}
+					{$html_body = null}
+				{else}
+					{$html_body = $message->getContentAsHtml()}
+				{/if}
+		
+	  		{if !empty($html_body)}
+		  		<div class="emailBodyHtml">
+			  		{$html_body nofilter}
+		  		</div>
+	  		{else}
+			  	<pre class="emailbody">{$message->getContent()|trim|escape|devblocks_hyperlinks|devblocks_hideemailquotes nofilter}</pre>
+		  	{/if}
 		  	<br>
+		  	
+				{if $active_worker->hasPriv('core.display.actions.attachments.download')}
+				{include file="devblocks:cerberusweb.core::internal/attachments/list.tpl" context="{CerberusContexts::CONTEXT_MESSAGE}" context_id=$message->id}
+				{/if}
+		  	
 		  	<table width="100%" cellpadding="0" cellspacing="0" border="0">
 		  		<tr>
 		  			<td align="left" id="{$message->id}act">
 						{* If not requester *}
 						{if !$message->is_outgoing && !isset($requesters.{$sender_id})}
-						<button type="button" onclick="$(this).remove(); genericAjaxGet('','c=display&a=requesterAdd&ticket_id={$ticket->id}&email='+encodeURIComponent('{$sender->email}'),function(o) { genericAjaxGet('displayTicketRequesterBubbles','c=display&a=requestersRefresh&ticket_id={$ticket->id}'); } );"><span class="cerb-sprite2 sprite-plus-circle"></span> {'display.ui.add_to_recipients'|devblocks_translate}</button>
+						<button type="button" onclick="$(this).remove(); genericAjaxGet('','c=display&a=requesterAdd&ticket_id={$ticket->id}&email='+encodeURIComponent('{$sender->email}'),function(o) { genericAjaxGet('displayTicketRequesterBubbles','c=display&a=requestersRefresh&ticket_id={$ticket->id}'); } );"><span class="glyphicons glyphicons-circle-plus" style="color:rgb(0,180,0);"></span> {'display.ui.add_to_recipients'|devblocks_translate}</button>
 						{/if}
 						
 					  	{if $active_worker->hasPriv('core.display.actions.reply')}
-					  		<button type="button" class="reply split-left" onclick="displayReply('{$message->id}',0,0,{if empty($mail_reply_button)}1{else}0{/if});" title="{if empty($mail_reply_button)}{'display.reply.quote'|devblocks_translate}{else}{'display.reply.no_quote'|devblocks_translate}{/if}"><span class="cerb-sprite sprite-export"></span> {'display.ui.reply'|devblocks_translate|capitalize}</button><!--
-					  		--><button type="button" class="split-right" onclick="$ul=$(this).next('ul');$ul.toggle();if($ul.is(':hidden')) { $ul.blur(); } else { $ul.find('a:first').focus(); }"><span class="cerb-sprite sprite-arrow-down-white"></span></button>
+					  		<button type="button" class="reply split-left" onclick="displayReply('{$message->id}',0,0,{if empty($mail_reply_button)}1{else}0{/if});" title="{if empty($mail_reply_button)}{'display.reply.quote'|devblocks_translate}{else}{'display.reply.no_quote'|devblocks_translate}{/if}"><span class="glyphicons glyphicons-share" style="color:rgb(0,180,0);"></span> {'display.ui.reply'|devblocks_translate|capitalize}</button><!--
+					  		--><button type="button" class="split-right" onclick="$ul=$(this).next('ul');$ul.toggle();if($ul.is(':hidden')) { $ul.blur(); } else { $ul.find('a:first').focus(); }"><span class="glyphicons glyphicons-chevron-down" style="font-size:12px;color:white;"></span></button>
 					  		<ul class="cerb-popupmenu cerb-float" style="margin-top:-5px;">
 					  			<li><a href="javascript:;" onclick="displayReply('{$message->id}',0,0,1);">{'display.reply.quote'|devblocks_translate}</a></li>
 					  			<li><a href="javascript:;" onclick="displayReply('{$message->id}',0,0,0);">{'display.reply.no_quote'|devblocks_translate}</a></li>
@@ -116,10 +132,13 @@
 					  		</ul>
 					  	{/if}
 					  	
-					  	{if $active_worker->hasPriv('core.display.actions.note')}<button type="button" onclick="displayAddNote('{$message->id}');"><span class="cerb-sprite sprite-document_plain_yellow"></span> {'display.ui.sticky_note'|devblocks_translate|capitalize}</button>{/if}
+					  	{if $active_worker->hasPriv('core.display.actions.note')}<button type="button" onclick="displayAddNote('{$message->id}');"><span class="glyphicons glyphicons-edit"></span> {'display.ui.sticky_note'|devblocks_translate|capitalize}</button>{/if}
 					  	
-					  	 &nbsp; 
-				  		<button type="button" onclick="toggleDiv('{$message->id}options');">{'common.more'|devblocks_translate|lower} &raquo;</button>
+					  	{if $active_worker->hasPriv('core.display.actions.reply')}
+					  	<button type="button" class="edit"><span class="glyphicons glyphicons-cogwheel"></span></button>
+					  	{/if}
+					  	
+				  		<button type="button" onclick="$('#{$message->id}options').toggle();"><span class="glyphicons glyphicons-more"></span></button>
 		  			</td>
 		  		</tr>
 		  	</table>
@@ -129,27 +148,25 @@
 		  		<input type="hidden" name="a" value="">
 		  		<input type="hidden" name="id" value="{$message->id}">
 		  		
-		  		<button type="button" onclick="document.frmPrint.action='{devblocks_url}c=print&a=message&id={$message->id}{/devblocks_url}';document.frmPrint.submit();"><span class="cerb-sprite sprite-printer"></span> {'common.print'|devblocks_translate|capitalize}</button>
+		  		<button type="button" onclick="document.frmPrint.action='{devblocks_url}c=print&a=message&id={$message->id}{/devblocks_url}';document.frmPrint.submit();"><span class="glyphicons glyphicons-print"></span> {'common.print'|devblocks_translate|capitalize}</button>
 		  		
 		  		{if $ticket->first_message_id != $message->id && $active_worker->hasPriv('core.display.actions.split')} {* Don't allow splitting of a single message *}
-		  		<button type="button" onclick="$frm=$(this).closest('form');$frm.find('input:hidden[name=a]').val('doSplitMessage');$frm.submit();" title="Split message into new ticket"><span class="cerb-sprite sprite-documents"></span> {'display.button.split_ticket'|devblocks_translate|capitalize}</button>
+		  		<button type="button" onclick="$frm=$(this).closest('form');$frm.find('input:hidden[name=a]').val('doSplitMessage');$frm.submit();" title="Split message into new ticket"><span class="glyphicons glyphicons-duplicate"></span> {'display.button.split_ticket'|devblocks_translate|capitalize}</button>
 		  		{/if}
 		  		
-				{if $active_worker->hasPriv('core.display.message.actions.delete')}
-				<button type="button" onclick="if(!confirm('Are you sure you want to delete this message?'))return; $frm=$(this).closest('form');$frm.find('input:hidden[name=a]').val('doDeleteMessage');$frm.submit();" title="Delete this message"><span class="cerb-sprite2 sprite-cross-circle"></span> {'common.delete'|devblocks_translate|capitalize}</button>
-				{/if}
-				
-				{* Plugin Toolbar *}
-				{if !empty($message_toolbaritems)}
-					{foreach from=$message_toolbaritems item=renderer}
-						{if !empty($renderer)}{$renderer->render($message)}{/if}
-					{/foreach}
-				{/if}
+					{* Plugin Toolbar *}
+					{if !empty($message_toolbaritems)}
+						{foreach from=$message_toolbaritems item=renderer}
+							{if !empty($renderer)}{$renderer->render($message)}{/if}
+						{/foreach}
+					{/if}
 		  	</form>
 		  	
-		  	{if $active_worker->hasPriv('core.display.actions.attachments.download')}
-			{include file="devblocks:cerberusweb.core::internal/attachments/list.tpl" context="{CerberusContexts::CONTEXT_MESSAGE}" context_id=$message->id}
-			{/if}
+			{$values = array_shift(DAO_CustomFieldValue::getValuesByContextIds(CerberusContexts::CONTEXT_MESSAGE, $message->id))|default:[]}
+			{$message_custom_fieldsets = Page_Profiles::getProfilePropertiesCustomFieldsets(CerberusContexts::CONTEXT_MESSAGE, $message->id, $values)}
+			<div style="margin-top:10px;">
+				{include file="devblocks:cerberusweb.core::internal/custom_fieldsets/profile_fieldsets.tpl" properties=$message_custom_fieldsets}
+			</div>
 		</div> <!-- end visible -->
 	  	{/if}
 	  </td>
@@ -176,7 +193,9 @@ $('#{$message->id}t').hover(
 
 {if $active_worker->hasPriv('core.display.actions.reply')}
 <script type="text/javascript">
-$('#{$message->id}act')
+var $actions = $('#{$message->id}act');
+
+$actions
 	.find('ul.cerb-popupmenu')
 	.hover(
 		function(e) { }, 
@@ -194,10 +213,27 @@ $('#{$message->id}act')
 	})
 ;
 
-$('#{$message->id}act')
+$actions
+	.find('button.edit')
+	.click(function() {
+		var $popup = genericAjaxPopup('peek_message','c=display&a=showMessagePeekPopup&id={$message->id}', null, false, '650');
+		
+		// Reload when done
+		$popup.one('message_save', function() {
+			$('#btnMsgMax{$message->id}').click();
+		});
+		
+		// Clear if deleted
+		$popup.one('message_delete', function() {
+			$('#{$message->id}t').remove();
+		});
+	})
+	;
+
+$actions
 	.find('li a.relay')
 	.click(function() {
-		genericAjaxPopup('relay', 'c=display&a=showRelayMessagePopup&id={$message->id}', null, false, '500');
+		genericAjaxPopup('relay', 'c=display&a=showRelayMessagePopup&id={$message->id}', null, false, '650');
 	})
 	;
 

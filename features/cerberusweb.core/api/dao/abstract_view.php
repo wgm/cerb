@@ -19,6 +19,7 @@ abstract class C4_AbstractView {
 	public $id = 0;
 	public $is_ephemeral = 0;
 	public $name = "";
+	public $options = array();
 	
 	public $view_columns = array();
 	private $_columnsHidden = array();
@@ -45,6 +46,26 @@ abstract class C4_AbstractView {
 	
 	private $_placeholderLabels = array();
 	private $_placeholderValues = array();
+	
+	public function __destruct() {
+		if(isset($this->__auto_persist) && !$this->__auto_persist) {
+			return;
+		}
+		
+		$this->persist();
+	}
+	
+	public function persist() {
+		C4_AbstractViewLoader::setView($this->id, $this);
+	}
+	
+	public function setAutoPersist($auto_persist) {
+		if($auto_persist) {
+			unset($this->__auto_persist);
+		} else {
+			$this->__auto_persist = false;
+		}
+	}
 	
 	protected function _getDataAsObjects($dao_class, $ids=null) {
 		if(is_null($ids)) {
@@ -133,7 +154,7 @@ abstract class C4_AbstractView {
 			($has_multiple_values ? sprintf("GROUP BY %s.id ", $query_parts['primary_table']) : '').
 			$sort_sql;
 
-		$rs = $db->Execute($sql);
+		$rs = $db->ExecuteSlave($sql);
 		
 		$objects = array();
 		while($row = mysqli_fetch_row($rs)) {
@@ -141,6 +162,10 @@ abstract class C4_AbstractView {
 		}
 		
 		return $objects;
+	}
+	
+	function isCustom() {
+		return 'cust_' == substr($this->id, 0, 5);
 	}
 
 	function getColumnsAvailable() {
@@ -187,7 +212,7 @@ abstract class C4_AbstractView {
 	}
 
 	private function _filterParamsByFieldset($params) {
-		$results = $this->findParam('*_has_fieldset', $this->getParams());
+		$results = $this->findParam('*_has_fieldset', $this->getParams(false));
 		
 		if(!empty($results)) {
 			$fieldset_ids = array();
@@ -221,9 +246,14 @@ abstract class C4_AbstractView {
 		$params = $this->_paramsEditable;
 		
 		// Required should supersede editable
-		if(is_array($this->_paramsRequired))
-		foreach($this->_paramsRequired as $key => $param)
-			$params['req_'.$key] = $param;
+		
+		if(is_array($this->_paramsRequired)) {
+			$params_required = DevblocksPlatform::deepCloneArray($this->_paramsRequired);
+			
+			foreach($params_required as $key => $param) {
+				$params['req_'.$key] = $param;
+			}
+		}
 		
 		if($parse_placeholders) {
 			// Translate snippets in filters
@@ -475,7 +505,11 @@ abstract class C4_AbstractView {
 	function render() {
 		echo ' '; // Expect Override
 	}
-
+	
+	function renderCustomizeOptions() {
+		echo ' '; // Expect Override
+	}
+	
 	function renderCriteria($field) {
 		echo ' '; // Expect Override
 	}
@@ -1158,9 +1192,8 @@ abstract class C4_AbstractView {
 	protected function _sanitize() {
 		$fields = $this->getColumnsAvailable();
 		$custom_fields = DAO_CustomField::getAll();
-		$needs_save = false;
 		
-		$params = $this->getParams();
+		$params = $this->getParams(false);
 		
 		// Parameter sanity check
 		if(is_array($params))
@@ -1172,7 +1205,6 @@ abstract class C4_AbstractView {
 				// Make sure our custom fields still exist
 				if(!isset($custom_fields[$cf_id])) {
 					$this->removeParam($pidx);
-					$needs_save = true;
 				}
 			}
 		}
@@ -1187,14 +1219,12 @@ abstract class C4_AbstractView {
 					// Make sure our custom fields still exist
 					if(!isset($custom_fields[$cf_id])) {
 						unset($this->view_columns[$cidx]);
-						$needs_save = true;
 					}
 				}
 			} else {
 				// If the column no longer exists (rare but worth checking)
 				if(!isset($fields[$c])) {
 					unset($this->view_columns[$cidx]);
-					$needs_save = true;
 				}
 			}
 		}
@@ -1204,13 +1234,8 @@ abstract class C4_AbstractView {
 			if(0 != ($cf_id = intval(substr($this->renderSortBy,3)))) {
 				if(!isset($custom_fields[$cf_id])) {
 					$this->renderSortBy = null;
-					$needs_save = true;
 				}
 			}
-		}
-		
-		if($needs_save) {
-			C4_AbstractViewLoader::setView($this->id, $this);
 		}
 	}
 	
@@ -1299,7 +1324,7 @@ abstract class C4_AbstractView {
 		return array();
 	}
 
-	function doCustomize($columns, $num_rows=10) {
+	function doCustomize($columns, $num_rows=10, $options=array()) {
 		$this->renderLimit = $num_rows;
 
 		$viewColumns = array();
@@ -1310,6 +1335,8 @@ abstract class C4_AbstractView {
 		}
 
 		$this->view_columns = $viewColumns;
+		
+		$this->options = $options;
 	}
 
 	function doSortBy($sortBy) {
@@ -1368,6 +1395,11 @@ abstract class C4_AbstractView {
 		$tpl->assign('subtotal_fields', $fields);
 		
 		$counts = $this->getSubtotalCounts($this->renderSubtotals);
+		
+		// Unless we're subtotalling by group, limit the results to top 20
+		if($this->renderSubtotals != 't_group_id')
+			$counts = array_slice($counts, 0, 20);
+		
 		$tpl->assign('subtotal_counts', $counts);
 		
 		$tpl->display('devblocks:cerberusweb.core::internal/views/sidebar.tpl');
@@ -1453,12 +1485,12 @@ abstract class C4_AbstractView {
 			$where_sql.
 			"GROUP BY label ".
 			"ORDER BY hits DESC ".
-			"LIMIT 0,20 "
+			"LIMIT 0,250 "
 		;
 		
-		$results = $db->GetArray($sql);
+		$results = $db->GetArraySlave($sql);
 //		$total = count($results);
-//		$total = ($total < 20) ? $total : $db->GetOne("SELECT FOUND_ROWS()");
+//		$total = ($total < 20) ? $total : $db->GetOneSlave("SELECT FOUND_ROWS()");
 
 		return $results;
 	}
@@ -1646,10 +1678,10 @@ abstract class C4_AbstractView {
 			$where_sql.
 			"GROUP BY watcher_id ".
 			"ORDER BY hits DESC ".
-			"LIMIT 0,20 "
+			"LIMIT 0,250 "
 		;
 		
-		$results = $db->GetArray($sql);
+		$results = $db->GetArraySlave($sql);
 
 		return $results;
 	}
@@ -1767,7 +1799,7 @@ abstract class C4_AbstractView {
 			);
 			
 		} else {
-			$sql = sprintf("SELECT from_context AS link_from_context, from_context_id AS link_from_context_id, count(*) AS hits FROM context_link WHERE to_context = %s AND to_context_id IN (%s) AND from_context = %s GROUP BY from_context_id ORDER BY hits DESC LIMIT 0,20 ",
+			$sql = sprintf("SELECT from_context AS link_from_context, from_context_id AS link_from_context_id, count(*) AS hits FROM context_link WHERE to_context = %s AND to_context_id IN (%s) AND from_context = %s GROUP BY from_context_id ORDER BY hits DESC LIMIT 0,250 ",
 				$db->qstr($context),
 				(
 					sprintf("SELECT %s.id ", $query_parts['primary_table']).
@@ -1779,7 +1811,7 @@ abstract class C4_AbstractView {
 			
 		}
 
-		$results = $db->GetArray($sql);
+		$results = $db->GetArraySlave($sql);
 
 		return $results;
 	}
@@ -1925,7 +1957,7 @@ abstract class C4_AbstractView {
 			);
 		}
 
-		$results = $db->GetArray($sql);
+		$results = $db->GetArraySlave($sql);
 
 		return $results;
 	}
@@ -2064,7 +2096,7 @@ abstract class C4_AbstractView {
 			$db->qstr(CerberusContexts::CONTEXT_CUSTOM_FIELDSET)
 		);
 		
-		$results = $db->GetArray($sql);
+		$results = $db->GetArraySlave($sql);
 
 		return $results;
 		
@@ -2148,7 +2180,7 @@ abstract class C4_AbstractView {
 					"ORDER BY hits DESC "
 				;
 		
-				$results = $db->GetArray($sql);
+				$results = $db->GetArraySlave($sql);
 		
 				foreach($results as $result) {
 					$label = '';
@@ -2206,9 +2238,9 @@ abstract class C4_AbstractView {
 					"LIMIT 20 "
 				;
 				
-				$results = $db->GetArray($sql);
+				$results = $db->GetArraySlave($sql);
 //				$total = count($results);
-//				$total = ($total < 20) ? $total : $db->GetOne("SELECT FOUND_ROWS()");
+//				$total = ($total < 20) ? $total : $db->GetOneSlave("SELECT FOUND_ROWS()");
 				
 				foreach($results as $result) {
 					$label = '';
@@ -2269,9 +2301,9 @@ abstract class C4_AbstractView {
 					"LIMIT 20 "
 				;
 				
-				$results = $db->GetArray($sql);
+				$results = $db->GetArraySlave($sql);
 //				$total = count($results);
-//				$total = ($total < 20) ? $total : $db->GetOne("SELECT FOUND_ROWS()");
+//				$total = ($total < 20) ? $total : $db->GetOneSlave("SELECT FOUND_ROWS()");
 		
 				foreach($results as $result) {
 					$label = '';
@@ -2394,6 +2426,7 @@ class C4_AbstractViewModel {
 
 	public $id = '';
 	public $name = "";
+	public $options = array();
 	public $is_ephemeral = 0;
 	
 	public $view_columns = array();
@@ -2427,9 +2460,9 @@ class C4_AbstractViewLoader {
 	/**
 	 * Enter description here...
 	 *
-	 * @param string $class C4_AbstractView
-	 * @param string $view_label ID
-	 * @return C4_AbstractView or null
+	 * @param string $view_id
+	 * @param C4_AbstractViewModel $defaults
+	 * @return C4_AbstractView | null
 	 */
 	static function getView($view_id, C4_AbstractViewModel $defaults=null) {
 		$worker_id = 0;
@@ -2443,8 +2476,7 @@ class C4_AbstractViewLoader {
 			
 		} elseif(!empty($defaults) && $defaults instanceof C4_AbstractViewModel) {
 			// Load defaults if they were provided
-			if(null != ($view = self::unserializeAbstractView($defaults)))  {
-				self::setView($view_id, $view);
+			if(null != ($view = self::unserializeAbstractView($defaults, false)))  {
 				return $view;
 			}
 		}
@@ -2464,8 +2496,20 @@ class C4_AbstractViewLoader {
 		
 		if(null !== ($active_worker = CerberusApplication::getActiveWorker()))
 			$worker_id = $active_worker->id;
-
+		
+		// Is the view dirty? (do we need to persist it?)
+		if(false != ($_init_checksum = @$view->_init_checksum)) {
+			unset($view->_init_checksum);
+			$_exit_checksum = sha1(serialize($view));
+			
+			// If the view model is not dirty (we wouldn't end up changing anything in the database)
+			if($_init_checksum == $_exit_checksum) {
+				return;
+			}
+		}
+		
 		$model = self::serializeAbstractView($view);
+		
 		DAO_WorkerViewModel::setView($worker_id, $view_id, $model);
 	}
 
@@ -2481,30 +2525,38 @@ class C4_AbstractViewLoader {
 	static function serializeAbstractView($view) {
 		if(!$view instanceof C4_AbstractView)
 			return NULL;
-
+		
 		$model = new C4_AbstractViewModel();
-			
-		$model->class_name = get_class($view);
+		
+		$class_name = get_class($view);
+		$model->class_name = $class_name;
+		
+		$parent = new $class_name(); /* @var $parent C4_AbstractView */
+		$parent->setAutoPersist(false);
 
 		$model->id = $view->id;
-		$model->is_ephemeral = $view->is_ephemeral;
+		$model->is_ephemeral = $view->is_ephemeral ? true : false;
 		$model->name = $view->name;
+		$model->options = $view->options;
 		
 		$model->view_columns = $view->view_columns;
-		$model->columnsHidden = $view->getColumnsHidden();
+		
+		// Only persist hidden columns that are distinct from the parent (so we can inherit parent changes)
+		$model->columnsHidden = array_diff($view->getColumnsHidden(), $parent->getColumnsHidden());
 		
 		$model->paramsEditable = $view->getEditableParams();
 		$model->paramsDefault = $view->getParamsDefault();
 		$model->paramsRequired = $view->getParamsRequired();
-		$model->paramsHidden = $view->getParamsHidden();
+		// Only persist hidden params that are distinct from the parent (so we can inherit parent changes)
+		$model->paramsHidden = array_diff($view->getParamsHidden(), $parent->getParamsHidden());
 		
-		$model->renderPage = $view->renderPage;
-		$model->renderLimit = $view->renderLimit;
-		$model->renderTotal = $view->renderTotal;
+		$model->renderPage = intval($view->renderPage);
+		$model->renderLimit = intval($view->renderLimit);
+		$model->renderTotal = intval($view->renderTotal);
 		$model->renderSortBy = $view->renderSortBy;
-		$model->renderSortAsc = $view->renderSortAsc;
+		$model->renderSortAsc = $view->renderSortAsc ? true : false;
 
-		$model->renderFilters = $view->renderFilters;
+		$model->renderFilters = $view->renderFilters ? true : false;
 		$model->renderSubtotals = $view->renderSubtotals;
 		
 		$model->renderTemplate = $view->renderTemplate;
@@ -2515,26 +2567,29 @@ class C4_AbstractViewLoader {
 		return $model;
 	}
 
-	static function unserializeAbstractView(C4_AbstractViewModel $model) {
+	static function unserializeAbstractView(C4_AbstractViewModel $model, $checksum=true) {
 		if(!class_exists($model->class_name, true))
 			return null;
 		
 		if(null == ($inst = new $model->class_name))
 			return null;
-
+		
 		/* @var $inst C4_AbstractView */
 		
 		if(!empty($model->id))
 			$inst->id = $model->id;
 		if(null !== $model->is_ephemeral)
-			$inst->is_ephemeral = $model->is_ephemeral;
+			$inst->is_ephemeral = $model->is_ephemeral ? true : false;
 		if(!empty($model->name))
 			$inst->name = $model->name;
+		
+		if(is_array($model->options) && !empty($model->options))
+			$inst->options = $model->options;
 		
 		if(is_array($model->view_columns) && !empty($model->view_columns))
 			$inst->view_columns = $model->view_columns;
 		if(is_array($model->columnsHidden))
-			$inst->addColumnsHidden($model->columnsHidden, true);
+			$inst->addColumnsHidden($model->columnsHidden, false);
 		
 		if(is_array($model->paramsEditable))
 			$inst->addParams($model->paramsEditable, true);
@@ -2543,20 +2598,20 @@ class C4_AbstractViewLoader {
 		if(is_array($model->paramsRequired))
 			$inst->addParamsRequired($model->paramsRequired, true);
 		if(is_array($model->paramsHidden))
-			$inst->addParamsHidden($model->paramsHidden, true);
+			$inst->addParamsHidden($model->paramsHidden, false);
 
 		if(null !== $model->renderPage)
-			$inst->renderPage = $model->renderPage;
+			$inst->renderPage = intval($model->renderPage);
 		if(null !== $model->renderLimit)
-			$inst->renderLimit = $model->renderLimit;
+			$inst->renderLimit = intval($model->renderLimit);
 		if(null !== $model->renderTotal)
-			$inst->renderTotal = $model->renderTotal;
+			$inst->renderTotal = intval($model->renderTotal);
 		if(!empty($model->renderSortBy))
 			$inst->renderSortBy = $model->renderSortBy;
 		if(null !== $model->renderSortBy)
-			$inst->renderSortAsc = $model->renderSortAsc;
+			$inst->renderSortAsc = $model->renderSortAsc ? true : false;
 
-		$inst->renderFilters = $model->renderFilters;
+		$inst->renderFilters = $model->renderFilters ? true : false;
 		$inst->renderSubtotals = $model->renderSubtotals;
 			
 		$inst->renderTemplate = $model->renderTemplate;
@@ -2568,18 +2623,25 @@ class C4_AbstractViewLoader {
 		
 		// Enforce class restrictions
 		$parent = new $model->class_name;
+		$parent->__auto_persist = false;
+		// [TODO] This is a rather heavy way to accomplish this, these could be static
 		$inst->addColumnsHidden($parent->getColumnsHidden());
 		$inst->addParamsHidden($parent->getParamsHidden());
 		$inst->addParamsRequired($parent->getParamsRequired());
+		unset($parent);
+		
+		if($checksum)
+			$inst->_init_checksum = sha1(serialize($inst));
 		
 		return $inst;
 	}
 	
 	static function serializeViewToAbstractJson(C4_AbstractView $view, $context=null) {
 		$model = array(
+			'options' => $view->options,
 			'columns' => $view->view_columns,
 			'params' => json_decode(json_encode($view->getEditableParams()), true),
-			'limit' => $view->renderLimit,
+			'limit' => intval($view->renderLimit),
 			'sort_by' => $view->renderSortBy,
 			'sort_asc' => !empty($view->renderSortAsc),
 			'subtotals' => $view->renderSubtotals,
@@ -2603,10 +2665,13 @@ class C4_AbstractViewLoader {
 		if(null == ($view = $ctx->getChooserView($view_id))) /* @var $view C4_AbstractView */
 			return false;
 		
+		if(isset($view_model['options']))
+			$view->options = $view_model['options'];
+		
 		$view->view_columns = $view_model['columns'];
-		$view->renderLimit = $view_model['limit'];
+		$view->renderLimit = intval($view_model['limit']);
 		$view->renderSortBy = $view_model['sort_by'];
-		$view->renderSortAsc = $view_model['sort_asc'];
+		$view->renderSortAsc = $view_model['sort_asc'] ? true : false;
 		$view->renderSubtotals = $view_model['subtotals'];
 		
 		// Convert JSON params back to objects
@@ -2640,9 +2705,10 @@ class C4_AbstractViewLoader {
 			$view->addParamsRequired($view_model['params_required'], true);
 		}
 
-		// [TODO] This needs a bit more logic
 		$active_worker = CerberusApplication::getActiveWorker();
 		$view->setPlaceholderValues(array('current_worker_id' => !empty($active_worker) ? $active_worker->id : 0));
+		
+		$view->_init_checksum = sha1(serialize($view));
 		
 		return $view;
 	}
@@ -2665,6 +2731,7 @@ class DAO_WorkerViewModel {
 			'is_ephemeral',
 			'class_name',
 			'title',
+			'options_json',
 			'columns_json',
 			'columns_hidden_json',
 			'params_editable_json',
@@ -2683,7 +2750,7 @@ class DAO_WorkerViewModel {
 			'placeholder_values_json',
 		);
 		
-		$rs = $db->Execute(sprintf("SELECT %s FROM worker_view_model %s",
+		$rs = $db->ExecuteSlave(sprintf("SELECT %s FROM worker_view_model %s",
 			implode(',', $fields),
 			(!empty($where) ? ('WHERE ' . $where) : '')
 		));
@@ -2706,6 +2773,7 @@ class DAO_WorkerViewModel {
 			$model->renderTemplate = $row['render_template'];
 			
 			// JSON blocks
+			$model->options = json_decode($row['options_json'], true);
 			$model->view_columns = json_decode($row['columns_json'], true);
 			$model->columnsHidden = json_decode($row['columns_hidden_json'], true);
 			$model->paramsEditable = self::decodeParamsJson($row['params_editable_json']);
@@ -2794,6 +2862,7 @@ class DAO_WorkerViewModel {
 			'is_ephemeral' => !empty($model->is_ephemeral) ? 1 : 0,
 			'class_name' => $db->qstr($model->class_name),
 			'title' => $db->qstr($model->name),
+			'options_json' => $db->qstr(json_encode($model->options)),
 			'columns_json' => $db->qstr(json_encode($model->view_columns)),
 			'columns_hidden_json' => $db->qstr(json_encode($model->columnsHidden)),
 			'params_editable_json' => $db->qstr(json_encode($model->paramsEditable)),
@@ -2812,7 +2881,7 @@ class DAO_WorkerViewModel {
 			'placeholder_values_json' => $db->qstr(json_encode($model->placeholderValues)),
 		);
 		
-		$db->Execute(sprintf("REPLACE INTO worker_view_model (%s)".
+		$db->ExecuteMaster(sprintf("REPLACE INTO worker_view_model (%s) ".
 			"VALUES (%s)",
 			implode(',', array_keys($fields)),
 			implode(',', $fields)
@@ -2822,7 +2891,7 @@ class DAO_WorkerViewModel {
 	static public function deleteView($worker_id, $view_id) {
 		$db = DevblocksPlatform::getDatabaseService();
 		
-		$db->Execute(sprintf("DELETE FROM worker_view_model WHERE worker_id = %d AND view_id = %s",
+		$db->ExecuteMaster(sprintf("DELETE FROM worker_view_model WHERE worker_id = %d AND view_id = %s",
 			$worker_id,
 			$db->qstr($view_id)
 		));
@@ -2836,10 +2905,10 @@ class DAO_WorkerViewModel {
 	 */
 	static public function flush($worker_id) {
 		$db = DevblocksPlatform::getDatabaseService();
-		$db->Execute(sprintf("DELETE FROM worker_view_model WHERE worker_id = %d and is_ephemeral = 1",
+		$db->ExecuteMaster(sprintf("DELETE FROM worker_view_model WHERE worker_id = %d and is_ephemeral = 1",
 			$worker_id
 		));
-		$db->Execute(sprintf("UPDATE worker_view_model SET render_page = 0 WHERE worker_id = %d",
+		$db->ExecuteMaster(sprintf("UPDATE worker_view_model SET render_page = 0 WHERE worker_id = %d",
 			$worker_id
 		));
 	}

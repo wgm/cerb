@@ -62,7 +62,7 @@ class DAO_FeedbackEntry extends Cerb_ORMHelper {
 		$sql = sprintf("INSERT INTO feedback_entry () ".
 			"VALUES ()"
 		);
-		$db->Execute($sql);
+		$db->ExecuteMaster($sql);
 		$id = $db->LastInsertId();
 		
 		self::update($id, $fields);
@@ -120,7 +120,7 @@ class DAO_FeedbackEntry extends Cerb_ORMHelper {
 			"FROM feedback_entry ".
 			(!empty($where) ? sprintf("WHERE %s ",$where) : "").
 			"ORDER BY id asc";
-		$rs = $db->Execute($sql);
+		$rs = $db->ExecuteSlave($sql);
 		
 		return self::_getObjectsFromResult($rs);
 	}
@@ -129,6 +129,9 @@ class DAO_FeedbackEntry extends Cerb_ORMHelper {
 	 * @param integer $id
 	 * @return Model_FeedbackEntry	 */
 	static function get($id) {
+		if(empty($id))
+			return null;
+		
 		$objects = self::getWhere(sprintf("%s = %d",
 			self::ID,
 			$id
@@ -166,7 +169,7 @@ class DAO_FeedbackEntry extends Cerb_ORMHelper {
 	
 	static function getItemCount() {
 		$db = DevblocksPlatform::getDatabaseService();
-		return $db->GetOne("SELECT count(id) FROM feedback_entry");
+		return $db->GetOneSlave("SELECT count(id) FROM feedback_entry");
 	}
 	
 	static function delete($ids) {
@@ -176,7 +179,7 @@ class DAO_FeedbackEntry extends Cerb_ORMHelper {
 		$ids_list = implode(',', $ids);
 		
 		// Entries
-		$db->Execute(sprintf("DELETE FROM feedback_entry WHERE id IN (%s)", $ids_list));
+		$db->ExecuteMaster(sprintf("DELETE FROM feedback_entry WHERE id IN (%s)", $ids_list));
 		
 		// Fire event
 		$eventMgr = DevblocksPlatform::getEventService();
@@ -344,7 +347,7 @@ class DAO_FeedbackEntry extends Cerb_ORMHelper {
 					($has_multiple_values ? "SELECT COUNT(DISTINCT f.id) " : "SELECT COUNT(f.id) ").
 					$join_sql.
 					$where_sql;
-				$total = $db->GetOne($count_sql);
+				$total = $db->GetOneSlave($count_sql);
 			}
 		}
 		
@@ -1045,6 +1048,7 @@ class ChFeedbackController extends DevblocksControllerExtension {
 		// View
 		@$view_id = DevblocksPlatform::importGPC($_REQUEST['view_id'],'string');
 		$view = C4_AbstractViewLoader::getView($view_id);
+		$view->setAutoPersist(false);
 		
 		// Feedback fields
 //		@$list_id = trim(DevblocksPlatform::importGPC($_POST['list_id'],'integer',0));
@@ -1331,7 +1335,6 @@ class Context_Feedback extends Extension_DevblocksContext implements IDevblocksC
 		$view->renderLimit = 10;
 		$view->renderTemplate = 'contextlinks_chooser';
 		
-		C4_AbstractViewLoader::setView($view_id, $view);
 		return $view;
 	}
 	
@@ -1356,7 +1359,6 @@ class Context_Feedback extends Extension_DevblocksContext implements IDevblocksC
 		$view->addParamsRequired($params_req, true);
 		
 		$view->renderTemplate = 'context';
-		C4_AbstractViewLoader::setView($view_id, $view);
 		return $view;
 	}
 	

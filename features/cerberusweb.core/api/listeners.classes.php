@@ -28,20 +28,29 @@ class ChCoreTour extends DevblocksHttpResponseListenerExtension {
 							new DevblocksTourCallout(
 								'#tourHeaderMenu',
 								'Navigation Bar',
-								'The navigation bar is located at the top of your browser window. It displays a list of shortcuts to pages.',
+								'The navigation bar is located at the top of your browser window. It displays a list of shortcuts to pages. You can add and remove shortcuts here, and drag them to rearrange their order.',
 								'bottomLeft',
 								'topLeft',
 								10,
 								5
 							),
 							new DevblocksTourCallout(
+								'#logo',
+								'Logo',
+								'Click the logo as a shortcut to your default page.',
+								'topLeft',
+								'bottomLeft',
+								50,
+								-10
+							),
+							new DevblocksTourCallout(
 								'body > table:first td:nth(1) b',
 								'Worker Menu',
 								'Clicking your name provides a menu with useful shortcuts.',
-								'topRight',
-								'bottomLeft',
-								0,
-								0
+								'bottomRight',
+								'topLeft',
+								10,
+								5
 							),
 							new DevblocksTourCallout(
 								'UL.navmenu:first LI.tour-navmenu-search',
@@ -82,7 +91,7 @@ class ChCoreTour extends DevblocksHttpResponseListenerExtension {
 									5
 									),
 								new DevblocksTourCallout(
-									'#viewpages TABLE.worklist A > SPAN.sprite-plus-circle-frame',
+									'#viewpages TABLE.worklist A > SPAN.glyphicons-circle-plus',
 									'Add Pages',
 									'You can add a page by clicking on the (+) icon in the pages worklist.',
 									'bottomRight',
@@ -118,7 +127,7 @@ class ChCoreTour extends DevblocksHttpResponseListenerExtension {
 							'body' =>"Pages give you the freedom to build a completely personalized interface based on how you use the software. You can add as many new pages as you want, and your favorites can be added to the navigation menu for quick access.",
 							'callouts' => array(
 								new DevblocksTourCallout(
-									'#pageTabs LI[role=tab]:last',
+									'DIV[id^=pageTabs]:first LI[role=tab]:last',
 									'Add a workspace tab',
 									'Click this tab to add new tabs to this workspace.',
 									'bottomLeft',
@@ -310,7 +319,7 @@ class ChCoreTour extends DevblocksHttpResponseListenerExtension {
 							'body' => 'This setup page provides a place to globally manage Virtual Attendants.',
 							'callouts' => array(
 								new DevblocksTourCallout(
-									'#viewsetup_virtual_attendants TABLE.worklist A > SPAN.sprite-plus-circle-frame',
+									'#viewsetup_virtual_attendants TABLE.worklist A > SPAN.glyphicons-circle-plus',
 									'Add Virtual Attendant',
 									'You can add a Virtual Attendant by clicking on the (+) icon in this worklist.',
 									'bottomRight',
@@ -357,9 +366,9 @@ class ChCoreTour extends DevblocksHttpResponseListenerExtension {
 						);
 						break;
 						
-					case 'mail_pop3':
+					case 'mailboxes':
 						$tour = array(
-							'title' => 'POP3 Accounts',
+							'title' => 'Mailboxes',
 							'body' => "Here is where you specify the mailboxes that should be checked for new mail to import into Cerb.",
 						);
 						break;
@@ -531,7 +540,7 @@ class ChCoreTour extends DevblocksHttpResponseListenerExtension {
 									0
 									),
 								new DevblocksTourCallout(
-									'#displayTabs',
+									'#profileTicketTabs',
 									'Conversation Timeline',
 									'This is where all email replies will be displayed for this ticket. Your responses will be sent to all recipients.',
 									'bottomLeft',
@@ -549,7 +558,7 @@ class ChCoreTour extends DevblocksHttpResponseListenerExtension {
 									0
 									),
 								new DevblocksTourCallout(
-									'#displayTabs > UL > li:nth(1)',
+									'#profileTicketTabs > UL > li:nth(1)',
 									'Activity Log',
 									'This tab displays everything that has happened to this conversation: worker replies, customer replies, status changes, merges, and more.',
 									'topLeft',
@@ -558,7 +567,7 @@ class ChCoreTour extends DevblocksHttpResponseListenerExtension {
 									-10
 									),
 								new DevblocksTourCallout(
-									'#displayTabs > UL > li:nth(2)',
+									'#profileTicketTabs > UL > li:nth(2)',
 									'Links',
 									'You can connect this conversation to any other record in the system: tasks, organizations, opportunities, time tracking, servers, domains, etc.',
 									'bottomLeft',
@@ -567,7 +576,7 @@ class ChCoreTour extends DevblocksHttpResponseListenerExtension {
 									10
 									),
 								new DevblocksTourCallout(
-									'#displayTabs > UL > li:nth(3)',
+									'#profileTicketTabs > UL > li:nth(3)',
 									'Recipient History',
 									'This tab displays prior conversations involving any of these recipients.',
 									'bottomLeft',
@@ -878,10 +887,12 @@ class ChCoreEventListener extends DevblocksEventListenerExtension {
 		DAO_AttachmentLink::removeAllByContext($context, $context_ids);
 		DAO_Comment::deleteByContext($context, $context_ids);
 		DAO_ContextActivityLog::deleteByContext($context, $context_ids);
+		DAO_ContextRecommendation::deleteByContext($context, $context_ids);
 		DAO_ContextLink::delete($context, $context_ids);
 		DAO_CustomFieldset::deleteByOwner($context, $context_ids);
 		DAO_CustomFieldValue::deleteByContextIds($context, $context_ids);
 		DAO_Notification::deleteByContext($context, $context_ids);
+		DAO_ContextScheduledBehavior::deleteByContext($context, $context_ids);
 		DAO_VirtualAttendant::deleteByOwner($context, $context_ids);
 		DAO_WorkspacePage::deleteByOwner($context, $context_ids);
 	}
@@ -901,7 +912,7 @@ class ChCoreEventListener extends DevblocksEventListenerExtension {
 		// ===========================================================================
 		// Attachment links
 
-		$db->Execute(sprintf("DELETE FROM attachment_link WHERE context = %s AND context_id NOT IN (SELECT %s FROM %s)",
+		$db->ExecuteMaster(sprintf("DELETE FROM attachment_link WHERE context = %s AND context_id NOT IN (SELECT %s FROM %s)",
 			$db->qstr($context),
 			$db->escape($context_index),
 			$db->escape($context_table)
@@ -913,7 +924,7 @@ class ChCoreEventListener extends DevblocksEventListenerExtension {
 		// Comments
 		
 		if($context != CerberusContexts::CONTEXT_COMMENT) {
-			$db->Execute(sprintf("DELETE FROM comment WHERE context = %s AND context_id NOT IN (SELECT %s FROM %s)",
+			$db->ExecuteMaster(sprintf("DELETE FROM comment WHERE context = %s AND context_id NOT IN (SELECT %s FROM %s)",
 				$db->qstr($context),
 				$db->escape($context_index),
 				$db->escape($context_table)
@@ -926,7 +937,7 @@ class ChCoreEventListener extends DevblocksEventListenerExtension {
 		// ===========================================================================
 		// Context Activity Log
 
-		$db->Execute(sprintf("DELETE FROM context_activity_log WHERE target_context = %s AND target_context_id NOT IN (SELECT %s FROM %s)",
+		$db->ExecuteMaster(sprintf("DELETE FROM context_activity_log WHERE target_context = %s AND target_context_id NOT IN (SELECT %s FROM %s)",
 			$db->qstr($context),
 			$db->escape($context_index),
 			$db->escape($context_table)
@@ -937,7 +948,7 @@ class ChCoreEventListener extends DevblocksEventListenerExtension {
 		// ===========================================================================
 		// Context Links
 		
-		$db->Execute(sprintf("DELETE FROM context_link WHERE from_context = %s AND from_context_id NOT IN (SELECT %s FROM %s)",
+		$db->ExecuteMaster(sprintf("DELETE FROM context_link WHERE from_context = %s AND from_context_id NOT IN (SELECT %s FROM %s)",
 			$db->qstr($context),
 			$db->escape($context_index),
 			$db->escape($context_table)
@@ -945,7 +956,7 @@ class ChCoreEventListener extends DevblocksEventListenerExtension {
 		if(null != ($deletes = $db->Affected_Rows()))
 			$logger->info(sprintf("Purged %d %s context link sources.", $deletes, $context));
 		
-		$db->Execute(sprintf("DELETE FROM context_link WHERE to_context = %s AND to_context_id NOT IN (SELECT %s FROM %s)",
+		$db->ExecuteMaster(sprintf("DELETE FROM context_link WHERE to_context = %s AND to_context_id NOT IN (SELECT %s FROM %s)",
 			$db->qstr($context),
 			$db->escape($context_index),
 			$db->escape($context_table)
@@ -956,7 +967,7 @@ class ChCoreEventListener extends DevblocksEventListenerExtension {
 		// ===========================================================================
 		// Custom fields
 		
-		$db->Execute(sprintf("DELETE FROM custom_field_stringvalue WHERE context = %s AND context_id NOT IN (SELECT %s FROM %s)",
+		$db->ExecuteMaster(sprintf("DELETE FROM custom_field_stringvalue WHERE context = %s AND context_id NOT IN (SELECT %s FROM %s)",
 			$db->qstr($context),
 			$db->escape($context_index),
 			$db->escape($context_table)
@@ -964,7 +975,7 @@ class ChCoreEventListener extends DevblocksEventListenerExtension {
 		if(null != ($deletes = $db->Affected_Rows()))
 			$logger->info(sprintf("Purged %d %s custom field strings.", $deletes, $context));
 		
-		$db->Execute(sprintf("DELETE FROM custom_field_numbervalue WHERE context = %s AND context_id NOT IN (SELECT %s FROM %s)",
+		$db->ExecuteMaster(sprintf("DELETE FROM custom_field_numbervalue WHERE context = %s AND context_id NOT IN (SELECT %s FROM %s)",
 			$db->qstr($context),
 			$db->escape($context_index),
 			$db->escape($context_table)
@@ -972,7 +983,7 @@ class ChCoreEventListener extends DevblocksEventListenerExtension {
 		if(null != ($deletes = $db->Affected_Rows()))
 			$logger->info(sprintf("Purged %d %s custom field numbers.", $deletes, $context));
 		
-		$db->Execute(sprintf("DELETE FROM custom_field_clobvalue WHERE context = %s AND context_id NOT IN (SELECT %s FROM %s)",
+		$db->ExecuteMaster(sprintf("DELETE FROM custom_field_clobvalue WHERE context = %s AND context_id NOT IN (SELECT %s FROM %s)",
 			$db->qstr($context),
 			$db->escape($context_index),
 			$db->escape($context_table)
@@ -984,7 +995,7 @@ class ChCoreEventListener extends DevblocksEventListenerExtension {
 		// Notifications
 		
 		if($context != CerberusContexts::CONTEXT_NOTIFICATION) {
-			$db->Execute(sprintf("DELETE FROM notification WHERE context = %s AND context_id NOT IN (SELECT %s FROM %s)",
+			$db->ExecuteMaster(sprintf("DELETE FROM notification WHERE context = %s AND context_id NOT IN (SELECT %s FROM %s)",
 				$db->qstr($context),
 				$db->escape($context_index),
 				$db->escape($context_table)
@@ -998,7 +1009,7 @@ class ChCoreEventListener extends DevblocksEventListenerExtension {
 		// Virtual Attendants
 		
 		if($context != CerberusContexts::CONTEXT_VIRTUAL_ATTENDANT) {
-			$rs = $db->Execute(sprintf("SELECT id FROM virtual_attendant WHERE owner_context = %s AND owner_context_id NOT IN (SELECT %s FROM %s)",
+			$rs = $db->ExecuteSlave(sprintf("SELECT id FROM virtual_attendant WHERE owner_context = %s AND owner_context_id NOT IN (SELECT %s FROM %s)",
 				$db->qstr($context),
 				$db->escape($context_index),
 				$db->escape($context_table)

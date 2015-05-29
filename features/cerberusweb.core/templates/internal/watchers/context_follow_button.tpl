@@ -1,45 +1,39 @@
-{$expand_btnid = microtime()|md5}
+{if empty($watchers_btn_domid)}{$watchers_btn_domid = uniqid()}{/if}
 {$num_watchers = $object_watchers.{$context_id}|count}
 {$is_current_worker = isset($object_watchers.{$context_id}.{$active_worker->id})}
-<button type="button" class="{if $is_current_worker}{else}green{/if} {if $full}split-left{/if}" onclick="genericAjaxGet($(this).parent(),'c=internal&a=toggleContextWatcher&context={$context}&context_id={$context_id}&follow={if $is_current_worker}0{else}1{/if}&full={if empty($full)}0{else}1{/if}');">
-	{if $is_current_worker}
-	<span class="cerb-sprite2 sprite-minus-circle"></span>
-	{else}
-	<span class="cerb-sprite2 sprite-plus-circle"></span>
-	{/if}
+<button type="button" id="{$watchers_btn_domid}" class="{if $is_current_worker}green{/if}" title="{'common.watchers'|devblocks_translate|capitalize}" group_id="{$watchers_group_id}" bucket_id="{$watchers_bucket_id}">
 	{if $full}
-		{if $is_current_worker}Stop watching{else}Start watching{/if}
 		<div class="badge-count">{$num_watchers}</div>
+		Watching
 	{else}
-		{$num_watchers}
+		<div class="badge-count">{$num_watchers}</div>
 	{/if}
-</button><!--
---><button type="button" class="split-right" id="{$expand_btnid}" {if !$full}style="display:none;"{/if}><span class="cerb-sprite sprite-arrow-down-white"></span></button>
-{if empty($workers)}{$workers = DAO_Worker::getAllActive()}{/if}
+</button>
 
 <script type="text/javascript">
-{if !$full}
-$('#{$expand_btnid}').parent().hover(
-		function(e) {
-			$('#{$expand_btnid}').prev('button').addClass('split-left');
-			$('#{$expand_btnid}').css('display','inline');
-		},
-		function(e) {
-			$('#{$expand_btnid}').prev('button').removeClass('split-left');
-			$('#{$expand_btnid}').css('display','none');
-		}
-	)
-	;
-{/if}
-$('#{$expand_btnid}').click(function(e) {
-	$popup=genericAjaxPopup('watchers','c=internal&a=showContextWatchers&context={$context}&context_id={$context_id}',this,false,'500');
-	$popup.one('watchers_save', function(event) {
-		if(0 == event.add_worker_ids.length && 0 == event.delete_worker_ids.length)
-			return;
-		add_worker_ids = event.add_worker_ids.join(',');
-		delete_worker_ids = event.delete_worker_ids.join(',');
-		genericAjaxGet($('#{$expand_btnid}').parent(),'c=internal&a=addContextWatchers&context={$context}&context_id={$context_id}&add_worker_ids=' + add_worker_ids + '&delete_worker_ids=' + delete_worker_ids + '&full={if $full}1{else}0{/if}');
+$(function() {
+	var $btn = $('#{$watchers_btn_domid}');
+	
+	$btn.click(function() {
+		var group_id = $btn.attr('group_id');
+		var bucket_id = $btn.attr('bucket_id');
+		var $popup = genericAjaxPopup('watchers','c=internal&a=handleSectionAction&section=watchers&action=showContextWatchersPopup&context={$context}&context_id={$context_id}&full={if empty($full)}0{else}1{/if}&group_id=' + group_id + '&bucket_id=' + bucket_id);
+		
+		$popup.one('watchers_save', function(e) {
+			if(undefined != e.watchers_count && undefined != e.watchers_include_worker) {
+				$btn.fadeTo('fast', 0.5);
+				$btn.find('div.badge-count').html(e.watchers_count);
+				
+				if(e.watchers_include_worker) {
+					$btn.addClass('green');
+				} else {
+					$btn.removeClass('green');
+				}
+				
+				$btn.fadeTo('fast', 1.0);
+			}
+		});
+		
 	});
 });
 </script>
-

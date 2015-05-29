@@ -418,6 +418,7 @@ class DevblocksSearchEngineElasticSearch extends Extension_DevblocksSearchEngine
 		if(empty($base_url) || empty($index) || empty($type))
 			return false;
 		
+		// [TODO] Paging
 		
 		$url = sprintf("%s/%s/%s/_search?q=%s&_source=false&size=%d&default_operator=AND",
 			$base_url,
@@ -755,7 +756,7 @@ class DevblocksSearchEngineMysqlFulltext extends Extension_DevblocksSearchEngine
 		if(!isset($tables['fulltext_' . $ns]))
 			return false;
 		
-		return intval($db->GetOne(sprintf("SELECT MAX(id) FROM fulltext_%s", $db->escape($ns))));
+		return intval($db->GetOneSlave(sprintf("SELECT MAX(id) FROM fulltext_%s", $db->escape($ns))));
 	}
 	
 	private function _getCount(Extension_DevblocksSearchSchema $schema) {
@@ -766,7 +767,7 @@ class DevblocksSearchEngineMysqlFulltext extends Extension_DevblocksSearchEngine
 		if(!isset($tables['fulltext_' . $ns]))
 			return false;
 		
-		return intval($db->GetOne(sprintf("SELECT COUNT(id) FROM fulltext_%s", $db->escape($ns))));
+		return intval($db->GetOneSlave(sprintf("SELECT COUNT(id) FROM fulltext_%s", $db->escape($ns))));
 	}
 	
 	public function getQuickSearchExamples(Extension_DevblocksSearchSchema $schema) {
@@ -832,7 +833,8 @@ class DevblocksSearchEngineMysqlFulltext extends Extension_DevblocksSearchEngine
 		// Our temp table name is consistently named because we may keep it around for the duration of the request
 		$temp_table = sprintf("_search_%s", sha1($ns.$query));
 		
-		$sql = sprintf("CREATE TEMPORARY TABLE IF NOT EXISTS %s SELECT id, MATCH content AGAINST ('%s' IN BOOLEAN MODE) AS score ".
+		$sql = sprintf("CREATE TEMPORARY TABLE IF NOT EXISTS %s (PRIMARY KEY (id)) ".
+			"SELECT id, MATCH content AGAINST ('%s' IN BOOLEAN MODE) AS score ".
 			"FROM fulltext_%s ".
 			"WHERE MATCH content AGAINST ('%s' IN BOOLEAN MODE) ".
 			"%s ".
@@ -845,7 +847,7 @@ class DevblocksSearchEngineMysqlFulltext extends Extension_DevblocksSearchEngine
 			!empty($where_sql) ? ('AND ' . implode(' AND ', $where_sql)) : ''
 		);
 		
-		$db->Execute($sql);
+		$db->ExecuteSlave($sql);
 		
 		return $temp_table;
 	}
@@ -1137,7 +1139,7 @@ class DevblocksSearchEngineMysqlFulltext extends Extension_DevblocksSearchEngine
 			implode(',', $fields)
 		);
 		
-		$result = $db->Execute($sql);
+		$result = $db->ExecuteMaster($sql);
 		
 		$return = (false !== $result) ? true : false;
 		
@@ -1153,6 +1155,7 @@ class DevblocksSearchEngineMysqlFulltext extends Extension_DevblocksSearchEngine
 	
 	private function _createTable(Extension_DevblocksSearchSchema $schema) {
 		$db = DevblocksPlatform::getDatabaseService();
+		$tables = DevblocksPlatform::getDatabaseTables();
 		$namespace = $schema->getNamespace();
 		$attributes = $schema->getAttributes();
 		
@@ -1198,18 +1201,6 @@ class DevblocksSearchEngineMysqlFulltext extends Extension_DevblocksSearchEngine
 			);
 		}
 		
-		$rs = $db->Execute("SHOW TABLES");
-
-		$tables = array();
-		
-		if($rs instanceof mysqli_result) {
-			while($row = mysqli_fetch_row($rs)) {
-				$tables[$row[0]] = true;
-			}
-			
-			mysqli_free_result($rs);
-		}
-		
 		$namespace = $this->escapeNamespace($namespace);
 		
 		if(isset($tables['fulltext_'.$namespace]))
@@ -1227,7 +1218,7 @@ class DevblocksSearchEngineMysqlFulltext extends Extension_DevblocksSearchEngine
 			(!empty($attributes_sql) ? implode(",\n", $attributes_sql) : '')
 		);
 		
-		$result = $db->Execute($sql);
+		$result = $db->ExecuteMaster($sql);
 		
 		$return = (false !== $result) ? true : false;
 		
@@ -1241,6 +1232,8 @@ class DevblocksSearchEngineMysqlFulltext extends Extension_DevblocksSearchEngine
 	
 	public function delete(Extension_DevblocksSearchSchema $schema, $ids) {
 		$db = DevblocksPlatform::getDatabaseService();
+		$tables = DevblocksPlatform::getDatabaseTables();
+		
 		$ns = $schema->getNamespace();
 		
 		if(!is_array($ids))
@@ -1249,8 +1242,13 @@ class DevblocksSearchEngineMysqlFulltext extends Extension_DevblocksSearchEngine
 		if(empty($ns) || empty($ids))
 			return;
 			
-		$result = $db->Execute(sprintf("DELETE FROM fulltext_%s WHERE id IN (%s) ",
-			$this->escapeNamespace($ns),
+		$namespace = $this->escapeNamespace($ns);
+		
+		if(!isset($tables['fulltext_'.$namespace]))
+			return true;
+		
+		$result = $db->ExecuteMaster(sprintf("DELETE FROM fulltext_%s WHERE id IN (%s) ",
+			$namespace,
 			implode(',', $ids)
 		));
 		

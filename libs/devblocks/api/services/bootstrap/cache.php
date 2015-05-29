@@ -66,6 +66,16 @@ class _DevblocksCacheManager {
 		self::$_cacher = self::$_bootstrap_cacher;
 	}
 
+	/**
+	 * 
+	 * @param mixed $data
+	 * @param string $key
+	 * @param array $tags
+	 * @param integer $ttl
+	 * @param boolean $local_only
+	 * @return boolean
+	 * @test DevblocksCacheTest
+	 */
 	public function save($data, $key, $tags=array(), $ttl=0, $local_only=false) {
 		// Monitor short-term cache memory usage
 		@$this->_statistics[$key] = intval($this->_statistics[$key]);
@@ -84,6 +94,14 @@ class _DevblocksCacheManager {
 		return $engine->save($data, $key, $tags, $ttl);
 	}
 	
+	/**
+	 * 
+	 * @param string $key
+	 * @param boolean $nocache
+	 * @param boolean $local_only
+	 * @return mixed
+	 * @test DevblocksCacheTest
+	 */
 	public function load($key, $nocache=false, $local_only=false) {
 		// If this is a local request, only try the registry, not cache
 		if($local_only) {
@@ -121,6 +139,13 @@ class _DevblocksCacheManager {
 		return NULL;
 	}
 	
+	/**
+	 * 
+	 * @param string $key
+	 * @param boolean $local_only
+	 * @return boolean
+	 * @test DevblocksCacheTest
+	 */
 	public function remove($key, $local_only=false) {
 		if(empty($key))
 			return;
@@ -324,6 +349,8 @@ class DevblocksCacheEngine_Disk extends Extension_DevblocksCacheEngine {
 		$file = $cache_dir . $this->_getFilename($key);
 		if(file_exists($file) && is_writeable($file))
 			@unlink($file);
+		
+		return true;
 	}
 	
 	function clean() {
@@ -461,7 +488,7 @@ class DevblocksCacheEngine_Memcache extends Extension_DevblocksCacheEngine {
 			return;
 
 		$cache_key = $this->_getCacheKey($key);
-		$this->_driver->delete($cache_key);
+		return $this->_driver->delete($cache_key);
 	}
 
 	function clean() {
@@ -583,9 +610,7 @@ class DevblocksCacheEngine_Redis extends Extension_DevblocksCacheEngine {
 	function remove($key) {
 		$cache_key = $this->_getCacheKey($key);
 		
-		$this->_driver->del($cache_key);
-		
-		return true;
+		return $this->_driver->del($cache_key);
 	}
 
 	function clean() {

@@ -133,11 +133,6 @@
 				<seg>[Correo] Puede redactar nuevos mensajes desde el Helpdesk</seg>
 			</tuv>
 		</tu>
-		<tu tuid="acl.core.rss">
-			<tuv xml:lang="es_ES">
-				<seg>[RSS] Puede exportar listas como archivos RSS</seg>
-			</tuv>
-		</tu>
 		<tu tuid="acl.core.snippets.actions.create">
 			<tuv xml:lang="es_ES">
 				<seg/>
@@ -521,11 +516,6 @@
 		<tu tuid="activity.mail.search">
 			<tuv xml:lang="es_ES">
 				<seg>%s esta buscanco tickets</seg>
-			</tuv>
-		</tu>
-		<tu tuid="activity.mail.workflow">
-			<tuv xml:lang="es_ES">
-				<seg>%s está viendo %s en Flujo de trabajo</seg>
 			</tuv>
 		</tu>
 		<tu tuid="activity.mail.workspaces">
@@ -1178,6 +1168,11 @@
 				<seg/>
 			</tuv>
 		</tu>
+		<tu tuid="common.history">
+			<tuv xml:lang="es_ES">
+				<seg>historía</seg>
+			</tuv>
+		</tu>
 		<tu tuid="common.hours">
 			<tuv xml:lang="es_ES">
 				<seg>horas</seg>
@@ -1201,6 +1196,11 @@
 		<tu tuid="common.import.upload_csv.tip">
 			<tuv xml:lang="es_ES">
 				<seg/>
+			</tuv>
+		</tu>
+		<tu tuid="common.importance">
+			<tuv xml:lang="es_ES">
+				<seg></seg>
 			</tuv>
 		</tu>
 		<tu tuid="common.inactive">
@@ -1371,6 +1371,11 @@
 		<tu tuid="common.no">
 			<tuv xml:lang="es_ES">
 				<seg>no</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.no_thanks">
+			<tuv xml:lang="es_ES">
+				<seg>no gracias!</seg>
 			</tuv>
 		</tu>
 		<tu tuid="common.nobody">
@@ -1803,12 +1808,12 @@
 				<seg>ID Perfil</seg>
 			</tuv>
 		</tu>
-		<tu tuid="config.mail.pop3.error_hostname">
+		<tu tuid="config.mailboxes.error_hostname">
 			<tuv xml:lang="es_ES">
 				<seg>Error: No se ha proporcionado un nombre de host.</seg>
 			</tuv>
 		</tu>
-		<tu tuid="config.mail.pop3.failed">
+		<tu tuid="config.mailboxes.failed">
 			<tuv xml:lang="es_ES">
 				<seg>Falló la conexión al buzón de correo.</seg>
 			</tuv>
@@ -2768,11 +2773,6 @@
 				<seg>(bandeja actual)</seg>
 			</tuv>
 		</tu>
-		<tu tuid="display.reply.next.move.no_thanks">
-			<tuv xml:lang="es_ES">
-				<seg>no gracias!</seg>
-			</tuv>
-		</tu>
 		<tu tuid="display.reply.next.owner">
 			<tuv xml:lang="es_ES">
 				<seg/>
@@ -2996,11 +2996,6 @@
 		<tu tuid="header.config">
 			<tuv xml:lang="es_ES">
 				<seg>configuración</seg>
-			</tuv>
-		</tu>
-		<tu tuid="header.history">
-			<tuv xml:lang="es_ES">
-				<seg>historía</seg>
 			</tuv>
 		</tu>
 		<tu tuid="header.last_viewed">
@@ -3286,11 +3281,6 @@
 		<tu tuid="mail.worklist.draft_in_progress">
 			<tuv xml:lang="es_ES">
 				<seg></seg>
-			</tuv>
-		</tu>
-		<tu tuid="mail.workflow">
-			<tuv xml:lang="es_ES">
-				<seg>Pendientes</seg>
 			</tuv>
 		</tu>
 		<tu tuid="mail.workspaces.create">
@@ -4048,7 +4038,7 @@
 				<seg/>
 			</tuv>
 		</tu>
-		<tu tuid="preferences.account.mail.reply_textbox_size.inelastic">
+		<tu tuid="preferences.account.mail.reply_textbox_size.auto">
 			<tuv xml:lang="es_ES">
 				<seg/>
 			</tuv>
@@ -4474,11 +4464,6 @@ Si no pidió esto, no pinche en el enlace de arriba.  La petición expirará en 
 				<seg>Historial del Usuario</seg>
 			</tuv>
 		</tu>
-		<tu tuid="rss.bad_feed">
-			<tuv xml:lang="es_ES">
-				<seg>Datos de fuente incorrectos.</seg>
-			</tuv>
-		</tu>
 		<tu tuid="search.date.between">
 			<tuv xml:lang="es_ES">
 				<seg>entre</seg>
@@ -4758,11 +4743,6 @@ Por ejemplo: *recibo*</seg>
 				<seg>Tareas del Ticket</seg>
 			</tuv>
 		</tu>
-		<tu tuid="ticket.assignable">
-			<tuv xml:lang="es_ES">
-				<seg/>
-			</tuv>
-		</tu>
 		<tu tuid="ticket.closed_at">
 			<tuv xml:lang="es_ES">
 				<seg/>
@@ -4866,11 +4846,6 @@ Por ejemplo: *recibo*</seg>
 		<tu tuid="ticket.spam_training">
 			<tuv xml:lang="es_ES">
 				<seg>Aprendizaje Spam</seg>
-			</tuv>
-		</tu>
-		<tu tuid="ticket.status">
-			<tuv xml:lang="es_ES">
-				<seg>Estado</seg>
 			</tuv>
 		</tu>
 		<tu tuid="ticket.subject">

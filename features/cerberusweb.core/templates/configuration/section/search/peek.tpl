@@ -20,7 +20,7 @@
 <div class="status"></div>
 
 <div style="margin-top:10px;">
-	<button type="button" class="submit"><span class="cerb-sprite2 sprite-tick-circle"></span> {'common.save_changes'|devblocks_translate}</button>
+	<button type="button" class="submit"><span class="glyphicons glyphicons-circle-ok" style="color:rgb(0,180,0);"></span> {'common.save_changes'|devblocks_translate}</button>
 </div>
 
 </form>
@@ -41,7 +41,7 @@ $(function() {
 			$(this).closest('fieldset').find('> div').fadeIn();
 		});
 		
-		$frm.find('textarea').elastic();
+		$frm.find('textarea').autosize();
 		
 		$frm.find('button.submit').on('click', function() {
 			$status.html('').hide();

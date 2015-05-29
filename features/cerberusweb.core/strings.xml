@@ -54,6 +54,11 @@
 
 		<!-- Activity points -->
 		
+		<tu tuid="activities.custom.other">
+			<tuv xml:lang="en_US">
+				<seg>{{message}}</seg>
+			</tuv>
+		</tu>
 		<tu tuid="activities.calendar_event.created">
 			<tuv xml:lang="en_US">
 				<seg>{{actor}} created event {{event}} on calendar {{target}}</seg>
@@ -79,9 +84,24 @@
 				<seg>{{actor}} disconnected {{target_object}} {{target}} from {{link_object}} {{link}}</seg>
 			</tuv>
 		</tu>
+		<tu tuid="activities.mailbox.check.error">
+			<tuv xml:lang="en_US">
+				<seg>Mailbox {{target}} has failed to download mail on {{count}} consecutive attempts: {{error}}</seg>
+			</tuv>
+		</tu>
 		<tu tuid="activities.org.merge">
 			<tuv xml:lang="en_US">
 				<seg>{{actor}} merged organization {{source}} with organization {{target}}</seg>
+			</tuv>
+		</tu>
+		<tu tuid="activities.record.recommendation.added">
+			<tuv xml:lang="en_US">
+				<seg>{{actor}} recommended {{worker}} for {{target_object}} {{target}}</seg>
+			</tuv>
+		</tu>
+		<tu tuid="activities.record.recommendation.removed">
+			<tuv xml:lang="en_US">
+				<seg>{{actor}} removed the recommendation of {{worker}} on {{target_object}} {{target}}</seg>
 			</tuv>
 		</tu>
 		<tu tuid="activities.task.created">
@@ -462,6 +482,11 @@
 				<seg>due</seg>
 			</tuv>
 		</tu>
+		<tu tuid="common.edit">
+			<tuv xml:lang="en_US">
+				<seg>edit</seg>
+			</tuv>
+		</tu>
 		<tu tuid="common.email">
 			<tuv xml:lang="en_US">
 				<seg>Email</seg>
@@ -472,9 +497,9 @@
 				<seg>Enabled</seg>
 			</tuv>
 		</tu>
-		<tu tuid="common.edit">
+		<tu tuid="common.error">
 			<tuv xml:lang="en_US">
-				<seg>edit</seg>
+				<seg>error</seg>
 			</tuv>
 		</tu>
 		<tu tuid="common.event">
@@ -552,6 +577,11 @@
 				<seg>fetch &amp; retrieve</seg>
 			</tuv>
 		</tu>
+		<tu tuid="common.for">
+			<tuv xml:lang="en_US">
+				<seg>for</seg>
+			</tuv>
+		</tu>
 		<tu tuid="common.group">
 			<tuv xml:lang="en_US">
 				<seg>Group</seg>
@@ -565,6 +595,16 @@
 		<tu tuid="common.guid">
 			<tuv xml:lang="en_US">
 				<seg>GUID</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.history">
+			<tuv xml:lang="en_US">
+				<seg>history</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.host">
+			<tuv xml:lang="en_US">
+				<seg>host</seg>
 			</tuv>
 		</tu>
 		<tu tuid="common.hours">
@@ -590,6 +630,11 @@
 		<tu tuid="common.import.upload_csv.tip">
 			<tuv xml:lang="en_US">
 				<seg>(any column order; the next step will let you choose where the data goes)</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.importance">
+			<tuv xml:lang="en_US">
+				<seg>importance</seg>
 			</tuv>
 		</tu>
 		<tu tuid="common.inactive">
@@ -635,6 +680,11 @@
 		<tu tuid="common.mail">
 			<tuv xml:lang="en_US">
 				<seg>Mail</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.mailbox">
+			<tuv xml:lang="en_US">
+				<seg>Mailbox</seg>
 			</tuv>
 		</tu>
 		<tu tuid="common.manager">
@@ -732,6 +782,11 @@
 				<seg>no</seg>
 			</tuv>
 		</tu>
+		<tu tuid="common.no_thanks">
+			<tuv xml:lang="en_US">
+				<seg>no thanks!</seg>
+			</tuv>
+		</tu>
 		<tu tuid="common.no_title">
 			<tuv xml:lang="en_US">
 				<seg>(no title)</seg>
@@ -812,6 +867,16 @@
 				<seg>next</seg>
 			</tuv>
 		</tu>
+		<tu tuid="common.notification">
+			<tuv xml:lang="en_US">
+				<seg>notification</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.notifications">
+			<tuv xml:lang="en_US">
+				<seg>notifications</seg>
+			</tuv>
+		</tu>
 		<tu tuid="common.notify_watchers_and">
 			<tuv xml:lang="en_US">
 				<seg>Notify watchers and</seg>
@@ -825,6 +890,16 @@
 		<tu tuid="common.ok">
 			<tuv xml:lang="en_US">
 				<seg>OK</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.participant">
+			<tuv xml:lang="en_US">
+				<seg>participant</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.participants">
+			<tuv xml:lang="en_US">
+				<seg>participants</seg>
 			</tuv>
 		</tu>
 		<tu tuid="common.password">
@@ -902,6 +977,26 @@
 				<seg>recipients</seg>
 			</tuv>
 		</tu>
+		<tu tuid="common.recommend">
+			<tuv xml:lang="en_US">
+				<seg>recommend</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.recommendation">
+			<tuv xml:lang="en_US">
+				<seg>recommendation</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.recommendations">
+			<tuv xml:lang="en_US">
+				<seg>recommendations</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.recommended">
+			<tuv xml:lang="en_US">
+				<seg>recommended</seg>
+			</tuv>
+		</tu>
 		<tu tuid="common.refresh">
 			<tuv xml:lang="en_US">
 				<seg>refresh</seg>
@@ -920,6 +1015,16 @@
 		<tu tuid="common.reset">
 			<tuv xml:lang="en_US">
 				<seg>reset</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.responsibility">
+			<tuv xml:lang="en_US">
+				<seg>responsibility</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.responsibilities">
+			<tuv xml:lang="en_US">
+				<seg>responsibilities</seg>
 			</tuv>
 		</tu>
 		<tu tuid="common.retry">
@@ -977,11 +1082,32 @@
 				<seg>go!</seg>
 			</tuv>
 		</tu>
+		<tu tuid="common.security">
+			<tuv xml:lang="en_US">
+				<seg>security</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.session">
+			<tuv xml:lang="en_US">
+				<seg>session</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.sessions">
+			<tuv xml:lang="en_US">
+				<seg>sessions</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.setting">
+			<tuv xml:lang="en_US">
+				<seg>setting</seg>
+			</tuv>
+		</tu>
 		<tu tuid="common.settings">
 			<tuv xml:lang="en_US">
 				<seg>settings</seg>
 			</tuv>
 		</tu>
+		
 		<tu tuid="common.signature">
 			<tuv xml:lang="en_US">
 				<seg>signature</seg>
@@ -990,6 +1116,26 @@
 		<tu tuid="common.size">
 			<tuv xml:lang="en_US">
 				<seg>size</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.skill">
+			<tuv xml:lang="en_US">
+				<seg>skill</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.skills">
+			<tuv xml:lang="en_US">
+				<seg>skills</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.skillset">
+			<tuv xml:lang="en_US">
+				<seg>skillset</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.skillsets">
+			<tuv xml:lang="en_US">
+				<seg>skillsets</seg>
 			</tuv>
 		</tu>
 		<tu tuid="common.snippets">
@@ -1125,6 +1271,11 @@
 		<tu tuid="common.url">
 			<tuv xml:lang="en_US">
 				<seg>URL</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.user">
+			<tuv xml:lang="en_US">
+				<seg>User</seg>
 			</tuv>
 		</tu>
 		<tu tuid="common.url.record">
@@ -1342,6 +1493,30 @@
 				<seg>Requirements</seg>
 			</tuv>
 		</tu>
+		
+		<!-- Mailbox -->
+		
+		<tu tuid='dao.mailbox.protocol'>
+			<tuv xml:lang="en_US"><seg>Protocol</seg></tuv>
+		</tu>
+		<tu tuid='dao.mailbox.port'>
+			<tuv xml:lang="en_US"><seg>Port</seg></tuv>
+		</tu>
+		<tu tuid='dao.mailbox.num_fails'>
+			<tuv xml:lang="en_US"><seg>Num Fails</seg></tuv>
+		</tu>
+		<tu tuid='dao.mailbox.delay_until'>
+			<tuv xml:lang="en_US"><seg>Delay Until</seg></tuv>
+		</tu>
+		<tu tuid='dao.mailbox.timeout_secs'>
+			<tuv xml:lang="en_US"><seg>Timeout Secs</seg></tuv>
+		</tu>
+		<tu tuid='dao.mailbox.max_msg_size_kb'>
+			<tuv xml:lang="en_US"><seg>Max Msg Size Kb</seg></tuv>
+		</tu>
+		<tu tuid='dao.mailbox.ssl_ignore_validation'>
+			<tuv xml:lang="en_US"><seg>Ssl Ignore Validation</seg></tuv>
+		</tu>
 
 		<!-- Snippets -->
 		
@@ -1490,14 +1665,6 @@
 		<tu tuid="acl.core.mail.draft.delete_all">
 			<tuv xml:lang="en_US">
 				<seg>[Mail] Can delete drafts owned by other workers</seg>
-			</tuv>
-		</tu>
-
-		<!-- RSS -->
-		
-		<tu tuid="acl.core.rss">
-			<tuv xml:lang="en_US">
-				<seg>[RSS] Can export lists as RSS feeds</seg>
 			</tuv>
 		</tu>
 
@@ -1808,12 +1975,12 @@ For example: http://www.cerbweb.com/support/</seg>
 
 		<!-- Configuration -->
 		
-		<tu tuid="config.mail.pop3.error_hostname">
+		<tu tuid="config.mailboxes.error_hostname">
 			<tuv xml:lang="en_US">
 				<seg>Error: No hostname provided.</seg>
 			</tuv>
 		</tu>
-		<tu tuid="config.mail.pop3.failed">
+		<tu tuid="config.mailboxes.failed">
 			<tuv xml:lang="en_US">
 				<seg>Mailbox Connection Failed.</seg>
 			</tuv>
@@ -1824,7 +1991,7 @@ For example: http://www.cerbweb.com/support/</seg>
 			</tuv>
 		</tu>
 
-		<!-- ConfirmationCode -->
+		<!-- Confirmation Code -->
 		
 		<tu tuid="dao.confirmation_code.namespace_key">
 			<tuv xml:lang="en_US">
@@ -1837,7 +2004,7 @@ For example: http://www.cerbweb.com/support/</seg>
 			</tuv>
 		</tu>
 
-		<!-- Contact orgs -->
+		<!-- Contact Orgs -->
 		
 		<tu tuid="contact_org.city">
 			<tuv xml:lang="en_US">
@@ -2004,11 +2171,6 @@ For example: http://www.cerbweb.com/support/</seg>
 				<seg>%s is searching tickets</seg>
 			</tuv>
 		</tu>
-		<tu tuid="activity.mail.workflow">
-			<tuv xml:lang="en_US">
-				<seg>%s is browsing %s in Workflow</seg>
-			</tuv>
-		</tu>
 		<tu tuid="activity.mail.workspaces">
 			<tuv xml:lang="en_US">
 				<seg>%s is browsing %s in Workspaces</seg>
@@ -2053,11 +2215,6 @@ For example: http://www.cerbweb.com/support/</seg>
 		<tu tuid="header.config">
 			<tuv xml:lang="en_US">
 				<seg>setup</seg>
-			</tuv>
-		</tu>
-		<tu tuid="header.history">
-			<tuv xml:lang="en_US">
-				<seg>history</seg>
 			</tuv>
 		</tu>
 		<tu tuid="header.last_viewed">
@@ -2185,7 +2342,7 @@ For example: http://www.cerbweb.com/support/</seg>
 		</tu>
 		<tu tuid="dashboard.num_rows">
 			<tuv xml:lang="en_US">
-				<seg>Rows per page</seg>
+				<seg>Records per page</seg>
 			</tuv>
 		</tu>
 		<tu tuid="dashboard.remove_view">
@@ -2326,17 +2483,12 @@ For example: http://www.cerbweb.com/support/</seg>
 		</tu>
 		<tu tuid="display.reply.next.move">
 			<tuv xml:lang="en_US">
-				<seg>Would you like to move this conversation?</seg>
+				<seg>Where does this conversation belong?</seg>
 			</tuv>
 		</tu>
 		<tu tuid="display.reply.next.move.current">
 			<tuv xml:lang="en_US">
 				<seg>(current bucket)</seg>
-			</tuv>
-		</tu>
-		<tu tuid="display.reply.next.move.no_thanks">
-			<tuv xml:lang="en_US">
-				<seg>no thanks!</seg>
 			</tuv>
 		</tu>
 		<tu tuid="display.reply.next.owner">
@@ -2572,6 +2724,16 @@ For example: http://www.cerbweb.com/support/</seg>
 				<seg>Sent</seg>
 			</tuv>
 		</tu>
+		<tu tuid="mail.transport">
+			<tuv xml:lang="en_US">
+				<seg>Transport</seg>
+			</tuv>
+		</tu>
+		<tu tuid="mail.transports">
+			<tuv xml:lang="en_US">
+				<seg>Transports</seg>
+			</tuv>
+		</tu>
 		<tu tuid="mail.view.add_filter">
 			<tuv xml:lang="en_US">
 				<seg>-add filter-</seg>
@@ -2585,11 +2747,6 @@ For example: http://www.cerbweb.com/support/</seg>
 		<tu tuid="mail.worklist.draft_in_progress">
 			<tuv xml:lang="en_US">
 				<seg>%s is currently responding to this ticket</seg>
-			</tuv>
-		</tu>
-		<tu tuid="mail.workflow">
-			<tuv xml:lang="en_US">
-				<seg>Workflow</seg>
 			</tuv>
 		</tu>
 		<tu tuid="mail.workspaces.create">
@@ -2800,14 +2957,6 @@ If you did not request this, do not click the link above.  The request will expi
 		<tu tuid="prefs.address.invalid">
 			<tuv xml:lang="en_US">
 				<seg>%s is not a valid email address.</seg>
-			</tuv>
-		</tu>
-
-		<!-- RSS -->
-		
-		<tu tuid="rss.bad_feed">
-			<tuv xml:lang="en_US">
-				<seg>Bad feed data.</seg>
 			</tuv>
 		</tu>
 
@@ -3022,11 +3171,6 @@ For example: *receipt*</seg>
 
 		<!-- Tickets -->
 		
-		<tu tuid="ticket.assignable">
-			<tuv xml:lang="en_US">
-				<seg>Assignable</seg>
-			</tuv>
-		</tu>
 		<tu tuid="ticket.closed_at">
 			<tuv xml:lang="en_US">
 				<seg>Closed</seg>
@@ -3130,11 +3274,6 @@ For example: *receipt*</seg>
 		<tu tuid="ticket.spam_training">
 			<tuv xml:lang="en_US">
 				<seg>Spam Training</seg>
-			</tuv>
-		</tu>
-		<tu tuid="ticket.status">
-			<tuv xml:lang="en_US">
-				<seg>Status</seg>
 			</tuv>
 		</tu>
 		<tu tuid="ticket.subject">
@@ -3411,6 +3550,11 @@ For example: *receipt*</seg>
 				<seg>Include activity log entries in the timeline</seg>
 			</tuv>
 		</tu>
+		<tu tuid="preferences.account.mail.display.disable_html">
+			<tuv xml:lang="en_US">
+				<seg>Always show plaintext messages (disable HTML)</seg>
+			</tuv>
+		</tu>
 		<tu tuid="preferences.account.mail.readall">
 			<tuv xml:lang="en_US">
 				<seg>Always use 'read all' mode (expand messages and sort chronologically)</seg>
@@ -3421,9 +3565,9 @@ For example: *receipt*</seg>
 				<seg>While replying:</seg>
 			</tuv>
 		</tu>
-		<tu tuid="preferences.account.mail.reply_textbox_size.inelastic">
+		<tu tuid="preferences.account.mail.reply_textbox_size.auto">
 			<tuv xml:lang="en_US">
-				<seg>Don't automatically grow the text box as I type</seg>
+				<seg>Automatically grow the text box as I type</seg>
 			</tuv>
 		</tu>
 		<tu tuid="preferences.account.mail.reply_textbox_size.pixels">

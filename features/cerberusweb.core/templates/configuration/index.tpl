@@ -2,7 +2,7 @@
 	<ul>
 		<li>
 			<div>
-				<a href="javascript:;" class="menu">Configure <span class="cerb-sprite sprite-arrow-down-white"></span></a>
+				<a href="javascript:;" class="menu">Configure <span class="glyphicons glyphicons-chevron-down" style="color:white;"></span></a>
 				<ul class="cerb-popupmenu cerb-float">
 					<li><a href="{devblocks_url}c=config&a=branding{/devblocks_url}">Branding</a></li>
 					<li><a href="{devblocks_url}c=config&a=localization{/devblocks_url}">Localization</a></li>
@@ -15,6 +15,7 @@
 					<li><a href="{devblocks_url}c=config&a=snippets{/devblocks_url}">Snippets</a></li>
 					<li><a href="{devblocks_url}c=config&a=sessions{/devblocks_url}">Sessions</a></li>
 					<li><a href="{devblocks_url}c=config&a=portals{/devblocks_url}">Community Portals</a></li>
+					<li><a href="{devblocks_url}c=config&a=skills{/devblocks_url}">Skills</a></li>
 					<li><a href="{devblocks_url}c=config&a=attendants{/devblocks_url}">Virtual Attendants</a></li>
 					<li><a href="{devblocks_url}c=config&a=scheduled_behavior{/devblocks_url}">Scheduled Behavior</a></li>
 					
@@ -28,7 +29,7 @@
 		</li>
 		<li>
 			<div>
-				<a href="javascript:;" class="menu">{'common.workers'|devblocks_translate|capitalize} &amp; {'common.groups'|devblocks_translate|capitalize} <span class="cerb-sprite sprite-arrow-down-white"></span></a>
+				<a href="javascript:;" class="menu">{'common.workers'|devblocks_translate|capitalize} &amp; {'common.groups'|devblocks_translate|capitalize} <span class="glyphicons glyphicons-chevron-down" style="color:white;"></span></a>
 				<ul class="cerb-popupmenu cerb-float">
 					<li><a href="{devblocks_url}c=config&a=groups{/devblocks_url}">{'common.groups'|devblocks_translate|capitalize}</a></li>
 					<li><a href="{devblocks_url}c=config&a=acl{/devblocks_url}">{'common.roles'|devblocks_translate|capitalize}</a></li>
@@ -44,11 +45,11 @@
 		</li>
 		<li>
 			<div>
-				<a href="javascript:;" class="menu">Mail <span class="cerb-sprite sprite-arrow-down-white"></span></a>
+				<a href="javascript:;" class="menu">Mail <span class="glyphicons glyphicons-chevron-down" style="color:white;"></span></a>
 				<ul class="cerb-popupmenu cerb-float">
 					<li><b>Incoming Mail</b></li>
 					<li><a href="{devblocks_url}c=config&a=mail_incoming{/devblocks_url}">Settings</a></li>
-					<li><a href="{devblocks_url}c=config&a=mail_pop3{/devblocks_url}">POP3 Accounts</a></li>
+					<li><a href="{devblocks_url}c=config&a=mailboxes{/devblocks_url}">Mailbox Accounts</a></li>
 					<li><a href="{devblocks_url}c=config&a=mail_routing{/devblocks_url}">Routing</a></li>
 					<li><a href="{devblocks_url}c=config&a=mail_filtering{/devblocks_url}">Filtering</a></li>
 					<li><a href="{devblocks_url}c=config&a=mail_failed{/devblocks_url}">Failed Messages</a></li>
@@ -57,7 +58,7 @@
 					<li><hr></li>
 					
 					<li><b>Outgoing Mail</b></li>
-					<li><a href="{devblocks_url}c=config&a=mail_smtp{/devblocks_url}">SMTP Server</a></li>
+					<li><a href="{devblocks_url}c=config&a=mail_smtp{/devblocks_url}">Mail Transports</a></li>
 					<li><a href="{devblocks_url}c=config&a=mail_from{/devblocks_url}">Reply-To Addresses</a></li>
 					<li><a href="{devblocks_url}c=config&a=mail_queue{/devblocks_url}">Queue</a></li>
 					<li><a href="{devblocks_url}c=config&a=mail_html{/devblocks_url}">HTML Templates</a></li>
@@ -75,7 +76,7 @@
 		</li>
 		<li>
 			<div>
-				<a href="javascript:;" class="menu">Storage <span class="cerb-sprite sprite-arrow-down-white"></span></a>
+				<a href="javascript:;" class="menu">Storage <span class="glyphicons glyphicons-chevron-down" style="color:white;"></span></a>
 				<ul class="cerb-popupmenu cerb-float">
 					<li><a href="{devblocks_url}c=config&a=storage_content{/devblocks_url}">Content</a></li>
 					<li><a href="{devblocks_url}c=config&a=storage_profiles{/devblocks_url}">Profiles</a></li>
@@ -91,7 +92,7 @@
 		</li>
 		<li>
 			<div>
-				<a href="javascript:;" class="menu">Plugins <span class="cerb-sprite sprite-arrow-down-white"></span></a>
+				<a href="javascript:;" class="menu">Plugins <span class="glyphicons glyphicons-chevron-down" style="color:white;"></span></a>
 				<ul class="cerb-popupmenu cerb-float">
 					<li><a href="{devblocks_url}c=config&a=plugins&tab=installed{/devblocks_url}">Installed Plugins</a></li>
 					<li><a href="{devblocks_url}c=config&a=plugins&tab=library{/devblocks_url}">Plugin Library</a></li>

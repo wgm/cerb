@@ -7,7 +7,7 @@
 <input type="hidden" name="action" value="saveJson">
 
 <div style="margin-bottom:10px;">
-	<button type="button" onclick="genericAjaxPopup('peek','c=config&a=handleSectionAction&section=mail_from&action=peek&id=0',null,false,'550');"><span class="cerb-sprite2 sprite-plus-circle"></span> {'common.add'|devblocks_translate|capitalize}</button>
+	<button type="button" onclick="genericAjaxPopup('peek','c=config&a=handleSectionAction&section=mail_from&action=peek&id=0',null,false,'550');"><span class="glyphicons glyphicons-circle-plus" style="color:rgb(0,180,0);"></span> {'common.add'|devblocks_translate|capitalize}</button>
 </div>
 
 {foreach from=$addresses item=address key=address_id}
@@ -27,6 +27,20 @@
 			<td>
 				{$address->getReplyPersonal($active_worker)}  
 				&lt;{$address->email}&gt;
+			</td>
+		</tr>
+		
+		<tr>
+			<td valign="top" style="min-width:75px;">
+				<b>{'mail.transport'|devblocks_translate|capitalize}:</b>
+			</td>
+			<td>
+				{$transport = $address->getReplyMailTransport()}
+				{if $transport}
+					<a href="{devblocks_url}c=profiles&a=mail_transport&id={$transport->id}-{$transport->name|devblocks_permalink}{/devblocks_url}">{$transport->name}</a>
+				{else}
+					({'common.default'|devblocks_translate|lower})
+				{/if}  
 			</td>
 		</tr>
 		

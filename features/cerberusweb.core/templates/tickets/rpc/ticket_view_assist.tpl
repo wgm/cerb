@@ -27,21 +27,16 @@ Sort biggest piles by:
 	<td width="1%" nowrap="nowrap">
 		<select name="piles_moveto[]" id="select{$hash}">
 			<option value=""></option>
-			<optgroup label="Move to Group" style="color:rgb(0,150,0);font-weight:bold;">
-				{foreach from=$groups item=group}
-					<option value="t{$group->id}">{$group->name}</option>
+			<optgroup label="Move to..." style="color:rgb(0,150,0);font-weight:bold;">
+				{foreach from=$group_buckets item=group_bucket_list key=groupId}
+					{$group = $groups.$groupId}
+					{if isset($active_worker_memberships.$groupId)}
+						{foreach from=$group_bucket_list item=bucket}
+							<option value="m{$bucket->id}">{$group->name}: {$bucket->name}</option>
+						{/foreach}
+					{/if}
 				{/foreach}
 			</optgroup>
-			{foreach from=$group_buckets item=group_bucket_list key=groupId}
-				{assign var=group value=$groups.$groupId}
-				{if isset($active_worker_memberships.$groupId)}
-					<optgroup label="-- {$group->name} --">
-					{foreach from=$group_bucket_list item=bucket}
-						<option value="c{$bucket->id}">{$bucket->name}</option>
-					{/foreach}
-					</optgroup>
-				{/if}
-			{/foreach}
 			<optgroup label="Set Status" style="font-weight:bold;">
 				{if $active_worker->hasPriv('core.ticket.actions.close')}<option value="ac">Close</option>{/if}
 				{if $active_worker->hasPriv('core.ticket.actions.spam')}<option value="as">Report Spam</option>{/if}
@@ -63,9 +58,9 @@ Sort biggest piles by:
 			</optgroup>
 			{/if}
 		</select>
-		{if $active_worker->hasPriv('core.ticket.actions.close')}<a href="javascript:;" onclick="document.getElementById('viewAssist{$view_id}').select{$hash}.value='ac';"><span class="cerb-sprite2 sprite-folder-tick-circle"></span></a>{/if}
-		{if $active_worker->hasPriv('core.ticket.actions.spam')}<a href="javascript:;" onclick="document.getElementById('viewAssist{$view_id}').select{$hash}.value='as';"><span class="cerb-sprite sprite-spam"></span></a>{/if}
-		{if $active_worker->hasPriv('core.ticket.actions.delete')}<a href="javascript:;" onclick="document.getElementById('viewAssist{$view_id}').select{$hash}.value='ad';"><span class="cerb-sprite2 sprite-cross-circle"></span></a>{/if}
+		{if $active_worker->hasPriv('core.ticket.actions.close')}<a href="javascript:;" onclick="document.getElementById('viewAssist{$view_id}').select{$hash}.value='ac';"><span class="glyphicons glyphicons-ok" style="color:rgb(0,180,0);"></span></a>{/if}
+		{if $active_worker->hasPriv('core.ticket.actions.spam')}<a href="javascript:;" onclick="document.getElementById('viewAssist{$view_id}').select{$hash}.value='as';"><span class="glyphicons glyphicons-ban" style="color:rgb(200,0,0);"></span></a>{/if}
+		{if $active_worker->hasPriv('core.ticket.actions.delete')}<a href="javascript:;" onclick="document.getElementById('viewAssist{$view_id}').select{$hash}.value='ad';"><span class="glyphicons glyphicons-remove"></span></a>{/if}
 	</td>
 	<td width="98%" align="top">
 		<input type="hidden" name="piles_hash[]" value="{$hash}">
@@ -81,21 +76,16 @@ Sort biggest piles by:
 		<td width="1%" nowrap="nowrap">
 			<select name="piles_moveto[]" id="select{$sender_hash}">
 				<option value=""></option>
-				<optgroup label="Move to Group" style="color:rgb(0,150,0);font-weight:bold;">
-					{foreach from=$groups item=group}
-						<option value="t{$group->id}">{$group->name}</option>
+				<optgroup label="Move to..." style="color:rgb(0,150,0);font-weight:bold;">
+					{foreach from=$group_buckets item=group_bucket_list key=groupId}
+						{$group = $groups.$groupId}
+						{if isset($active_worker_memberships.$groupId)}
+							{foreach from=$group_bucket_list item=bucket}
+								<option value="m{$bucket->id}">{$group->name}: {$bucket->name}</option>
+							{/foreach}
+						{/if}
 					{/foreach}
 				</optgroup>
-				{foreach from=$group_buckets item=group_bucket_list key=groupId}
-					{assign var=group value=$groups.$groupId}
-					{if isset($active_worker_memberships.$groupId)}
-						<optgroup label="-- {$group->name} --">
-						{foreach from=$group_bucket_list item=bucket}
-							<option value="c{$bucket->id}">{$bucket->name}</option>
-						{/foreach}
-						</optgroup>
-					{/if}
-				{/foreach}
 				<optgroup label="Set Status" style="font-weight:bold;">
 					{if $active_worker->hasPriv('core.ticket.actions.close')}<option value="ac">Close</option>{/if}
 					{if $active_worker->hasPriv('core.ticket.actions.spam')}<option value="as">Report Spam</option>{/if}
@@ -117,9 +107,9 @@ Sort biggest piles by:
 				</optgroup>
 				{/if}
 			</select>
-			{if $active_worker->hasPriv('core.ticket.actions.close')}<a href="javascript:;" onclick="document.getElementById('viewAssist{$view_id}').select{$sender_hash}.value='ac';"><span class="cerb-sprite2 sprite-folder-tick-circle"></span></a>{/if}
-			{if $active_worker->hasPriv('core.ticket.actions.spam')}<a href="javascript:;" onclick="document.getElementById('viewAssist{$view_id}').select{$sender_hash}.value='as';"><span class="cerb-sprite sprite-spam"></span></a>{/if}
-			{if $active_worker->hasPriv('core.ticket.actions.delete')}<a href="javascript:;" onclick="document.getElementById('viewAssist{$view_id}').select{$sender_hash}.value='ad';"><span class="cerb-sprite2 sprite-cross-circle"></span></a>{/if}
+			{if $active_worker->hasPriv('core.ticket.actions.close')}<a href="javascript:;" onclick="document.getElementById('viewAssist{$view_id}').select{$sender_hash}.value='ac';"><span class="glyphicons glyphicons-ok" style="color:rgb(0,180,0);"></span></a>{/if}
+			{if $active_worker->hasPriv('core.ticket.actions.spam')}<a href="javascript:;" onclick="document.getElementById('viewAssist{$view_id}').select{$sender_hash}.value='as';"><span class="glyphicons glyphicons-ban" style="color:rgb(200,0,0);"></span></a>{/if}
+			{if $active_worker->hasPriv('core.ticket.actions.delete')}<a href="javascript:;" onclick="document.getElementById('viewAssist{$view_id}').select{$sender_hash}.value='ad';"><span class="glyphicons glyphicons-remove"></span></a>{/if}
 		</td>
 		<td width="98%">
 			<blockquote style="margin-bottom:0px;">

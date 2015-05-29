@@ -13,7 +13,7 @@ class DAO_Calendar extends Cerb_ORMHelper {
 		$db = DevblocksPlatform::getDatabaseService();
 		
 		$sql = "INSERT INTO calendar () VALUES ()";
-		$db->Execute($sql);
+		$db->ExecuteMaster($sql);
 		$id = $db->LastInsertId();
 		
 		self::update($id, $fields);
@@ -73,7 +73,7 @@ class DAO_Calendar extends Cerb_ORMHelper {
 	 * @param integer $limit
 	 * @return Model_Calendar[]
 	 */
-	static function getWhere($where=null, $sortBy=null, $sortAsc=true, $limit=null) {
+	static function getWhere($where=null, $sortBy=null, $sortAsc=true, $limit=null, $options=null) {
 		$db = DevblocksPlatform::getDatabaseService();
 
 		list($where_sql, $sort_sql, $limit_sql) = self::_getWhereSQL($where, $sortBy, $sortAsc, $limit);
@@ -85,7 +85,12 @@ class DAO_Calendar extends Cerb_ORMHelper {
 			$sort_sql.
 			$limit_sql
 		;
-		$rs = $db->Execute($sql);
+		
+		if($options & Cerb_ORMHelper::OPT_GET_MASTER_ONLY) {
+			$rs = $db->ExecuteMaster($sql);
+		} else {
+			$rs = $db->ExecuteSlave($sql);
+		}
 		
 		return self::_getObjectsFromResult($rs);
 	}
@@ -101,7 +106,9 @@ class DAO_Calendar extends Cerb_ORMHelper {
 			$calendars = DAO_Calendar::getWhere(
 				array(),
 				DAO_Calendar::NAME,
-				true
+				true,
+				null,
+				Cerb_ORMHelper::OPT_GET_MASTER_ONLY
 			);
 			$cache->save($calendars, self::CACHE_ALL);
 		}
@@ -114,6 +121,9 @@ class DAO_Calendar extends Cerb_ORMHelper {
 	 * @return Model_Calendar
 	 */
 	static function get($id) {
+		if(empty($id))
+			return null;
+		
 		$calendars = self::getAll();
 
 		if(isset($calendars[$id]))
@@ -210,7 +220,7 @@ class DAO_Calendar extends Cerb_ORMHelper {
 		
 		$ids_list = implode(',', $ids);
 		
-		$db->Execute(sprintf("DELETE FROM calendar WHERE id IN (%s)", $ids_list));
+		$db->ExecuteMaster(sprintf("DELETE FROM calendar WHERE id IN (%s)", $ids_list));
 		
 		// Delete linked records
 		DAO_CalendarEvent::deleteByCalendarIds($ids);
@@ -393,9 +403,9 @@ class DAO_Calendar extends Cerb_ORMHelper {
 			$sort_sql;
 			
 		if($limit > 0) {
-			$rs = $db->SelectLimit($sql,$limit,$page*$limit) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs ADORecordSet */
+			$rs = $db->SelectLimit($sql,$limit,$page*$limit) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs mysqli_result */
 		} else {
-			$rs = $db->Execute($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs ADORecordSet */
+			$rs = $db->ExecuteSlave($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs mysqli_result */
 			$total = mysqli_num_rows($rs);
 		}
 		
@@ -415,7 +425,7 @@ class DAO_Calendar extends Cerb_ORMHelper {
 					($has_multiple_values ? "SELECT COUNT(DISTINCT calendar.id) " : "SELECT COUNT(calendar.id) ").
 					$join_sql.
 					$where_sql;
-				$total = $db->GetOne($count_sql);
+				$total = $db->GetOneSlave($count_sql);
 			}
 		}
 		
@@ -602,7 +612,7 @@ class Model_Calendar {
 			$date_from
 		);
 		
-		$results = $db->GetArray($sql);
+		$results = $db->GetArraySlave($sql);
 
 		foreach($results as $row) {
 			// If the event spans multiple days, split them up into distinct events
@@ -697,6 +707,10 @@ class Model_CalendarAvailability {
 		$this->_start = $start;
 		$this->_end = $end;
 		$this->_mins = $mins;
+	}
+	
+	function getMinutes() {
+		return $this->_mins;
 	}
 	
 	function isAvailableAtFor($at, $for_mins) {
@@ -1428,6 +1442,7 @@ class Context_Calendar extends Extension_DevblocksContext implements IDevblocksC
 				break;
 			
 			case 'scope':
+				// [TODO] Handle 'Start on Monday'
 				$month = null;
 				$year = null;
 				
@@ -1579,7 +1594,6 @@ class Context_Calendar extends Extension_DevblocksContext implements IDevblocksC
 		$view->renderFilters = false;
 		$view->renderTemplate = 'contextlinks_chooser';
 		
-		C4_AbstractViewLoader::setView($view_id, $view);
 		return $view;
 	}
 	
@@ -1604,7 +1618,6 @@ class Context_Calendar extends Extension_DevblocksContext implements IDevblocksC
 		$view->addParamsRequired($params_req, true);
 		
 		$view->renderTemplate = 'context';
-		C4_AbstractViewLoader::setView($view_id, $view);
 		return $view;
 	}
 	

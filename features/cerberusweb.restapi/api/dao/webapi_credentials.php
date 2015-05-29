@@ -13,7 +13,7 @@ class DAO_WebApiCredentials extends Cerb_ORMHelper {
 		$db = DevblocksPlatform::getDatabaseService();
 		
 		$sql = "INSERT INTO webapi_credentials () VALUES ()";
-		$db->Execute($sql);
+		$db->ExecuteMaster($sql);
 		$id = $db->LastInsertId();
 		
 		self::update($id, $fields);
@@ -34,7 +34,7 @@ class DAO_WebApiCredentials extends Cerb_ORMHelper {
 	 * @param integer $limit
 	 * @return Model_WebApiCredentials[]
 	 */
-	static function getWhere($where=null, $sortBy=null, $sortAsc=true, $limit=null) {
+	static function getWhere($where=null, $sortBy=null, $sortAsc=true, $limit=null, $options=null) {
 		$db = DevblocksPlatform::getDatabaseService();
 
 		list($where_sql, $sort_sql, $limit_sql) = self::_getWhereSQL($where, $sortBy, $sortAsc, $limit);
@@ -46,7 +46,12 @@ class DAO_WebApiCredentials extends Cerb_ORMHelper {
 			$sort_sql.
 			$limit_sql
 		;
-		$rs = $db->Execute($sql);
+
+		if($options & Cerb_ORMHelper::OPT_GET_MASTER_ONLY) {
+			$rs = $db->ExecuteMaster($sql);
+		} else {
+			$rs = $db->ExecuteSlave($sql);
+		}
 		
 		return self::_getObjectsFromResult($rs);
 	}
@@ -56,6 +61,9 @@ class DAO_WebApiCredentials extends Cerb_ORMHelper {
 	 * @return Model_WebApiCredentials
 	 */
 	static function get($id) {
+		if(empty($id))
+			return null;
+		
 		$objects = self::getAll();
 		
 		if(isset($objects[$id]))
@@ -72,7 +80,13 @@ class DAO_WebApiCredentials extends Cerb_ORMHelper {
 		$cache = DevblocksPlatform::getCacheService();
 
 		if($nocache || null === ($credentials = $cache->load(self::_CACHE_ALL))) {
-			$credentials = self::getWhere();
+			$credentials = self::getWhere(
+				null,
+				null,
+				true,
+				null,
+				Cerb_ORMHelper::OPT_GET_MASTER_ONLY
+			);
 			$cache->save($credentials, self::_CACHE_ALL);
 		}
 		
@@ -125,7 +139,7 @@ class DAO_WebApiCredentials extends Cerb_ORMHelper {
 		
 		$ids_list = implode(',', $ids);
 		
-		$db->Execute(sprintf("DELETE FROM webapi_credentials WHERE id IN (%s)", $ids_list));
+		$db->ExecuteMaster(sprintf("DELETE FROM webapi_credentials WHERE id IN (%s)", $ids_list));
 		
 		self::clearCache();
 		
@@ -238,9 +252,9 @@ class DAO_WebApiCredentials extends Cerb_ORMHelper {
 			$sort_sql;
 			
 		if($limit > 0) {
-			$rs = $db->SelectLimit($sql,$limit,$page*$limit) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs ADORecordSet */
+			$rs = $db->SelectLimit($sql,$limit,$page*$limit) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs mysqli_result */
 		} else {
-			$rs = $db->Execute($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs ADORecordSet */
+			$rs = $db->ExecuteSlave($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs mysqli_result */
 			$total = mysqli_num_rows($rs);
 		}
 		
@@ -260,7 +274,7 @@ class DAO_WebApiCredentials extends Cerb_ORMHelper {
 					($has_multiple_values ? "SELECT COUNT(DISTINCT webapi_credentials.id) " : "SELECT COUNT(webapi_credentials.id) ").
 					$join_sql.
 					$where_sql;
-				$total = $db->GetOne($count_sql);
+				$total = $db->GetOneSlave($count_sql);
 			}
 		}
 		

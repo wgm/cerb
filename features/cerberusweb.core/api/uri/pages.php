@@ -25,8 +25,9 @@ class Page_Custom extends CerberusPageExtension {
 	}
 	
 	function handleSectionActionAction() {
-		@$section_uri = DevblocksPlatform::importGPC($_REQUEST['section'],'string','');
-		@$action = DevblocksPlatform::importGPC($_REQUEST['action'],'string','');
+		// GET has precedence over POST
+		@$section_uri = DevblocksPlatform::importGPC(isset($_GET['section']) ? $_GET['section'] : $_REQUEST['section'],'string','');
+		@$action = DevblocksPlatform::importGPC(isset($_GET['action']) ? $_GET['action'] : $_REQUEST['action'],'string','');
 
 		$inst = Extension_PageSection::getExtensionByPageUri($this->manifest->id, $section_uri, true);
 		
@@ -129,8 +130,6 @@ class Page_Custom extends CerberusPageExtension {
 			
 			$view->addParamsRequired($params, true);
 			
-			C4_AbstractViewLoader::setView($view->id, $view);
-			
 			$tpl->assign('view', $view);
 		}
 		
@@ -140,7 +139,6 @@ class Page_Custom extends CerberusPageExtension {
 	private function _renderPage($page_id) {
 		$tpl = DevblocksPlatform::getTemplateService();
 		$active_worker = CerberusApplication::getActiveWorker();
-		$visit = CerberusApplication::getVisit();
 		
 		if(null == ($page = DAO_WorkspacePage::get($page_id)))
 			return;
@@ -153,9 +151,6 @@ class Page_Custom extends CerberusPageExtension {
 			$page_id
 		);
 		$tpl->assign('point', $point);
-
-		if(null != ($selected_tab = $visit->get($point, null)))
-			$tpl->assign('selected_tab', $selected_tab);
 
 		// Template
 		if(null != ($page_extension = DevblocksPlatform::getExtension($page->extension_id, true)))
@@ -310,6 +305,8 @@ class Page_Custom extends CerberusPageExtension {
 
 		// Workflow: Open conversations
 		
+			// [TODO] Recommended
+		
 			$context = CerberusContexts::CONTEXT_TICKET;
 			$context_ext = Extension_DevblocksContext::get($context);
 			$view = $context_ext->getChooserView(); /* @var $view C4_AbstractView */
@@ -317,17 +314,21 @@ class Page_Custom extends CerberusPageExtension {
 			$view->name = 'Needs attention';
 			$view->renderLimit = 10;
 			$view->view_columns = array(
+				SearchFields_Ticket::BUCKET_RESPONSIBILITY,
 				SearchFields_Ticket::TICKET_LAST_ACTION_CODE,
 				SearchFields_Ticket::TICKET_UPDATED_DATE,
 				SearchFields_Ticket::TICKET_GROUP_ID,
 				SearchFields_Ticket::TICKET_BUCKET_ID,
 				SearchFields_Ticket::TICKET_OWNER_ID,
 			);
+			$view->options = array('disable_watchers' => true);
+			$view->renderSortBy = SearchFields_Ticket::BUCKET_RESPONSIBILITY;
+			$view->renderSortAsc = 0;
 			$view->renderSubtotals = SearchFields_Ticket::TICKET_GROUP_ID;
 			$view->addParams(array(
-				//new DevblocksSearchCriteria(SearchFields_Ticket::VIRTUAL_STATUS, 'in', array('open')),
 			), true);
 			$view->addParamsRequired(array(
+				new DevblocksSearchCriteria(SearchFields_Ticket::VIRTUAL_GROUPS_OF_WORKER, '=', '{{current_worker_id}}'),
 				new DevblocksSearchCriteria(SearchFields_Ticket::VIRTUAL_STATUS, 'in', array('open')),
 			), true);
 			
@@ -335,6 +336,7 @@ class Page_Custom extends CerberusPageExtension {
 			
 			$list_view = new Model_WorkspaceListView();
 			$list_view->title = $view_model->name;
+			$list_view->options = $view_model->options;
 			$list_view->columns = $view_model->view_columns;
 			$list_view->num_rows = $view_model->renderLimit;
 			$list_view->params = $view_model->paramsEditable;
@@ -350,6 +352,56 @@ class Page_Custom extends CerberusPageExtension {
 				DAO_WorkspaceList::WORKSPACE_TAB_ID => $tab_id,
 			));
 			
+		// Sent
+		
+		$tab_id = DAO_WorkspaceTab::create(array(
+			DAO_WorkspaceTab::NAME => 'Sent',
+			DAO_WorkspaceTab::EXTENSION_ID => 'core.workspace.tab.worklists',
+			DAO_WorkspaceTab::POS => $pos++,
+			DAO_WorkspaceTab::WORKSPACE_PAGE_ID => $page_id,
+		));
+		
+		// Sent: my sent messages
+		
+			$context = CerberusContexts::CONTEXT_MESSAGE;
+			$context_ext = Extension_DevblocksContext::get($context);
+			$view = $context_ext->getChooserView(); /* @var $view C4_AbstractView */
+			
+			$view->name = 'My sent messages';
+			$view->renderLimit = 10;
+			$view->view_columns = array(
+				SearchFields_Message::ADDRESS_EMAIL,
+				SearchFields_Message::TICKET_GROUP_ID,
+				SearchFields_Message::CREATED_DATE,
+				SearchFields_Message::WORKER_ID,
+			);
+			$view->addParams(array(
+			), true);
+			$view->addParamsRequired(array(
+				new DevblocksSearchCriteria(SearchFields_Message::WORKER_ID, 'in', array('{{current_worker_id}}')),
+				new DevblocksSearchCriteria(SearchFields_Message::IS_OUTGOING, '=', 1),
+			), true);
+			
+			$view_model = C4_AbstractViewLoader::serializeAbstractView($view);
+			
+			$list_view = new Model_WorkspaceListView();
+			$list_view->title = $view_model->name;
+			$list_view->options = $view_model->options;
+			$list_view->columns = $view_model->view_columns;
+			$list_view->num_rows = $view_model->renderLimit;
+			$list_view->params = $view_model->paramsEditable;
+			$list_view->params_required = $view_model->paramsRequired;
+			$list_view->sort_by = $view_model->renderSortBy;
+			$list_view->sort_asc = $view_model->renderSortAsc;
+			$list_view->subtotals = $view_model->renderSubtotals;
+			
+			$list_id = DAO_WorkspaceList::create(array(
+				DAO_WorkspaceList::CONTEXT => $context,
+				DAO_WorkspaceList::LIST_POS => $list_pos++,
+				DAO_WorkspaceList::LIST_VIEW => serialize($list_view),
+				DAO_WorkspaceList::WORKSPACE_TAB_ID => $tab_id,
+			));	
+
 		// Drafts
 		
 		$tab_id = DAO_WorkspaceTab::create(array(
@@ -383,6 +435,7 @@ class Page_Custom extends CerberusPageExtension {
 			
 			$list_view = new Model_WorkspaceListView();
 			$list_view->title = $view_model->name;
+			$list_view->options = $view_model->options;
 			$list_view->columns = $view_model->view_columns;
 			$list_view->num_rows = $view_model->renderLimit;
 			$list_view->params = $view_model->paramsEditable;
@@ -398,58 +451,8 @@ class Page_Custom extends CerberusPageExtension {
 				DAO_WorkspaceList::WORKSPACE_TAB_ID => $tab_id,
 			));
 		
-		// Sent
-		
-		$tab_id = DAO_WorkspaceTab::create(array(
-			DAO_WorkspaceTab::NAME => 'Sent',
-			DAO_WorkspaceTab::EXTENSION_ID => 'core.workspace.tab.worklists',
-			DAO_WorkspaceTab::POS => $pos++,
-			DAO_WorkspaceTab::WORKSPACE_PAGE_ID => $page_id,
-		));
-		
-		// Sent: my sent messages
-		
-			$context = CerberusContexts::CONTEXT_MESSAGE;
-			$context_ext = Extension_DevblocksContext::get($context);
-			$view = $context_ext->getChooserView(); /* @var $view C4_AbstractView */
-			
-			$view->name = 'My sent messages';
-			$view->renderLimit = 10;
-			$view->view_columns = array(
-				SearchFields_Message::ADDRESS_EMAIL,
-				SearchFields_Message::TICKET_GROUP_ID,
-				SearchFields_Message::CREATED_DATE,
-				SearchFields_Message::WORKER_ID,
-			);
-			$view->addParams(array(
-				//new DevblocksSearchCriteria(SearchFields_Message::VIRTUAL_STATUS, 'in', array('open')),
-			), true);
-			$view->addParamsRequired(array(
-				new DevblocksSearchCriteria(SearchFields_Message::WORKER_ID, 'in', array('{{current_worker_id}}')),
-				new DevblocksSearchCriteria(SearchFields_Message::IS_OUTGOING, '=', 1),
-			), true);
-			
-			$view_model = C4_AbstractViewLoader::serializeAbstractView($view);
-			
-			$list_view = new Model_WorkspaceListView();
-			$list_view->title = $view_model->name;
-			$list_view->columns = $view_model->view_columns;
-			$list_view->num_rows = $view_model->renderLimit;
-			$list_view->params = $view_model->paramsEditable;
-			$list_view->params_required = $view_model->paramsRequired;
-			$list_view->sort_by = $view_model->renderSortBy;
-			$list_view->sort_asc = $view_model->renderSortAsc;
-			$list_view->subtotals = $view_model->renderSubtotals;
-			
-			$list_id = DAO_WorkspaceList::create(array(
-				DAO_WorkspaceList::CONTEXT => $context,
-				DAO_WorkspaceList::LIST_POS => $list_pos++,
-				DAO_WorkspaceList::LIST_VIEW => serialize($list_view),
-				DAO_WorkspaceList::WORKSPACE_TAB_ID => $tab_id,
-			));	
-
 		// Marquee
-			
+		
 		if(!empty($page_id) && !empty($view_id)) {
 			$url_writer = DevblocksPlatform::getUrlService();
 			C4_AbstractView::setMarquee($view_id, sprintf("New page created: <a href='%s'><b>%s</b></a>",
@@ -681,9 +684,6 @@ class Page_Custom extends CerberusPageExtension {
 		$tpl = DevblocksPlatform::getTemplateService();
 		$active_worker = CerberusApplication::getActiveWorker();
 
-		$visit = CerberusApplication::getVisit();
-		$visit->set($point, 'w_'.$tab_id);
-
 		if(null == ($tab = DAO_WorkspaceTab::get($tab_id)))
 			return;
 		
@@ -737,6 +737,7 @@ class Page_Custom extends CerberusPageExtension {
 				return;
 				
 			$view->name = $list_view->title;
+			$view->options = $list_view->options;
 			$view->renderLimit = $list_view->num_rows;
 			$view->renderPage = 0;
 			$view->is_ephemeral = 0;
@@ -766,8 +767,6 @@ class Page_Custom extends CerberusPageExtension {
 	
 			$view->setPlaceholderLabels($labels);
 			$view->setPlaceholderValues($values);
-				
-			C4_AbstractViewLoader::setView($view_id, $view);
 				
 			$tpl->assign('view', $view);
 			$tpl->display('devblocks:cerberusweb.core::internal/views/search_and_view.tpl');

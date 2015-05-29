@@ -127,8 +127,6 @@ class PageSection_SetupPortal extends Extension_PageSection {
 			$view->addParamsRequired(array(
 				new DevblocksSearchCriteria(SearchFields_DevblocksTemplate::TAG,'=','portal_'.$tool->code),
 			), true);
-			
-			C4_AbstractViewLoader::setView($view->id, $view);
 		}
 		
 		$tpl->assign('view', $view);
@@ -172,6 +170,7 @@ class PageSection_SetupPortal extends Extension_PageSection {
 		// View
 		@$view_id = DevblocksPlatform::importGPC($_REQUEST['view_id'],'string');
 		$view = C4_AbstractViewLoader::getView($view_id);
+		$view->setAutoPersist(false);
 		
 		// Templates fields
 		@$deleted = trim(DevblocksPlatform::importGPC($_POST['deleted'],'integer',0));
@@ -285,7 +284,7 @@ class PageSection_SetupPortal extends Extension_PageSection {
 		// Pull from filesystem for editing
 		$content = '';
 		if(null != ($plugin = DevblocksPlatform::getPlugin($plugin_id))) {
-			$path = APP_PATH . '/' . $plugin->dir . '/templates/' . $template_path;
+			$path = $plugin->getStoragePath() . '/templates/' . $template_path;
 			if(file_exists($path)) {
 				$content = file_get_contents($path);
 			}

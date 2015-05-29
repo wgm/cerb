@@ -42,7 +42,6 @@ class Page_ExampleObjects extends CerberusPageExtension {
 				
 				if(null == ($view = C4_AbstractViewLoader::getView(self::VIEW_ID, $defaults))) {
 					$view->name = $translate->_('example.object.common.objects');
-					C4_AbstractViewLoader::setView($view->id, $view);
 				}
 		
 				$tpl->assign('view', $view);
@@ -158,6 +157,7 @@ class Page_ExampleObjects extends CerberusPageExtension {
 		// View
 		@$view_id = DevblocksPlatform::importGPC($_REQUEST['view_id'],'string');
 		$view = C4_AbstractViewLoader::getView($view_id);
+		$view->setAutoPersist(false);
 		
 		// Fields
 		//$is_closed = trim(DevblocksPlatform::importGPC($_POST['is_closed'],'string',''));
@@ -217,6 +217,7 @@ class Page_ExampleObjects extends CerberusPageExtension {
 		
 		// Loop through view and get IDs
 		$view = C4_AbstractViewLoader::getView($view_id);
+		$view->setAutoPersist(false);
 
 		// Page start
 		@$explore_from = DevblocksPlatform::importGPC($_REQUEST['explore_from'],'integer',0);

@@ -26,14 +26,13 @@
 
 <div id="prefTabs">
 	<ul>
-		{$tabs = [general,security,sessions,watcher,rss]}
+		{$tabs = [general,security,sessions,watcher]}
 		{$point = Extension_PreferenceTab::POINT}
 
 		<li><a href="{devblocks_url}ajax.php?c=preferences&a=showGeneralTab{/devblocks_url}">{'common.settings'|devblocks_translate|capitalize}</a></li>
-		<li><a href="{devblocks_url}ajax.php?c=preferences&a=showSecurityTab{/devblocks_url}">Security</a></li>
-		<li><a href="{devblocks_url}ajax.php?c=preferences&a=showSessionsTab{/devblocks_url}">Sessions</a></li>
-		<li><a href="{devblocks_url}ajax.php?c=preferences&a=showWatcherTab{/devblocks_url}">Watcher Notifications</a></li>
-		<li><a href="{devblocks_url}ajax.php?c=preferences&a=showRssTab{/devblocks_url}">RSS</a></li>
+		<li><a href="{devblocks_url}ajax.php?c=preferences&a=showSecurityTab{/devblocks_url}">{'common.security'|devblocks_translate|capitalize}</a></li>
+		<li><a href="{devblocks_url}ajax.php?c=preferences&a=showSessionsTab{/devblocks_url}">{'common.sessions'|devblocks_translate|capitalize}</a></li>
+		<li><a href="{devblocks_url}ajax.php?c=preferences&a=showWatcherTab{/devblocks_url}">{'common.notifications'|devblocks_translate|capitalize}</a></li>
 
 		{foreach from=$tab_manifests item=tab_manifest}
 			{$tabs[] = $tab_manifest->params.uri}
@@ -43,16 +42,11 @@
 </div>
 <br>
 
-{$selected_tab_idx=0}
-{foreach from=$tabs item=tab_label name=tabs}
-	{if $tab_label==$selected_tab}{$selected_tab_idx = $smarty.foreach.tabs.index}{/if}
-{/foreach}
-
 <script type="text/javascript">
-	$(function() {
-		var tabOptions = Devblocks.getDefaultjQueryUiTabOptions();
-		tabOptions.active = {$selected_tab_idx};
-		
-		var tabs = $("#prefTabs").tabs(tabOptions);
-	});
+$(function() {
+	var tabOptions = Devblocks.getDefaultjQueryUiTabOptions();
+	tabOptions.active = Devblocks.getjQueryUiTabSelected('prefTabs');
+	
+	var tabs = $("#prefTabs").tabs(tabOptions);
+});
 </script>

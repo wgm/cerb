@@ -4,43 +4,20 @@
 {$gravatar_plugin = DevblocksPlatform::getPlugin('cerberusweb.gravatar')}
 {$gravatar_enabled = $gravatar_plugin && $gravatar_plugin->enabled}
 
-<div style="float:right;display:inline-block;">
+{$memberships = $worker->getMemberships()}
+
+<div style="float:left;">
+	<h1>{$worker->getName()}</h1>
+</div>
+
+<div style="float:right;">
 	{$ctx = Extension_DevblocksContext::get($page_context)}
 	{include file="devblocks:cerberusweb.core::search/quick_search.tpl" view=$ctx->getSearchView() return_url="{devblocks_url}c=search&context={$ctx->manifest->params.alias}{/devblocks_url}"}
 </div>
 
-<div style="float:left;display:inline-block;">
-	<table cellpadding="0" cellspacing="0" border="0">
-		<tr>
-			<td nowrap="nowrap" rowspan="2" valign="top" style="padding-left:10px;">
-				{if $gravatar_enabled}
-				<img src="{if $is_ssl}https://secure.{else}http://www.{/if}gravatar.com/avatar/{$worker->email|trim|lower|md5}?s=64&d=http://cerbweb.com/gravatar/gravatar_nouser.jpg" height="64" width="64" border="0" style="margin:0px 5px 5px 0px;">
-				{/if}
-			</td>
-			<td valign="top">
-				<h1 style="color:rgb(0,120,0);font-weight:bold;font-size:150%;margin:0px;">{$worker->getName()}</h1>
-				{if !empty($worker->title)}<div>{$worker->title}</div>{/if}
-			</td>
-		</tr>
-		<tr>
-			<td colspan="2">
-				{$memberships = $worker->getMemberships()}
-				{if !empty($memberships)}
-				<ul class="bubbles">
-					{foreach from=$memberships item=member key=group_id name=groups}
-						{$group = $groups.{$group_id}}
-						<li><a href="{devblocks_url}c=profiles&k=group&id={$group->id}-{$group->name|devblocks_permalink}{/devblocks_url}" style="{if $member->is_manager}font-weight:bold;{/if}">{$group->name}</a></li>
-					{/foreach}
-				</ul>
-				{/if}
-			</td>
-		</tr>
-	</table>
-</div>
-
 <div style="clear:both;"></div>
 
-<div class="cerb-profile-toolbar" style="margin-top:5px;">
+<div class="cerb-profile-toolbar">
 	<form class="toolbar" action="javascript:;" method="POST" style="margin:0px 0px 5px 5px;" onsubmit="return false;">
 		<!-- Macros -->
 		{if $worker->id == $active_worker->id || $active_worker->is_superuser}
@@ -51,11 +28,20 @@
 		{/if}
 	
 		{if $active_worker->is_superuser}
-			{if $worker->id != $active_worker->id}<button type="button" id="btnProfileWorkerPossess"><span class="cerb-sprite2 sprite-user-silhouette"></span> Impersonate</button>{/if}
-			<button type="button" id="btnProfileWorkerEdit" title="{'common.edit'|devblocks_translate|capitalize}">&nbsp;<span class="cerb-sprite2 sprite-gear"></span>&nbsp;</button>
-			<button type="button" title="{'common.refresh'|devblocks_translate|capitalize}" onclick="document.location='{devblocks_url}c=profiles&type=worker&id={$worker->id}{/devblocks_url}-{$worker->getName()|devblocks_permalink}';">&nbsp;<span class="cerb-sprite sprite-refresh"></span>&nbsp;</button>
+			{if $worker->id != $active_worker->id}<button type="button" id="btnProfileWorkerPossess"><span class="glyphicons glyphicons-user"></span> Impersonate</button>{/if}
+			<button type="button" id="btnProfileWorkerEdit" title="{'common.edit'|devblocks_translate|capitalize}"><span class="glyphicons glyphicons-cogwheel"></span></button>
+			<button type="button" title="{'common.refresh'|devblocks_translate|capitalize}" onclick="document.location='{devblocks_url}c=profiles&type=worker&id={$worker->id}{/devblocks_url}-{$worker->getName()|devblocks_permalink}';"><span class="glyphicons glyphicons-refresh"></span></button>
 		{/if}
 	</form>
+	
+	{if $pref_keyboard_shortcuts}
+		<small>
+		{$translate->_('common.keyboard')|lower}:
+		{if $active_worker->is_superuser}(<b>e</b>) {'common.edit'|devblocks_translate|lower}{/if}
+		{if !empty($macros)}(<b>m</b>) {'common.macros'|devblocks_translate|lower} {/if}
+		(<b>1-9</b>) change tab
+		</small>
+	{/if}
 </div>
 
 <fieldset class="properties">
@@ -93,75 +79,133 @@
 {include file="devblocks:cerberusweb.core::internal/macros/behavior/scheduled_behavior_profile.tpl" context=$page_context context_id=$page_context_id}
 </div>
 
-<div id="profileTabs">
+<div id="profileWorkerTabs">
 	<ul>
 		{$tabs = []}
 		{$point = "cerberusweb.profiles.worker.{$worker->id}"}
 		
 		{if $worker->id == $active_worker->id}
 		{$tabs[] = 'notifications'}
-		<li><a href="{devblocks_url}ajax.php?c=preferences&a=showMyNotificationsTab{/devblocks_url}">{'home.tab.my_notifications'|devblocks_translate}</a></li>
+		<li data-alias="notifications"><a href="{devblocks_url}ajax.php?c=preferences&a=showMyNotificationsTab{/devblocks_url}">{'home.tab.my_notifications'|devblocks_translate}</a></li>
 		{/if}
 		
+		{$tabs[] = 'responsibilities'}
+		<li data-alias="responsibilities"><a href="{devblocks_url}ajax.php?c=internal&a=handleSectionAction&section=responsibilities&action=showResponsibilitiesTab&point={$point}&context={$page_context}&context_id={$page_context_id}{/devblocks_url}">{'common.responsibilities'|devblocks_translate|capitalize}</a></li>
+		
+		{if DAO_Skill::count()}
+		{$tabs[] = 'skills'}
+		<li data-alias="skills"><a href="{devblocks_url}ajax.php?c=internal&a=handleSectionAction&section=skills&action=showSkillsTab&point={$point}&context={$page_context}&context_id={$page_context_id}{/devblocks_url}">{'common.skills'|devblocks_translate|capitalize}</a></li>
+		{/if}
+		
+		{$tabs[] = 'calendar'}
+		<li data-alias="calendar"><a href="{devblocks_url}ajax.php?c=internal&a=handleSectionAction&section=calendars&action=showCalendarTab&point={$point}&context={$page_context}&context_id={$page_context_id}&id={$worker->calendar_id}{/devblocks_url}">{'common.calendar'|devblocks_translate|capitalize}</a></li>
+
 		{$tabs[] = 'availability'}
-		<li><a href="{devblocks_url}ajax.php?c=internal&a=handleSectionAction&section=calendars&action=showCalendarAvailabilityTab&point={$point}&context={$page_context}&context_id={$page_context_id}&id={$worker->calendar_id}{/devblocks_url}">Availability</a></li>
+		<li data-alias="availability"><a href="{devblocks_url}ajax.php?c=internal&a=handleSectionAction&section=calendars&action=showCalendarAvailabilityTab&point={$point}&context={$page_context}&context_id={$page_context_id}&id={$worker->calendar_id}{/devblocks_url}">{'common.availability'|devblocks_translate|capitalize}</a></li>
 		
 		{$tabs[] = 'activity'}
-		<li><a href="{devblocks_url}ajax.php?c=internal&a=showTabActivityLog&scope=both&point={$point}&context={$page_context}&context_id={$page_context_id}{/devblocks_url}">{'common.activity_log'|devblocks_translate|capitalize}</a></li>
+		<li data-alias="activity"><a href="{devblocks_url}ajax.php?c=internal&a=showTabActivityLog&scope=both&point={$point}&context={$page_context}&context_id={$page_context_id}{/devblocks_url}">{'common.activity_log'|devblocks_translate|capitalize}</a></li>
+		
+		{$tabs[] = 'links'}
+		<li data-alias="links"><a href="{devblocks_url}ajax.php?c=internal&a=showTabContextLinks&context={$page_context}&point={$point}&id={$page_context_id}{/devblocks_url}">Watchlist <div class="tab-badge">{DAO_ContextLink::count($page_context, $page_context_id)|default:0}</div></a></li>
 		
 		{$tabs[] = 'comments'}
-		<li><a href="{devblocks_url}ajax.php?c=internal&a=showTabContextComments&context={$page_context}&id={$page_context_id}{/devblocks_url}">{'common.comments'|devblocks_translate|capitalize} <div class="tab-badge">{DAO_Comment::count($page_context, $page_context_id)|default:0}</div></a></li>
+		<li data-alias="comments"><a href="{devblocks_url}ajax.php?c=internal&a=showTabContextComments&context={$page_context}&id={$page_context_id}{/devblocks_url}">{'common.comments'|devblocks_translate|capitalize} <div class="tab-badge">{DAO_Comment::count($page_context, $page_context_id)|default:0}</div></a></li>
 
 		{if $active_worker->is_superuser || $worker->id == $active_worker->id}
 		{$tabs[] = 'attendants'}
-		<li><a href="{devblocks_url}ajax.php?c=internal&a=showAttendantsTab&point={$point}&context={$page_context}&context_id={$page_context_id}{/devblocks_url}">Virtual Attendants</a></li>
+		<li data-alias="attendants"><a href="{devblocks_url}ajax.php?c=internal&a=showAttendantsTab&point={$point}&context={$page_context}&context_id={$page_context_id}{/devblocks_url}">{'common.virtual_attendants'|devblocks_translate|capitalize}</a></li>
 		{/if}
-		
-		{$tabs[] = 'links'}
-		<li><a href="{devblocks_url}ajax.php?c=internal&a=showTabContextLinks&context={$page_context}&point={$point}&id={$page_context_id}{/devblocks_url}">Watchlist <div class="tab-badge">{DAO_ContextLink::count($page_context, $page_context_id)|default:0}</div></a></li>
 		
 		{if $active_worker->is_superuser || $worker->id == $active_worker->id}
 		{$tabs[] = 'snippets'}
-		<li><a href="{devblocks_url}ajax.php?c=internal&a=showTabSnippets&point={$point}&context={$page_context}&context_id={$page_context_id}{/devblocks_url}">{'common.snippets'|devblocks_translate|capitalize}</a></li>
+		<li data-alias="snippets"><a href="{devblocks_url}ajax.php?c=internal&a=showTabSnippets&point={$point}&context={$page_context}&context_id={$page_context_id}{/devblocks_url}">{'common.snippets'|devblocks_translate|capitalize}</a></li>
 		{/if}
 		
 		{foreach from=$tab_manifests item=tab_manifest}
 			{$tabs[] = $tab_manifest->params.uri}
-			<li><a href="{devblocks_url}ajax.php?c=profiles&a=showTab&ext_id={$tab_manifest->id}&point={$point}&context={$page_context}&context_id={$page_context_id}{/devblocks_url}"><i>{$tab_manifest->params.title|devblocks_translate}</i></a></li>
+			<li data-alias="{$tab_manifest->params.uri}"><a href="{devblocks_url}ajax.php?c=profiles&a=showTab&ext_id={$tab_manifest->id}&point={$point}&context={$page_context}&context_id={$page_context_id}{/devblocks_url}"><i>{$tab_manifest->params.title|devblocks_translate}</i></a></li>
 		{/foreach}
 	</ul>
 </div> 
 <br>
 
-{$selected_tab_idx=0}
-{foreach from=$tabs item=tab_label name=tabs}
-	{if $tab_label==$selected_tab}{$selected_tab_idx = $smarty.foreach.tabs.index}{/if}
-{/foreach}
+<script type="text/javascript">
+$(function() {
+	var tabOptions = Devblocks.getDefaultjQueryUiTabOptions();
+	tabOptions.active = Devblocks.getjQueryUiTabSelected('profileWorkerTabs', '{$tab}');
+	
+	var tabs = $("#profileWorkerTabs").tabs(tabOptions);
+	
+	{if $active_worker->is_superuser}
+	$('#btnProfileWorkerEdit').bind('click', function() {
+		$popup = genericAjaxPopup('peek','c=config&a=handleSectionAction&section=workers&action=showWorkerPeek&id={$worker->id}',null,false,'550');
+		$popup.one('worker_save', function(event) {
+			event.stopPropagation();
+			window.location.reload();
+		});
+	});
+	$('#btnProfileWorkerPossess').bind('click', function() {
+		genericAjaxGet('','c=internal&a=su&worker_id={$worker->id}',function(o) {
+			window.location.reload();
+		});
+	});
+	{/if}
+});
+
+{include file="devblocks:cerberusweb.core::internal/macros/display/menu_script.tpl" selector_button=null selector_menu=null}
+</script>
 
 <script type="text/javascript">
-	$(function() {
-		var tabOptions = Devblocks.getDefaultjQueryUiTabOptions();
-		tabOptions.active = {$selected_tab_idx};
+{if $pref_keyboard_shortcuts}
+$(function() {
+	$(document).keypress(function(event) {
+		if(event.altKey || event.ctrlKey || event.shiftKey || event.metaKey)
+			return;
 		
-		var tabs = $("#profileTabs").tabs(tabOptions);
-		
-		{if $active_worker->is_superuser}
-		$('#btnProfileWorkerEdit').bind('click', function() {
-			$popup = genericAjaxPopup('peek','c=config&a=handleSectionAction&section=workers&action=showWorkerPeek&id={$worker->id}',null,false,'550');
-			$popup.one('worker_save', function(event) {
-				event.stopPropagation();
-				window.location.reload();
-			});
-		});
-		$('#btnProfileWorkerPossess').bind('click', function() {
-			genericAjaxGet('','c=internal&a=su&worker_id={$worker->id}',function(o) {
-				window.location.reload();
-			});
-		});
-		{/if}
-	});
+		if($(event.target).is(':input'))
+			return;
 	
-	{include file="devblocks:cerberusweb.core::internal/macros/display/menu_script.tpl" selector_button=null selector_menu=null}
+		var hotkey_activated = true;
+		
+		switch(event.which) {
+			case 49:  // (1) tab cycle
+			case 50:  // (2) tab cycle
+			case 51:  // (3) tab cycle
+			case 52:  // (4) tab cycle
+			case 53:  // (5) tab cycle
+			case 54:  // (6) tab cycle
+			case 55:  // (7) tab cycle
+			case 56:  // (8) tab cycle
+			case 57:  // (9) tab cycle
+			case 58:  // (0) tab cycle
+				try {
+					var idx = event.which-49;
+					var $tabs = $("#profileWorkerTabs").tabs();
+					$tabs.tabs('option', 'active', idx);
+				} catch(ex) { }
+				break;
+			case 101:  // (E) edit
+				try {
+					$('#btnProfileWorkerEdit').click();
+				} catch(ex) { }
+				break;
+			case 109:  // (M) macros
+				try {
+					$('#btnDisplayMacros').click();
+				} catch(ex) { }
+				break;
+			default:
+				// We didn't find any obvious keys, try other codes
+				hotkey_activated = false;
+				break;
+		}
+		
+		if(hotkey_activated)
+			event.preventDefault();
+	});
+});
+{/if}
 </script>
 
 {$profile_scripts = Extension_ContextProfileScript::getExtensions(true, $page_context)}

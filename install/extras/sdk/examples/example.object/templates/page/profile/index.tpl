@@ -8,7 +8,7 @@
 
 <form>
 	<!-- Toolbar -->
-	<button type="button" id="btnExObProfileEdit" title="{'common.edit'|devblocks_translate|capitalize}">&nbsp;<span class="cerb-sprite2 sprite-gear"></span>&nbsp;</button>
+	<button type="button" id="btnExObProfileEdit" title="{'common.edit'|devblocks_translate|capitalize}"><span class="glyphicons glyphicons-cogwheel"></span></button>
 </form>
 
 <div id="objectTabs">
@@ -23,24 +23,19 @@
 </div> 
 <br>
 
-{$selected_tab_idx=0}
-{foreach from=$tabs item=tab_label name=tabs}
-	{if $tab_label==$tab_selected}{$selected_tab_idx = $smarty.foreach.tabs.index}{/if}
-{/foreach}
-
 <script type="text/javascript">
-	$(function() {
-		var tabOptions = Devblocks.getDefaultjQueryUiTabOptions();
-		tabOptions.active = {$selected_tab_idx};
-		
-		var tabs = $('#objectTabs').tabs(tabOptions);
-		
-		$('#btnExObProfileEdit').bind('click', function() {
-			$popup = genericAjaxPopup('peek','c=example.objects&a=showPeekPopup&id={$model->id}',null,false,'550');
-			$popup.one('example_object_save', function(event) {
-				event.stopPropagation();
-				document.location.reload();
-			});
-		})
-	});
+$(function() {
+	var tabOptions = Devblocks.getDefaultjQueryUiTabOptions();
+	tabOptions.active = Devblocks.getjQueryUiTabSelected('objectTabs');
+	
+	var tabs = $('#objectTabs').tabs(tabOptions);
+	
+	$('#btnExObProfileEdit').bind('click', function() {
+		$popup = genericAjaxPopup('peek','c=example.objects&a=showPeekPopup&id={$model->id}',null,false,'550');
+		$popup.one('example_object_save', function(event) {
+			event.stopPropagation();
+			document.location.reload();
+		});
+	})
+});
 </script>

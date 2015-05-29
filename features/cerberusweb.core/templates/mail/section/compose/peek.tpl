@@ -30,13 +30,11 @@
 					{/foreach}
 				</select>
 				<select class="ticket-peek-bucket-options" style="display:none;">
-					<option value="0" group_id="*">{'common.inbox'|devblocks_translate|capitalize}</option>
 					{foreach from=$buckets item=bucket key=bucket_id}
 					<option value="{$bucket_id}" group_id="{$bucket->group_id}">{$bucket->name}</option>
 					{/foreach}
 				</select>
 				<select name="bucket_id">
-					<option value="0">{'common.inbox'|devblocks_translate|capitalize}</option>
 					{foreach from=$buckets item=bucket key=bucket_id}
 						{if $bucket->group_id == $defaults.group_id}
 						<option value="{$bucket_id}" {if $defaults.bucket_id == $bucket_id}selected="selected"{/if}>{$bucket->name}</option>
@@ -89,8 +87,8 @@
 					<fieldset style="display:inline-block;">
 						<legend>Actions</legend>
 						
-						<button id="btnComposeSaveDraft{$random}" class="toolbar-item" type="button"><span class="cerb-sprite2 sprite-tick-circle"></span> Save Draft</button>
-						<button id="btnComposeInsertSig{$random}" class="toolbar-item" type="button" {if $pref_keyboard_shortcuts}title="(Ctrl+Shift+G)"{/if}"><span class="cerb-sprite sprite-document_edit"></span> Insert Signature</button>
+						<button id="btnComposeSaveDraft{$random}" class="toolbar-item" type="button"><span class="glyphicons glyphicons-circle-ok"></span> Save Draft</button>
+						<button id="btnComposeInsertSig{$random}" class="toolbar-item" type="button" {if $pref_keyboard_shortcuts}title="(Ctrl+Shift+G)"{/if}"><span class="glyphicons glyphicons-edit"></span> Insert Signature</button>
 					</fieldset>
 				
 					<fieldset style="display:inline-block;">
@@ -98,8 +96,8 @@
 						<div>
 							Insert: 
 							<input type="text" size="25" class="context-snippet autocomplete" {if $pref_keyboard_shortcuts}placeholder="(Ctrl+Shift+I)"{/if}>
-							<button type="button" onclick="ajax.chooserSnippet('snippets',$('#divComposeContent{$random}'), { '{CerberusContexts::CONTEXT_WORKER}':'{$active_worker->id}' });"><span class="cerb-sprite sprite-view"></span></button>
-							<button type="button" onclick="genericAjaxPopup('add_snippet','c=internal&a=showSnippetsPeek&id=0&owner_context={CerberusContexts::CONTEXT_WORKER}&owner_context_id={$active_worker->id}&context=',null,false,'550');"><span class="cerb-sprite2 sprite-plus-circle"></span></button>
+							<button type="button" onclick="ajax.chooserSnippet('snippets',$('#divComposeContent{$random}'), { '{CerberusContexts::CONTEXT_WORKER}':'{$active_worker->id}' });"><span class="glyphicons glyphicons-search"></span></button>
+							<button type="button" onclick="genericAjaxPopup('add_snippet','c=internal&a=showSnippetsPeek&id=0&owner_context={CerberusContexts::CONTEXT_WORKER}&owner_context_id={$active_worker->id}&context=',null,false,'550');"><span class="glyphicons glyphicons-circle-plus"></span></button>
 						</div>
 					</fieldset>
 				</div>
@@ -167,7 +165,7 @@
 				{'common.watchers'|devblocks_translate|capitalize}:
 			</td>
 			<td width="99%">
-				<button type="button" class="chooser_watcher"><span class="cerb-sprite sprite-view"></span></button>
+				<button type="button" class="chooser_watcher"><span class="glyphicons glyphicons-search"></span></button>
 				<ul class="chooser-container bubbles" style="display:block;">
 					{if $draft->params.add_watcher_ids && is_array($draft->params.add_watcher_ids)}
 					{foreach from=$draft->params.add_watcher_ids item=watcher_id}
@@ -201,7 +199,7 @@
 
 <fieldset class="peek">
 	<legend>{'common.attachments'|devblocks_translate|capitalize}</legend>
-	<button type="button" class="chooser_file"><span class="cerb-sprite2 sprite-plus-circle"></span></button>
+	<button type="button" class="chooser_file"><span class="glyphicons glyphicons-paperclip"></span></button>
 	<ul class="bubbles chooser-container">
 	{if $draft->params.file_ids}
 	{foreach from=$draft->params.file_ids item=file_id}
@@ -216,7 +214,7 @@
 
 <div class="status"></div>
 
-<button type="button" class="submit"><span class="cerb-sprite2 sprite-tick-circle"></span> {'display.ui.send_message'|devblocks_translate}</button>
+<button type="button" class="submit"><span class="glyphicons glyphicons-circle-ok" style="color:rgb(0,180,0);"></span> {'display.ui.send_message'|devblocks_translate}</button>
 </form>
 
 <script type="text/javascript">
@@ -257,8 +255,8 @@
 		var markitupReplyFunctions = {
 			switchToMarkdown: function(markItUp) { 
 				$content.markItUpRemove().markItUp(markitupParsedownSettings);
-				{if empty($mail_reply_textbox_size_inelastic)}
-				$content.elastic();
+				{if !empty($mail_reply_textbox_size_auto)}
+				$content.autosize();
 				{/if}
 				$content.closest('form').find('input:hidden[name=format]').val('parsedown');
 
@@ -284,8 +282,8 @@
 			
 			switchToPlaintext: function(markItUp) { 
 				$content.markItUpRemove().markItUp(markitupPlaintextSettings);
-				{if empty($mail_reply_textbox_size_inelastic)}
-				$content.elastic();
+				{if !empty($mail_reply_textbox_size_auto)}
+				$content.autosize();
 				{/if}
 				$content.closest('form').find('input:hidden[name=format]').val('');
 			}
@@ -364,7 +362,7 @@
 			markitupReplyFunctions.switchToMarkdown();
 			{/if}
 			
-			$content.elastic();
+			$content.autosize();
 			
 		} catch(e) {
 			if(window.console)
@@ -381,7 +379,8 @@
 		$content
 			.atwho({
 				at: '#attach ',
-				{literal}tpl: '<li data-value="#attach ${tag}\n">${name} <small style="margin-left:10px;">${tag}</small></li>',{/literal}
+				{literal}displayTpl: '<li>${name} <small style="margin-left:10px;">${tag}</small></li>',{/literal}
+				{literal}insertTpl: '#attach ${tag}\n',{/literal}
 				suffix: '',
 				data: atwho_file_bundles,
 				limit: 10
@@ -389,7 +388,7 @@
 			.atwho({
 				at: '#',
 				data: [
-					'attach',
+					'attach ',
 					'comment',
 					'comment @',
 					'cut\n',
@@ -411,8 +410,10 @@
 			})
 			.atwho({
 				at: '@',
-				{literal}tpl: '<li data-value="@${at_mention}">${name} <small style="margin-left:10px;">${title}</small></li>',{/literal}
+				{literal}displayTpl: '<li>${name} <small style="margin-left:10px;">${title}</small> <small style="margin-left:10px;">@${at_mention}</small></li>',{/literal}
+				{literal}insertTpl: '@${at_mention}',{/literal}
 				data: atwho_workers,
+				searchKey: '_index',
 				limit: 10
 			})
 			;
@@ -577,6 +578,8 @@
 				genericAjaxGet('',url,function(json) {
 					// If the content has placeholders, use that popup instead
 					if(json.has_custom_placeholders) {
+						$textarea.focus();
+						
 						var $popup_paste = genericAjaxPopup('snippet_paste', 'c=internal&a=snippetPlaceholders&id=' + encodeURIComponent(json.id) + '&context_id=' + encodeURIComponent(json.context_id), null, false, '600');
 					
 						$popup_paste.bind('snippet_paste', function(event) {
