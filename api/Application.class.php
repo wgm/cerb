@@ -46,8 +46,8 @@
  \* - Jeff Standen, Darren Sugita, Dan Hildebrandt
  *	 Webgroup Media LLC - Developers of Cerb
  */
-define("APP_BUILD", 2015052601);
-define("APP_VERSION", '7.0.0');
+define("APP_BUILD", 2015060401);
+define("APP_VERSION", '7.0.1');
 
 define("APP_MAIL_PATH", APP_STORAGE_PATH . '/mail/');
 
@@ -119,6 +119,7 @@ class CerberusApplication extends DevblocksApplication {
 		return $workers;
 	}
 	
+	// [TODO] Cache by worker? (esp responsibility + availability + workloads)
 	static function getWorkerPickerData($population, $sample, $group_id=0, $bucket_id=0) {
 		// Shared objects
 		
@@ -126,6 +127,7 @@ class CerberusApplication extends DevblocksApplication {
 		$group_responsibilities = DAO_Group::getResponsibilities($group_id);
 		$bucket_responsibilities = @$group_responsibilities[$bucket_id] ?: array();
 		$workloads = DAO_Worker::getWorkloads();
+		// [TODO] Do availability efficiently 
 		
 		// Workers
 		
@@ -2245,6 +2247,7 @@ class CerberusSettings {
 	const TICKET_MASK_FORMAT = 'ticket_mask_format';
 	const AUTHORIZED_IPS = 'authorized_ips';
 	const LICENSE = 'license_json';
+	const RELAY_DISABLE = 'relay_disable';
 	const RELAY_DISABLE_AUTH = 'relay_disable_auth';
 	const RELAY_SPOOF_FROM = 'relay_spoof_from';
 	const SESSION_LIFESPAN = 'session_lifespan';
@@ -2252,13 +2255,14 @@ class CerberusSettings {
 };
 
 class CerberusSettingsDefaults {
-	const HELPDESK_TITLE = 'Cerb - a fast and flexible web-based platform for business collaboration and automation.';
+	const HELPDESK_TITLE = 'Cerb - a fast and flexible web-based platform for enterprise collaboration, productivity, and automation.';
 	const ATTACHMENTS_ENABLED = 1;
 	const ATTACHMENTS_MAX_SIZE = 10;
 	const PARSER_AUTO_REQ = 0;
 	const PARSER_AUTO_REQ_EXCLUDE = '';
 	const TICKET_MASK_FORMAT = 'LLL-NNNNN-NNN';
 	const AUTHORIZED_IPS = "127.0.0.1\n::1\n";
+	const RELAY_DISABLE = 0;
 	const RELAY_DISABLE_AUTH = 0;
 	const RELAY_SPOOF_FROM = 0;
 	const SESSION_LIFESPAN = 0;
