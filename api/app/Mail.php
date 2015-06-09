@@ -49,10 +49,13 @@
 class CerberusMail {
 	private function __construct() {}
 	
-	static function parseRfcAddresses($string) {
+	static function parseRfcAddresses($string, $exclude_controlled_addresses=false) {
 		$results = array();
 		$string = rtrim(str_replace(';',',',$string),' ,');
 		@$parsed = imap_rfc822_parse_adrlist($string, 'localhost');
+		
+		$exclude_list = DevblocksPlatform::getPluginSetting('cerberusweb.core', CerberusSettings::PARSER_AUTO_REQ_EXCLUDE, CerberusSettingsDefaults::PARSER_AUTO_REQ_EXCLUDE);
+		@$excludes = DevblocksPlatform::parseCrlfString($exclude_list);
 		
 		if(is_array($parsed))
 		foreach($parsed as $parsed_addy) {
@@ -69,6 +72,27 @@ class CerberusMail {
 			if(0 == strcasecmp($host, '.syntax-error.'))
 				continue;
 			
+			// Are we excluding Cerb controlled addresses?
+			if($exclude_controlled_addresses) {
+				$check_address = $mailbox.'@'.$host;
+				
+				// If this is a local address and we're excluding them, skip it
+				if(DAO_AddressOutgoing::isLocalAddress($check_address))
+					continue;
+				
+				$skip = false;
+				
+				// Filter explicit excludes
+				if(is_array($excludes) && !empty($excludes))
+				foreach($excludes as $excl_pattern) {
+					if(@preg_match(DevblocksPlatform::parseStringAsRegExp($excl_pattern), $check_address))
+						$skip = true;
+				}
+				
+				if($skip)
+					continue;
+			}
+			
 			$results[$mailbox . '@' . $host] = array(
 				'full_email' => !empty($personal) ? imap_rfc822_write_address($mailbox, $host, $personal) : imap_rfc822_write_address($mailbox, $host, null),
 				'email' => $mailbox . '@' . $host,
@@ -83,7 +107,7 @@ class CerberusMail {
 		return $results;
 	}
 	
-	static function quickSend($to, $subject, $body, $from_addy=null, $from_personal=null, $custom_headers=array(), $format=null, $html_template_id=null) {
+	static function quickSend($to, $subject, $body, $from_addy=null, $from_personal=null, $custom_headers=array(), $format=null, $html_template_id=null, $file_ids=array()) {
 		try {
 			$mail_service = DevblocksPlatform::getMailService();
 			$mail = $mail_service->createMessage();
@@ -136,7 +160,25 @@ class CerberusMail {
 					$mail->setBody($body);
 					break;
 			}
-		
+			
+			// Attachments
+			
+			if(!empty($file_ids) && is_array($file_ids)) {
+				foreach($file_ids as $file_id) {
+					// Attach the file
+					if(false != ($attachment = DAO_Attachment::get($file_id))) {
+						if(false !== ($fp = DevblocksPlatform::getTempFile())) {
+							if(false !== $attachment->getFileContents($fp)) {
+								$attach = Swift_Attachment::fromPath(DevblocksPlatform::getTempFileInfo($fp), $attachment->mime_type);
+								$attach->setFilename($attachment->display_name);
+								$mail->attach($attach);
+								fclose($fp);
+							}
+						}
+					}
+				}
+			}
+			
 			// [TODO] Report when the message wasn't sent.
 			// [TODO] We can use '$failedRecipients' for this
 			if(!$mail_service->send($mail)) {

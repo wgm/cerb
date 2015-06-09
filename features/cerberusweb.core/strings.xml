@@ -2463,7 +2463,7 @@ For example: http://www.cerbweb.com/support/</seg>
 		</tu>
 		<tu tuid="display.reply.attachments_limit">
 			<tuv xml:lang="en_US">
-				<seg>(The maximum attachment size is %s)</seg>
+				<seg>(The maximum size of combined attachments is %s)</seg>
 			</tuv>
 		</tu>
 		<tu tuid="display.reply.email_templates">
@@ -2514,6 +2514,11 @@ For example: http://www.cerbweb.com/support/</seg>
 		<tu tuid="display.reply.no_quote">
 			<tuv xml:lang="en_US">
 				<seg>Reply without quoting</seg>
+			</tuv>
+		</tu>
+		<tu tuid="display.reply.only_these_recipients">
+			<tuv xml:lang="en_US">
+				<seg>Quote and reply to only these recipients</seg>
 			</tuv>
 		</tu>
 		<tu tuid="display.reply.quote">
