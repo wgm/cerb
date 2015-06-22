@@ -37,13 +37,13 @@ class WorkspaceWidgetDatasource_Worklist extends Extension_WorkspaceWidgetDataso
 		
 		switch($widget->extension_id) {
 			case 'core.workspace.widget.chart':
+			case 'core.workspace.widget.pie_chart':
 			case 'core.workspace.widget.scatterplot':
 				$tpl->display('devblocks:cerberusweb.core::internal/workspaces/widgets/datasources/config_worklist_series.tpl');
 				break;
 				
 			case 'core.workspace.widget.counter':
 			case 'core.workspace.widget.gauge':
-			case 'core.workspace.widget.pie_chart':
 				$tpl->display('devblocks:cerberusweb.core::internal/workspaces/widgets/datasources/config_worklist_metric.tpl');
 				break;
 		}
@@ -613,11 +613,166 @@ class WorkspaceWidgetDatasource_URL extends Extension_WorkspaceWidgetDatasource 
 			$cache->save($data, $cache_key, array(), $cache_mins*60);
 		}
 	
-		$content_type = $data['info']['content_type'];
+		switch($widget->extension_id) {
+			case 'core.workspace.widget.chart':
+			case 'core.workspace.widget.pie_chart':
+			case 'core.workspace.widget.scatterplot':
+				return $this->_getDataSeries($widget, $params, $data);
+				break;
+				
+			case 'core.workspace.widget.counter':
+			case 'core.workspace.widget.gauge':
+				return $this->_getDataSingle($widget, $params, $data);
+				break;
+		}
+	}
+	
+	private function _getDataSeries($widget, $params=array(), $data=null) {
+		if(!is_array($data) || !isset($data['info']) || !isset($data['raw_data']))
+			return;
+		
+		if(!isset($params['url_format']) || empty($params['url_format'])) {
+			$content_type = $data['info']['content_type'];
+		} else {
+			$content_type = $params['url_format'];
+		}
+			
 		$raw_data = $data['raw_data'];
 		
 		if(empty($raw_data) || empty($content_type)) {
-			// [TODO] Die...
+			return;
+		}
+		
+		$url_format = '';
+		
+		switch($content_type) {
+			case 'application/json':
+			case 'text/json':
+				$url_format = 'json';
+				break;
+				
+			case 'text/xml':
+				$url_format = 'xml';
+				break;
+				
+			case 'text/csv':
+				$url_format = 'csv';
+				break;
+				
+			default:
+				return;
+				break;
+		}
+		
+		switch($url_format) {
+			case 'json':
+				if(false != (@$json = json_decode($raw_data, true))) {
+					$results = array();
+					
+					if(is_array($json))
+					foreach($json as $object) {
+						if(!isset($object['value']))
+							continue;
+						
+						$result = array();
+						
+						if(isset($object['value']))
+							$result['metric_value'] = floatval($object['value']);
+		
+						if(isset($object['label']))
+							$result['metric_label'] = $object['label'];
+						
+						/*
+						if(isset($object['type']))
+							$result['metric_type'] = $object['type'];
+		
+						if(isset($object['prefix']))
+							$result['metric_prefix'] = $object['prefix'];
+						
+						if(isset($object['suffix']))
+							$result['metric_suffix'] = $object['suffix'];
+						*/
+						
+						$results[] = $result;
+					}
+					
+					$params['data'] = $results;
+				}
+				break;
+				
+			case 'xml':
+				if(null != ($xml = simplexml_load_string($raw_data))) {
+					$results = array();
+					
+					foreach($xml as $object) {
+						if(!isset($object->value))
+							continue;
+						
+						$result = array();
+						
+						if(isset($object->value))
+							$result['metric_value'] = floatval($object->value);
+		
+						if(isset($object->label))
+							$result['metric_label'] = (string)$object->label;
+						
+						/*
+						if(isset($object->type))
+							$result['metric_type'] = (string)$object->type;
+		
+						if(isset($object->prefix))
+							$result['metric_prefix'] = (string)$object->prefix;
+						
+						if(isset($object->suffix))
+							$result['metric_suffix'] = (string)$object->suffix;
+						*/
+						
+						$results[] = $result;
+					}
+					
+					$params['data'] = $results;
+				}
+				break;
+				
+			case 'csv':
+				$fp = DevblocksPlatform::getTempFile();
+				fwrite($fp, $raw_data, strlen($raw_data));
+				
+				$results = array();
+				
+				fseek($fp, 0);
+				
+				while(false != ($row = fgetcsv($fp, 0, ',', '"'))) {
+					if(is_array($row) && count($row) >= 1) {
+						$result['metric_value'] = floatval($row[0]);
+						$result['metric_label'] = @$row[1] ?: '';
+						$results[] = $result;
+					}
+				}
+				
+				fclose($fp);
+				
+				$params['data'] = $results;
+				break;
+		}
+		
+		return $params;
+	}
+	
+	private function _getDataSingle($widget, $params=array(), $data=null) {
+		if(!is_array($data) || !isset($data['info']) || !isset($data['raw_data']))
+			return;
+		
+		if(!isset($params['url_format']) || empty($params['url_format'])) {
+			$content_type = $data['info']['content_type'];
+		} else {
+			$content_type = $params['url_format'];
+		}
+			
+		$raw_data = $data['raw_data'];
+		
+		if(empty($raw_data) || empty($content_type)) {
+			return;
 		}
 		
 		$url_format = '';
@@ -637,12 +792,15 @@ class WorkspaceWidgetDatasource_URL extends Extension_WorkspaceWidgetDatasource 
 				$url_format = 'text';
 				break;
 		}
-	
+		
 		switch($url_format) {
 			case 'json':
 				if(false != (@$json = json_decode($raw_data, true))) {
 					if(isset($json['value']))
 						$params['metric_value'] = floatval($json['value']);
+
+					if(isset($json['label']))
+						$params['metric_label'] = $json['label'];
 	
 					if((isset($params['metric_type']) && !empty($params['metric_type'])) && isset($json['type']))
 						$params['metric_type'] = $json['type'];
