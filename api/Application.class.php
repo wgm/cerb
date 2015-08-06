@@ -46,8 +46,8 @@
  \* - Jeff Standen, Darren Sugita, Dan Hildebrandt
  *	 Webgroup Media LLC - Developers of Cerb
  */
-define("APP_BUILD", 2015072701);
-define("APP_VERSION", '7.0.3');
+define("APP_BUILD", 2015072901);
+define("APP_VERSION", '7.0.4');
 
 define("APP_MAIL_PATH", APP_STORAGE_PATH . '/mail/');
 
@@ -156,7 +156,7 @@ class CerberusApplication extends DevblocksApplication {
 		// Set sample
 		foreach($sample as &$worker) {
 			if(!isset($population[$worker->id]))
-				conntinue;
+				continue;
 			
 			$picker_workers['sample'][$worker->id] = $worker;
 			unset($population[$worker->id]);
@@ -1716,7 +1716,7 @@ class CerberusContexts {
 		}
 
 		// Forced actor
-		if(!empty($actor_context) && !empty($actor_context_id)) {
+		if(!empty($actor_context)) {
 			if(null != ($ctx = DevblocksPlatform::getExtension($actor_context, true))
 				&& $ctx instanceof Extension_DevblocksContext) {
 				$meta = $ctx->getMeta($actor_context_id);
