@@ -69,7 +69,7 @@ abstract class C4_AbstractView {
 		}
 	}
 	
-	protected function _getDataAsObjects($dao_class, $ids=null) {
+	protected function _getDataAsObjects($dao_class, $ids=null, &$total=null) {
 		if(is_null($ids)) {
 			if(!method_exists($dao_class,'search'))
 				return array();
@@ -83,15 +83,18 @@ abstract class C4_AbstractView {
 					$this->renderPage,
 					$this->renderSortBy,
 					$this->renderSortAsc,
-					false
+					true
 				)
 			);
 			
-			list($results, $count) = $data;
+			list($results, $total) = $data;
 			
 			$ids = array_keys($results);
+			
+		} else {
+			$total = count($ids);
 		}
-
+		
 		if(!is_array($ids) || empty($ids))
 			return array();
 
@@ -294,16 +297,80 @@ abstract class C4_AbstractView {
 	}
 	
 	function addParamsWithQuickSearch($query, $replace=true) {
-		$fields = $this->_getFieldsFromQuickSearchQuery($query);
-
-		$params = array();
+		if(!($this instanceof IAbstractView_QuickSearch))
+			return false;
 		
-		if($this instanceof IAbstractView_QuickSearch) {
-			$params = $this->getParamsFromQuickSearchFields($fields);
+		// Replace placeholders
+
+		$tpl_builder = DevblocksPlatform::getTemplateBuilder();
+		$dict = new DevblocksDictionaryDelegate($this->getPlaceholderValues());
+		$query = $tpl_builder->build($query, $dict);
+		
+		// Get fields
+		
+		$fields = $this->_getFieldsFromQuickSearchQuery($query);
+		
+		// Quick search multi-sorting
+		
+		if(isset($fields['sort']) && $fields['sort']) {
+			if(false != ($sort_results = $this->_getSortFromQuickSearchQuery($fields['sort'])) && is_array($sort_results)) {
+				if(isset($sort_results['sort_by']) && !empty($sort_results['sort_by']))
+					$this->renderSortBy = $sort_results['sort_by'][0];
+				if(isset($sort_results['sort_asc']) && !empty($sort_results['sort_asc']))
+				$this->renderSortAsc = $sort_results['sort_asc'][0];
+			}
+			unset($fields['sort']);
 		}
+		
+		// Build params
+		
+		$params = $this->getParamsFromQuickSearchFields($fields);
 		
 		$this->addParams($params, $replace);
 		$this->renderPage = 0;
+	}
+	
+	function _getSortFromQuickSearchQuery($sort_query) {
+		$sort_results = array(
+			'sort_by' => array(),
+			'sort_asc' => array(),
+		);
+		
+		if(empty($sort_query) || !($this instanceof IAbstractView_QuickSearch))
+			return false;
+		
+		if(false == ($search_fields = $this->getQuickSearchFields()))
+			return false;
+		
+		// Tokenize the sort string with spaces
+		$sort_fields = explode(' ', $sort_query);
+		
+		if(!is_array($sort_fields) || empty($sort_fields))
+			return false;
+			
+		foreach($sort_fields as $sort_field) {
+			$sort_asc = true;
+			
+			if('-' == substr($sort_field,0,1))
+				$sort_asc = false;
+			
+			$sort_field = ltrim($sort_field, '+-');
+			
+			@$search_field = $search_fields[$sort_field];
+			
+			if(!is_array($search_field) || empty($search_field))
+				continue;
+			
+			@$param_key = $search_field['options']['param_key'];
+			
+			if(empty($param_key))
+				continue;
+			
+			$sort_results['sort_by'][] = $param_key;
+			$sort_results['sort_asc'][] = $sort_asc;
+		}
+		
+		return $sort_results;
 	}
 	
 	function removeParam($key) {
@@ -441,17 +508,28 @@ abstract class C4_AbstractView {
 				if(!isset($meta['name']) || !isset($meta['permalink']))
 					return;
 				
-				if(!empty($meta['permalink'])) {
-					$string = sprintf("New %s created: <a href='%s'><b>%s</b></a>",
-						strtolower($ctx->manifest->name),
-						htmlspecialchars($meta['permalink'], ENT_QUOTES, LANG_CHARSET_CODE),
-						htmlspecialchars($meta['name'], ENT_QUOTES, LANG_CHARSET_CODE)
+				// Use abstract popups if we can
+				if($ctx instanceof IDevblocksContextPeek) {
+					$string = sprintf("New %s created: <a href='javascript:;' class='cerb-peek-trigger' data-context='%s' data-context-id='%d'><b>%s</b></a>",
+						DevblocksPlatform::strEscapeHtml(strtolower($ctx->manifest->name)),
+						DevblocksPlatform::strEscapeHtml($context),
+						DevblocksPlatform::strEscapeHtml($context_id),
+						DevblocksPlatform::strEscapeHtml($meta['name'])
 					);
 					
+				// Otherwise, try linking to profile pages
+				} elseif(!empty($meta['permalink'])) {
+					$string = sprintf("New %s created: <a href='%s'><b>%s</b></a>",
+						DevblocksPlatform::strEscapeHtml(strtolower($ctx->manifest->name)),
+						DevblocksPlatform::strEscapeHtml($meta['permalink']),
+						DevblocksPlatform::strEscapeHtml($meta['name'])
+					);
+					
+				// Lastly, just output some text
 				} else {
 					$string = sprintf("New %s created: <b>%s</b>",
-						strtolower($ctx->manifest->name),
-						htmlspecialchars($meta['name'], ENT_QUOTES, LANG_CHARSET_CODE)
+						DevblocksPlatform::strEscapeHtml(strtolower($ctx->manifest->name)),
+						DevblocksPlatform::strEscapeHtml($meta['name'])
 					);
 				}
 			}
@@ -556,7 +634,7 @@ abstract class C4_AbstractView {
 		
 		foreach($values as $v) {
 			$strings[] = sprintf("<b>%s</b>",
-				(isset($label_map[$v]) ? $label_map[$v] : $v)
+				DevblocksPlatform::strEscapeHtml((isset($label_map[$v]) ? $label_map[$v] : $v))
 			);
 		}
 		
@@ -572,7 +650,7 @@ abstract class C4_AbstractView {
 		
 		foreach($values as $v) {
 			$strings[] = sprintf("<b>%s</b>",
-				(!empty($v) ? $translate->_('common.yes') : $translate->_('common.no'))
+				DevblocksPlatform::strEscapeHtml((!empty($v) ? $translate->_('common.yes') : $translate->_('common.no')))
 			);
 		}
 		
@@ -589,10 +667,12 @@ abstract class C4_AbstractView {
 			$values = array($values);
 		
 		foreach($values as $worker_id) {
-			if(isset($workers[$worker_id])) {
-				$strings[] = '<b>'.$workers[$worker_id]->getName().'</b>';
+			if(!is_numeric($worker_id)) {
+				$strings[] = sprintf('<b>%s</b>', $worker_id);
+			} elseif(isset($workers[$worker_id])) {
+				$strings[] = sprintf('<b>%s</b>',DevblocksPlatform::strEscapeHtml($workers[$worker_id]->getName()));
 			} elseif (!empty($worker_id)) {
-				$strings[] = '<b>'.$worker_id.'</b>';
+				$strings[] = sprintf('<b>%d</b>',$worker_id);
 			} elseif (0 == strlen($worker_id)) {
 				$strings[] = '<b>blank</b>';
 			} elseif (empty($worker_id)) {
@@ -604,12 +684,12 @@ abstract class C4_AbstractView {
 		
 		if(count($strings) > 2) {
 			$list_of_strings = sprintf("any of <abbr style='font-weight:bold;' title='%s'>(%d people)</abbr>",
-				htmlentities(strip_tags($list_of_strings), ENT_QUOTES, LANG_CHARSET_CODE),
+				strip_tags($list_of_strings),
 				count($strings)
 			);
 		}
 		
-		echo sprintf("%s", $list_of_strings);
+		echo $list_of_strings;
 	}
 	
 	protected function _renderCriteriaHasFieldset($tpl, $context) {
@@ -638,9 +718,9 @@ abstract class C4_AbstractView {
 			
 			if(!empty($context_id)) {
 				$meta = $context_ext->getMeta($context_id);
-				$strings[] = sprintf("<b>%s</b> (%s)", htmlentities($meta['name'], ENT_QUOTES, LANG_CHARSET_CODE), htmlentities($context_ext->manifest->name, ENT_QUOTES, LANG_CHARSET_CODE));
+				$strings[] = sprintf("<b>%s</b> (%s)", DevblocksPlatform::strEscapeHtml($meta['name']),DevblocksPlatform::strEscapeHtml($context_ext->manifest->name));
 			} else {
-				$strings[] = sprintf("(<b>%s</b>)", htmlentities($context_ext->manifest->name, ENT_QUOTES, LANG_CHARSET_CODE));
+				$strings[] = sprintf("(<b>%s</b>)", DevblocksPlatform::strEscapeHtml($context_ext->manifest->name));
 			}
 		}
 		
@@ -663,7 +743,7 @@ abstract class C4_AbstractView {
 		
 		if(count($strings) > 2) {
 			$list_of_strings = sprintf("any of <abbr style='font-weight:bold;' title='%s'>(%d %s)</abbr>",
-				htmlentities(strip_tags($list_of_strings), ENT_QUOTES, LANG_CHARSET_CODE),
+				strip_tags($list_of_strings),
 				count($strings),
 				strtolower($label_plural)
 			);
@@ -672,25 +752,25 @@ abstract class C4_AbstractView {
 		switch($param->operator) {
 			case DevblocksSearchCriteria::OPER_IS_NULL:
 				echo sprintf("There are no <b>%s</b>",
-					strtolower($label_plural)
+					DevblocksPlatform::strEscapeHtml(strtolower($label_plural))
 				);
 				break;
 			case DevblocksSearchCriteria::OPER_IS_NOT_NULL:
 				echo sprintf("There are <b>%s</b>",
-					strtolower($label_plural)
+					DevblocksPlatform::strEscapeHtml(strtolower($label_plural))
 				);
 				break;
 			case DevblocksSearchCriteria::OPER_IN:
-				echo sprintf("%s is %s", $label_singular, $list_of_strings);
+				echo sprintf("%s is %s", DevblocksPlatform::strEscapeHtml($label_singular), $list_of_strings);
 				break;
 			case DevblocksSearchCriteria::OPER_IN_OR_NULL:
-				echo sprintf("%s is blank or %s", $label_singular, $list_of_strings);
+				echo sprintf("%s is blank or %s", DevblocksPlatform::strEscapeHtml($label_singular), $list_of_strings);
 				break;
 			case DevblocksSearchCriteria::OPER_NIN:
-				echo sprintf("%s is not %s", $label_singular, $list_of_strings);
+				echo sprintf("%s is not %s", DevblocksPlatform::strEscapeHtml($label_singular), $list_of_strings);
 				break;
 			case DevblocksSearchCriteria::OPER_NIN_OR_NULL:
-				echo sprintf("%s is blank or not %s", $label_singular, $list_of_strings);
+				echo sprintf("%s is blank or not %s", DevblocksPlatform::strEscapeHtml($label_singular), $list_of_strings);
 				break;
 		}
 	}
@@ -701,7 +781,7 @@ abstract class C4_AbstractView {
 		
 		foreach($param->value as $param_data) {
 			if(isset($custom_fieldsets[$param_data]))
-				$strings[] = '<b>' . $custom_fieldsets[$param_data]->name . '</b>';
+				$strings[] = sprintf('<b>%s</b>', DevblocksPlatform::strEscapeHtml($custom_fieldsets[$param_data]->name));
 		}
 		
 		$label_singular = 'Fieldset';
@@ -711,7 +791,7 @@ abstract class C4_AbstractView {
 		
 		if(count($strings) > 2) {
 			$list_of_strings = sprintf("any of <abbr style='font-weight:bold;' title='%s'>(%d %s)</abbr>",
-				htmlentities(strip_tags($list_of_strings), ENT_QUOTES, LANG_CHARSET_CODE),
+				strip_tags($list_of_strings),
 				count($strings),
 				strtolower($label_plural)
 			);
@@ -720,25 +800,25 @@ abstract class C4_AbstractView {
 		switch($param->operator) {
 			case DevblocksSearchCriteria::OPER_IS_NULL:
 				echo sprintf("There are no <b>%s</b>",
-					strtolower($label_plural)
+					DevblocksPlatform::strEscapeHtml(strtolower($label_plural))
 				);
 				break;
 			case DevblocksSearchCriteria::OPER_IS_NOT_NULL:
 				echo sprintf("There are <b>%s</b>",
-					strtolower($label_plural)
+					DevblocksPlatform::strEscapeHtml(strtolower($label_plural))
 				);
 				break;
 			case DevblocksSearchCriteria::OPER_IN:
-				echo sprintf("%s is %s", $label_singular, $list_of_strings);
+				echo sprintf("%s is %s", DevblocksPlatform::strEscapeHtml($label_singular), $list_of_strings);
 				break;
 			case DevblocksSearchCriteria::OPER_IN_OR_NULL:
-				echo sprintf("%s is blank or %s", $label_singular, $list_of_strings);
+				echo sprintf("%s is blank or %s", DevblocksPlatform::strEscapeHtml($label_singular), $list_of_strings);
 				break;
 			case DevblocksSearchCriteria::OPER_NIN:
-				echo sprintf("%s is not %s", $label_singular, $list_of_strings);
+				echo sprintf("%s is not %s", DevblocksPlatform::strEscapeHtml($label_singular), $list_of_strings);
 				break;
 			case DevblocksSearchCriteria::OPER_NIN_OR_NULL:
-				echo sprintf("%s is blank or not %s", $label_singular, $list_of_strings);
+				echo sprintf("%s is blank or not %s", DevblocksPlatform::strEscapeHtml($label_singular), $list_of_strings);
 				break;
 		}
 	}
@@ -753,11 +833,11 @@ abstract class C4_AbstractView {
 		
 		foreach($param->value as $worker_id) {
 			if(isset($workers[$worker_id]))
-				$strings[] = '<b>'.$workers[$worker_id]->getName().'</b>';
+				$strings[] = sprintf("<b>%s</b>",DevblocksPlatform::strEscapeHtml($workers[$worker_id]->getName()));
 			elseif(empty($worker_id)) {
 				$strings[] = '<b>nobody</b>';
 			} else {
-				$strings[] = '<b>'.$worker_id.'</b>';
+				$strings[] = sprintf("<b>%d</b>",$worker_id);
 			}
 		}
 		
@@ -780,7 +860,7 @@ abstract class C4_AbstractView {
 		
 		if(count($strings) > 2) {
 			$list_of_strings = sprintf("any of <abbr style='font-weight:bold;' title='%s'>(%d people)</abbr>",
-				htmlentities(strip_tags($list_of_strings), ENT_QUOTES, LANG_CHARSET_CODE),
+				strip_tags($list_of_strings),
 				count($strings)
 			);
 		}
@@ -788,25 +868,25 @@ abstract class C4_AbstractView {
 		switch($param->operator) {
 			case DevblocksSearchCriteria::OPER_IS_NULL:
 				echo sprintf("There are no <b>%s</b>",
-					$label_plural
+					DevblocksPlatform::strEscapeHtml($label_plural)
 				);
 				break;
 			case DevblocksSearchCriteria::OPER_IS_NOT_NULL:
 				echo sprintf("There are <b>%s</b>",
-					$label_plural
+					DevblocksPlatform::strEscapeHtml($label_plural)
 				);
 				break;
 			case DevblocksSearchCriteria::OPER_IN:
-				echo sprintf("%s is %s", $label_singular, $list_of_strings);
+				echo sprintf("%s is %s", DevblocksPlatform::strEscapeHtml($label_singular), $list_of_strings);
 				break;
 			case DevblocksSearchCriteria::OPER_IN_OR_NULL:
-				echo sprintf("%s is blank or %s", $label_singular, $list_of_strings);
+				echo sprintf("%s is blank or %s", DevblocksPlatform::strEscapeHtml($label_singular), $list_of_strings);
 				break;
 			case DevblocksSearchCriteria::OPER_NIN:
-				echo sprintf("%s is not %s", $label_singular, $list_of_strings);
+				echo sprintf("%s is not %s", DevblocksPlatform::strEscapeHtml($label_singular), $list_of_strings);
 				break;
 			case DevblocksSearchCriteria::OPER_NIN_OR_NULL:
-				echo sprintf("%s is blank or not %s", $label_singular, $list_of_strings);
+				echo sprintf("%s is blank or not %s", DevblocksPlatform::strEscapeHtml($label_singular), $list_of_strings);
 				break;
 		}
 	}
@@ -1092,10 +1172,11 @@ abstract class C4_AbstractView {
 		foreach($custom_fields as $cf_id => $cfield) {
 			$search_field_meta = array(
 				'type' => null,
+				'is_sortable' => true,
 				'options' => array(
+					'param_key' => sprintf("cf_%d", $cf_id),
 					'cf_ctx' => $cfield->context,
 					'cf_id' => $cf_id,
-					'param_key' => sprintf("cf_%d", $cf_id),
 				),
 			);
 			
@@ -1181,6 +1262,15 @@ abstract class C4_AbstractView {
 			}
 			
 			$fields[$field_key] = $search_field_meta;
+		}
+		
+		return $fields;
+	}
+	
+	protected function _setSortableQuickSearchFields($fields, $search_fields) {
+		foreach($fields as $k => &$field) {
+			@$param_key = $field['options']['param_key'];
+			$field['is_sortable'] = ($param_key && isset($search_fields[$param_key]) && $search_fields[$param_key]->is_sortable);
 		}
 		
 		return $fields;
@@ -1310,7 +1400,7 @@ abstract class C4_AbstractView {
 		// HTML escape
 		if(is_array($vals))
 		foreach($vals as $k => $v) {
-			$vals[$k] = htmlspecialchars($v, ENT_QUOTES, LANG_CHARSET_CODE);
+			$vals[$k] = DevblocksPlatform::strEscapeHtml($v);
 		}
 		
 		echo implode($implode_token, $vals);
@@ -2723,7 +2813,14 @@ class C4_AbstractViewLoader {
 		}
 
 		$active_worker = CerberusApplication::getActiveWorker();
-		$view->setPlaceholderValues(array('current_worker_id' => !empty($active_worker) ? $active_worker->id : 0));
+		
+		$labels = array();
+		$values = array();
+		
+		CerberusContexts::getContext(CerberusContexts::CONTEXT_WORKER, $active_worker, $worker_labels, $worker_values, null, true, true);
+		CerberusContexts::merge('current_worker_', null, $worker_labels, $worker_values, $labels, $values);
+		
+		$view->setPlaceholderValues($values);
 		
 		$view->_init_checksum = sha1(serialize($view));
 		
@@ -2731,7 +2828,7 @@ class C4_AbstractViewLoader {
 	}
 };
 
-class DAO_WorkerViewModel {
+class DAO_WorkerViewModel extends Cerb_ORMHelper {
 	/**
 	 *
 	 * @param string $where
@@ -2843,7 +2940,7 @@ class DAO_WorkerViewModel {
 		
 		if(is_array($params_data))
 		foreach($params_data as $key => $data) {
-			if(is_numeric(key($data))) {
+			if(is_array($data) && is_numeric(key($data))) {
 				$params[$key] = self::_recurseParam($data);
 			} else {
 				$params[$key] = new DevblocksSearchCriteria($data['field'], $data['operator'], $data['value']);

@@ -1,169 +1,123 @@
-<div id="peekTabs">
+{$div_id = "peek{uniqid()}"}
 
-<ul>
-	<li><a href="#orgPeekProps">{'common.properties'|devblocks_translate|capitalize}</a></li>
-	{if !empty($contact)}
-		<li><a href="{devblocks_url}ajax.php?c=contacts&a=showTabPeople&org={$contact->id}{/devblocks_url}">{'addy_book.org.tabs.people'|devblocks_translate} <div class="tab-badge">{$counts.people}</div></a></li>
-		<li><a href="{devblocks_url}ajax.php?c=internal&a=showTabContextComments&context={CerberusContexts::CONTEXT_ORG}&id={$contact->id}{/devblocks_url}">{'common.comments'|devblocks_translate|capitalize}</a></li>
-	{/if}
-</ul>
+{capture name="mailing_address"}
+{if $dict->street}<div>{$dict->street|escape:'html'|nl2br nofilter}</div>{/if}
+<div>
+{if $dict->city}{$dict->city}{/if}{if $dict->city && $dict->province}, {/if}
+{if $dict->province}{$dict->province}{/if} {if $dict->postal}{$dict->postal}{/if}
+</div>
+{if $dict->country}<div>{$dict->country}</div>{/if}
+{/capture}
 
-<div id="orgPeekProps">
-	<form action="{devblocks_url}{/devblocks_url}" method="POST" id="formOrgPeek" name="formOrgPeek" onsubmit="return false;">
-	<input type="hidden" name="c" value="contacts">
-	<input type="hidden" name="a" value="saveOrgPeek">
-	<input type="hidden" name="view_id" value="{$view_id}">
-	<input type="hidden" name="id" value="{$contact->id}">
-	{if !empty($link_context)}
-	<input type="hidden" name="link_context" value="{$link_context}">
-	<input type="hidden" name="link_context_id" value="{$link_context_id}">
-	{/if}
-	<input type="hidden" name="do_delete" value="0">
-	<input type="hidden" name="_csrf_token" value="{$session.csrf_token}">
-	
-	<fieldset class="peek">
-		<legend>{'common.properties'|devblocks_translate}</legend>
-		
-		<table cellpadding="0" cellspacing="2" border="0" width="98%">
-			<tr>
-				<td width="0%" nowrap="nowrap" align="right">{'common.name'|devblocks_translate|capitalize}: </td>
-				<td width="100%"><input type="text" name="org_name" value="{$contact->name}" style="width:98%;" class="required"></td>
-			</tr>
-			<tr>
-				<td align="right" valign="top">{'contact_org.street'|devblocks_translate|capitalize}: </td>
-				<td><textarea name="street" style="width:98%;height:50px;">{$contact->street}</textarea></td>
-			</tr>
-			<tr>
-				<td align="right">{'contact_org.city'|devblocks_translate|capitalize}: </td>
-				<td><input type="text" name="city" value="{$contact->city}" style="width:98%;"></td>
-			</tr>
-			<tr>
-				<td align="right">{'contact_org.province'|devblocks_translate|capitalize}.: </td>
-				<td><input type="text" name="province" value="{$contact->province}" style="width:98%;"></td>
-			</tr>
-			<tr>
-				<td align="right">{'contact_org.postal'|devblocks_translate|capitalize}: </td>
-				<td><input type="text" name="postal" value="{$contact->postal}" style="width:98%;"></td>
-			</tr>
-			<tr>
-				<td align="right">{'contact_org.country'|devblocks_translate|capitalize}: </td>
-				<td>
-					<input type="text" name="country" id="org_country_input" value="{$contact->country}" style="width:98%;">
-				</td>
-			</tr>
-			<tr>
-				<td align="right">{'contact_org.phone'|devblocks_translate|capitalize}: </td>
-				<td><input type="text" name="phone" value="{$contact->phone}" style="width:98%;"></td>
-			</tr>
-			<tr>
-				<td align="right">{if !empty($contact->website)}<a href="{$contact->website}" target="_blank">{'contact_org.website'|devblocks_translate|capitalize}</a>{else}{'contact_org.website'|devblocks_translate|capitalize}{/if}: </td>
-				<td><input type="text" name="website" value="{$contact->website}" style="width:98%;" class="url"></td>
-			</tr>
-			
-			{* Watchers *}
-			<tr>
-				<td width="0%" nowrap="nowrap" valign="top" align="right">{'common.watchers'|devblocks_translate|capitalize}: </td>
-				<td width="100%">
-					{if empty($contact->id)}
-						<button type="button" class="chooser_watcher"><span class="glyphicons glyphicons-search"></span></button>
-						<ul class="chooser-container bubbles" style="display:block;"></ul>
-					{else}
-						{$object_watchers = DAO_ContextLink::getContextLinks(CerberusContexts::CONTEXT_ORG, array($contact->id), CerberusContexts::CONTEXT_WORKER)}
-						{include file="devblocks:cerberusweb.core::internal/watchers/context_follow_button.tpl" context=CerberusContexts::CONTEXT_ORG context_id=$contact->id full=true}
-					{/if}
-				</td>
-			</tr>
-		</table>
-	</fieldset>
-	
-	{if !empty($custom_fields)}
-	<fieldset class="peek">
-		<legend>{'common.custom_fields'|devblocks_translate}</legend>
-		{include file="devblocks:cerberusweb.core::internal/custom_fields/bulk/form.tpl" bulk=false}
-	</fieldset>
-	{/if}
-	
-	{include file="devblocks:cerberusweb.core::internal/custom_fieldsets/peek_custom_fieldsets.tpl" context=CerberusContexts::CONTEXT_ORG context_id=$contact->id}
-	
-	{* Comments *}
-	{include file="devblocks:cerberusweb.core::internal/peek/peek_comments_pager.tpl" comments=$comments}
-	
-	<fieldset class="peek">
-		<legend>{'common.comment'|devblocks_translate|capitalize}</legend>
-		<textarea name="comment" rows="2" cols="45" style="width:98%;" placeholder="{'comment.notify.at_mention'|devblocks_translate}"></textarea>
-	</fieldset>
-	
-	{if $active_worker->hasPriv('core.addybook.org.actions.update')}
-		<button type="button" onclick="if($('#formOrgPeek').validate().form()) { genericAjaxPopupPostCloseReloadView(null,'formOrgPeek', '{$view_id}', false, 'org_save'); } "><span class="glyphicons glyphicons-circle-ok" style="color:rgb(0,180,0);"></span> {'common.save_changes'|devblocks_translate|capitalize}</button>
-		{if $active_worker->hasPriv('core.addybook.org.actions.delete') && !empty($contact->id)}<button type="button" onclick="if(confirm('Are you sure you want to permanently delete this organization?')) { $('#formOrgPeek input[name=do_delete]').val('1'); genericAjaxPopupPostCloseReloadView(null,'formOrgPeek','{$view_id}',false,'org_delete'); } "><span class="glyphicons glyphicons-circle-remove" style="color:rgb(200,0,0);"></span> {'common.delete'|devblocks_translate|capitalize}</button>{/if}
-	{else}
-		<div class="error">{'error.core.no_acl.edit'|devblocks_translate}</div>
-	{/if}
-
-	{if !empty($contact->id)}
-	<div style="float:right;">
-		<a href="{devblocks_url}&c=profiles&type=org&id={$contact->id}-{$contact->name|devblocks_permalink}{/devblocks_url}">{'addy_book.peek.view_full'|devblocks_translate}</a>
+<div id="{$div_id}">
+	<div style="float:left;margin-right:10px;">
+		<img src="{devblocks_url}c=avatars&context=org&context_id={$dict->id}{/devblocks_url}?v={$dict->updated}" style="height:75px;width:75px;border-radius:5px;vertical-align:middle;">
 	</div>
-	{/if}
-	</form>
-</div><!-- props tab -->
+	
+	<div style="float:left;">
+		<h1 style="color:inherit;">
+			{$dict->name}
+		</h1>
+		
+		{if $smarty.capture.mailing_address}
+		<div>
+		{$smarty.capture.mailing_address nofilter}
+		</div>
+		{/if}
+		
+		<div style="margin-top:5px;">
+			{if !empty($dict->id)}
+				{$object_watchers = DAO_ContextLink::getContextLinks(CerberusContexts::CONTEXT_ORG, array($dict->id), CerberusContexts::CONTEXT_WORKER)}
+				{include file="devblocks:cerberusweb.core::internal/watchers/context_follow_button.tpl" context=CerberusContexts::CONTEXT_ORG context_id=$dict->id full=true}
+			{/if}
+			
+			<button type="button" class="cerb-peek-edit" data-context="{CerberusContexts::CONTEXT_ORG}" data-context-id="{$dict->id}" data-edit="true"><span class="glyphicons glyphicons-cogwheel"></span> {'common.edit'|devblocks_translate|capitalize}</button>
+			{if $dict->id}<button type="button" class="cerb-peek-profile"><span class="glyphicons glyphicons-nameplate"></span> {'common.profile'|devblocks_translate|capitalize}</button>{/if}
+		</div>
+	</div>
+</div>
 
-</div><!-- tabs -->
+<div style="clear:both;padding-top:10px;"></div>
+
+<fieldset class="peek">
+	<legend>{'common.properties'|devblocks_translate|capitalize}</legend>
+	
+	<div class="cerb-properties-grid" data-column-width="100">
+	
+		{$labels = $dict->_labels}
+		{$types = $dict->_types}
+		{foreach from=$properties item=k name=props}
+			{if $dict->$k}
+			<div>
+			{if $k == ''}
+			{else}
+				{include file="devblocks:cerberusweb.core::internal/peek/peek_property_grid_cell.tpl" dict=$dict k=$k labels=$labels types=$types}
+			{/if}
+			</div>
+			{/if}
+		{/foreach}
+		
+	</div>
+	
+	<div style="clear:both;"></div>
+	
+	<div style="margin-top:5px;">
+		<button type="button" class="cerb-search-trigger" data-context="{CerberusContexts::CONTEXT_CONTACT}" data-query="org.id:{$dict->id}"><div class="badge-count">{$activity_counts.contacts|default:0}</div> {'common.contacts'|devblocks_translate|capitalize}</button>
+		<button type="button" class="cerb-search-trigger" data-context="{CerberusContexts::CONTEXT_ADDRESS}" data-query="org.id:{$dict->id}"><div class="badge-count">{$activity_counts.emails|default:0}</div> {'common.email_addresses'|devblocks_translate|capitalize}</button>
+	</div>
+</fieldset>
+
+<fieldset class="peek">
+	<legend>{'common.tickets'|devblocks_translate|capitalize}</legend>
+
+	<div>
+		<button type="button" class="cerb-search-trigger" data-context="{CerberusContexts::CONTEXT_TICKET}" data-query="org.id:{$dict->id} status:o,w,c"><div class="badge-count">{$activity_counts.tickets.total|default:0}</div> {'common.all'|devblocks_translate|capitalize}</button>
+		<button type="button" class="cerb-search-trigger" data-context="{CerberusContexts::CONTEXT_TICKET}" data-query="org.id:{$dict->id} status:o"><div class="badge-count">{$activity_counts.tickets.open|default:0}</div> {'status.open'|devblocks_translate|capitalize}</button>
+		<button type="button" class="cerb-search-trigger" data-context="{CerberusContexts::CONTEXT_TICKET}" data-query="org.id:{$dict->id} status:w"><div class="badge-count">{$activity_counts.tickets.waiting|default:0}</div> {'status.waiting'|devblocks_translate|capitalize}</button>
+		<button type="button" class="cerb-search-trigger" data-context="{CerberusContexts::CONTEXT_TICKET}" data-query="org.id:{$dict->id} status:c"><div class="badge-count">{$activity_counts.tickets.closed|default:0}</div> {'status.closed'|devblocks_translate|capitalize}</button>
+	</div>
+</fieldset>
+
+{include file="devblocks:cerberusweb.core::internal/peek/peek_links.tpl" links=$links}
+
 
 <script type="text/javascript">
 $(function() {
-	var $popup = genericAjaxPopupFind('#orgPeekProps');
+	var $div = $('#{$div_id}');
+	var $popup = genericAjaxPopupFind($div);
+	var $layer = $popup.attr('data-layer');
 
 	$popup.one('popup_open',function(event,ui) {
-		var $textarea = $(this).find('textarea[name=comment]');
+		$popup.dialog('option','title', "{'common.organization'|devblocks_translate|capitalize|escape:'javascript' nofilter}");
 		
-		// Title
+		// Properties grid
+		$popup.find('div.cerb-properties-grid').cerbPropertyGrid();
 		
-		$(this).dialog('option','title', "{'contact_org.name'|devblocks_translate|capitalize|escape:'javascript' nofilter}");
-		
-		// Tabs
-		
-		$("#peekTabs").tabs();
-
-		// Form hints
-		
-		$textarea
-			.focusin(function() {
-				$(this).siblings('div.cerb-form-hint').fadeIn();
+		// Edit button
+		$popup.find('button.cerb-peek-edit')
+			.cerbPeekTrigger({ 'view_id': '{$view_id}' })
+			.on('cerb-peek-saved', function(e) {
+				genericAjaxPopup($layer,'c=internal&a=showPeekPopup&context={CerberusContexts::CONTEXT_ORG}&context_id={$dict->id}&view_id={$view_id}','reuse',false,'50%');
 			})
-			.focusout(function() {
-				$(this).siblings('div.cerb-form-hint').fadeOut();
+			.on('cerb-peek-deleted', function(e) {
+				genericAjaxPopupClose($layer);
 			})
 			;
 		
-		// @mentions
+		// Searches
+		$popup.find('button.cerb-search-trigger')
+			.cerbSearchTrigger()
+			;
 		
-		var atwho_workers = {CerberusApplication::getAtMentionsWorkerDictionaryJson() nofilter};
-
-		$textarea.atwho({
-			at: '@',
-			{literal}displayTpl: '<li>${name} <small style="margin-left:10px;">${title}</small> <small style="margin-left:10px;">@${at_mention}</small></li>',{/literal}
-			{literal}insertTpl: '@${at_mention}',{/literal}
-			data: atwho_workers,
-			searchKey: '_index',
-			limit: 10
+		// View profile
+		$popup.find('.cerb-peek-profile').click(function(e) {
+			if(e.metaKey) {
+				window.open('{devblocks_url}c=profiles&type=org&id={$dict->id}-{$dict->name|devblocks_permalink}{/devblocks_url}', '_blank');
+				
+			} else {
+				document.location='{devblocks_url}c=profiles&type=org&id={$dict->id}-{$dict->name|devblocks_permalink}{/devblocks_url}';
+			}
 		});
-		
-		// Worker autocomplete
-		
-		$(this).find('button.chooser_watcher').each(function() {
-			ajax.chooser(this,'cerberusweb.contexts.worker','add_watcher_ids', { autocomplete:true });
-		});
-		
-		// Country autocomplete
-		
-		ajax.countryAutoComplete('#org_country_input');
-		
-		// Form validation
-		
-		$("#formOrgPeek").validate();
-
-		$('#formOrgPeek :input:text:first').focus();
 	});
 });
 </script>

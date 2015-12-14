@@ -3,7 +3,7 @@
 {if !empty($params)}
 {foreach from=$params item=param key=param_key name=params}
 	{if !$nested && !$readonly}<label><input type="checkbox" name="field_deletes[]" value="{$param_key}"> {/if}
-	{if !$nested && $readonly}<li style="position:relative;">{/if}
+	{if !$nested && $readonly}<li class="bubble-blue" style="position:relative;">{/if}
 		
 	{if '*_' == substr($param_key,0,2)}
 		{$view->renderVirtualCriteria($param)}
@@ -24,7 +24,7 @@
 			{/if}
 		{/foreach}
 	{else}
-		{assign var=field value=$param->field} 
+		{$field = $param->field} 
 		{$view_filters.$field->db_label|capitalize}
 		{* [TODO] Add operator labels to platform *}
 		{if $param->operator=='='}

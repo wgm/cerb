@@ -38,7 +38,7 @@
 	{foreach from=$filter_group_ids item=filter_group_id}
 	{$filter_group = $groups.{$filter_group_id}}
 	{if !empty($filter_group)}
-	<li>{$filter_group->name}<input type="hidden" name="group_id[]" value="{$filter_group->id}"><a href="javascript:;" onclick="$(this).parent().remove();"><span class="ui-icon ui-icon-trash" style="display:inline-block;width:14px;height:14px;"></span></a></li>
+	<li>{$filter_group->name}<input type="hidden" name="group_id[]" value="{$filter_group->id}"><a href="javascript:;" onclick="$(this).parent().remove();"><span class="glyphicons glyphicons-circle-remove"></span></a></li>
 	{/if}
 	{/foreach}
 </li>
@@ -196,11 +196,12 @@ $('#reportChart').bind('jqplotPostDraw',function(event, plot) {
 	$legend.html('');
 	len = plot.series.length;
 	for(series in plot.series) {
-		if(navigator.appName == 'Microsoft Internet Explorer') {
-			$cell = $('<span style="margin-right:5px;display:inline-block;"><span style="background-color:'+plot.series[series].color.replace('rgba','rgb').replace(',0.8','')+';display:inline-block;padding:0px;margin:2px;width:16px;height:16px;">&nbsp;</span>'+plot.series[series].label+'</span>');
-		} else {
-			$cell = $('<span style="margin-right:5px;display:inline-block;"><span style="background-color:'+plot.series[series].color+';display:inline-block;padding:0px;margin:2px;width:16px;height:16px;">&nbsp;</span>'+plot.series[series].label+'</span>');
-		}
+		$cell = $('<span style="margin-right:5px;display:inline-block;"/>')
+			.html(plot.series[series].label)
+			.prepend($('<span style="display:inline-block;padding:0px;margin:2px;width:16px;height:16px;"/>')
+				.css('background-color', plot.series[series].color)
+				.append('&nbsp;')
+			);
 		$legend.append($cell);
 	}
 });

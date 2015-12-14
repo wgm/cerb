@@ -33,14 +33,16 @@
 	
 	<input type="text" size="64" class="input_search filter" style="width:90%;">
 
+
 	<ul class="cerb-popupmenu" id="{$menu_divid}" style="display:block;margin-bottom:5px;max-height:200px;overflow-x:hidden;overflow-y:auto;">
 		{foreach from=$workers_with_relays item=worker}
 			{if !empty($worker->relay_emails)}
+				{$object_addys = DAO_Address::getIds($worker->relay_emails)}
 			
-				{foreach from=$worker->relay_emails item=email}
-				<li email="{$email}" label="{$email}">
+				{foreach from=$object_addys item=addy}
+				<li email="{$addy->email}" label="{$addy->email}">
 					<div class="item">
-						<a href="javascript:;">{$email}</a><br>
+						<a href="javascript:;">{$addy->email}</a><br>
 						<div style="margin-left:10px;">{$worker->getName()}</div>
 					</div>
 				</li>
@@ -135,10 +137,9 @@ $(function() {
 			if($bubbles.find('li input:hidden[value="'+email+'"]').length > 0)
 				return;
 			
-			var $bubble = $('<li></li>');
-			$bubble.append($('<input type="hidden" name="emails[]" value="'+email+'">'));
-			$bubble.append(label);
-			$bubble.append('<a href="javascript:;" onclick="$li=$(this).closest(\'li\');$li.remove();"><span class="ui-icon ui-icon-trash" style="display:inline-block;width:14px;height:14px;"></span></a>');
+			var $bubble = $('<li/>').text(label);
+			$bubble.append($('<input type="hidden">').attr('name','emails[]').attr('value',email));
+			$bubble.append('<a href="javascript:;" onclick="$li=$(this).closest(\'li\');$li.remove();"><span class="glyphicons glyphicons-circle-remove"></span></a>');
 			
 			$bubbles.append($bubble);
 		});

@@ -46,8 +46,8 @@
  \* - Jeff Standen, Darren Sugita, Dan Hildebrandt
  *	 Webgroup Media LLC - Developers of Cerb
  */
-define("APP_BUILD", 2015111601);
-define("APP_VERSION", '7.0.7');
+define("APP_BUILD", 2015121401);
+define("APP_VERSION", '7.1.0');
 
 define("APP_MAIL_PATH", APP_STORAGE_PATH . '/mail/');
 
@@ -205,7 +205,7 @@ class CerberusApplication extends DevblocksApplication {
 			$list[] = array(
 				'id' => $worker->id,
 				'name' => $worker->getName(),
-				'email' => $worker->email,
+				'email' => $worker->getEmailString(),
 				'title' => $worker->title,
 				'at_mention' => $worker->at_mention_name,
 				'_index' => $worker->getName() . ' ' . $worker->at_mention_name,
@@ -213,27 +213,6 @@ class CerberusApplication extends DevblocksApplication {
 		}
 
 		return json_encode($list);
-	}
-
-	static function getGravatarDefaultIcon() {
-		// Cache the result for the request
-		static $url = null;
-		
-		if(!is_null($url))
-			return $url;
-		
-		// First, check the Gravatar plugin's settings, if defined
-		if(DevblocksPlatform::isPluginEnabled('cerberusweb.gravatar')) {
-			$url = DevblocksPlatform::getPluginSetting('cerberusweb.gravatar', 'default_icon_url');
-			
-			if(!empty($url))
-				return $url;
-		}
-		
-		// Otherwise, default to the built-in icon
-		$url_writer = DevblocksPlatform::getUrlService();
-		$url = $url_writer->write('c=resource&p=cerberusweb.core&f=images/wgm/cerb_convo_bubbles_bw.png', true);
-		return $url;
 	}
 
 	/**
@@ -440,6 +419,7 @@ class CerberusApplication extends DevblocksApplication {
 		DAO_Platform::maint();
 
 		// Download updated plugins from repository
+		// [TODO] This causes problems on an intranet
 		if(class_exists('DAO_PluginLibrary'))
 			DAO_PluginLibrary::downloadUpdatedPluginsFromRepository();
 
@@ -902,7 +882,8 @@ class CerberusContexts {
 	const CONTEXT_CALENDAR_EVENT_RECURRING = 'cerberusweb.contexts.calendar_event.recurring';
 	const CONTEXT_CALL = 'cerberusweb.contexts.call';
 	const CONTEXT_COMMENT = 'cerberusweb.contexts.comment';
-	const CONTEXT_CONTACT_PERSON = 'cerberusweb.contexts.contact_person';
+	const CONTEXT_CONTACT = 'cerberusweb.contexts.contact';
+	const CONTEXT_CONTEXT_AVATAR = 'cerberusweb.contexts.context.avatar';
 	const CONTEXT_CUSTOM_FIELD = 'cerberusweb.contexts.custom_field';
 	const CONTEXT_CUSTOM_FIELDSET = 'cerberusweb.contexts.custom_fieldset';
 	const CONTEXT_DOMAIN = 'cerberusweb.contexts.datacenter.domain';
@@ -914,6 +895,7 @@ class CerberusContexts {
 	const CONTEXT_GROUP = 'cerberusweb.contexts.group';
 	const CONTEXT_KB_ARTICLE = 'cerberusweb.contexts.kb_article';
 	const CONTEXT_KB_CATEGORY = 'cerberusweb.contexts.kb_category';
+	const CONTEXT_MAIL_TRANSPORT = 'cerberusweb.contexts.mail.transport';
 	const CONTEXT_MAILBOX = 'cerberusweb.contexts.mailbox';
 	const CONTEXT_MAIL_HTML_TEMPLATE = 'cerberusweb.contexts.mail.html_template';
 	const CONTEXT_MAILING_LIST = 'cerberusweb.contexts.mailing_list';
@@ -1597,7 +1579,7 @@ class CerberusContexts {
 				// HTML formatting and incorporating URLs
 				if(is_array($vars))
 				foreach($vars as $k => $v) {
-					$vars[$k] = htmlentities($v, ENT_QUOTES, LANG_CHARSET_CODE);
+					$vars[$k] = DevblocksPlatform::strEscapeHtml($v);
 				}
 
 				if(isset($entry['urls']))
@@ -1705,16 +1687,9 @@ class CerberusContexts {
 			$context_id = $context_pair['context_id'];
 		}
 	}
-
-	static public function logActivity($activity_point, $target_context, $target_context_id, &$entry_array, $actor_context=null, $actor_context_id=null, $also_notify_worker_ids=array(), $also_notify_ignore_self=false) {
-		// Target meta
-		if(!isset($target_meta)) {
-			if(null != ($target_ctx = DevblocksPlatform::getExtension($target_context, true))
-				&& $target_ctx instanceof Extension_DevblocksContext) {
-					$target_meta = $target_ctx->getMeta($target_context_id);
-			}
-		}
-
+	
+	static public function getCurrentActor($actor_context=null, $actor_context_id=null) {
+		
 		// Forced actor
 		if(!empty($actor_context)) {
 			if(null != ($ctx = DevblocksPlatform::getExtension($actor_context, true))
@@ -1722,6 +1697,10 @@ class CerberusContexts {
 				$meta = $ctx->getMeta($actor_context_id);
 				$actor_name = $meta['name'];
 				$actor_url = sprintf("ctx://%s:%d", $actor_context, $actor_context_id);
+				
+			} else {
+				$actor_context = null;
+				$actor_context_id = null;
 			}
 		}
 
@@ -1777,20 +1756,41 @@ class CerberusContexts {
 
 		if(empty($actor_context)) {
 			$actor_context = CerberusContexts::CONTEXT_APPLICATION;
+			$actor_context_id = 0;
 			$actor_name = 'Cerb';
+			$actor_url = null;
+		}
+		
+		return array(
+			'context' => $actor_context,
+			'context_id' => $actor_context_id,
+			'name' => $actor_name,
+			'url' => $actor_url,
+		);
+	}
+
+	static public function logActivity($activity_point, $target_context, $target_context_id, &$entry_array, $actor_context=null, $actor_context_id=null, $also_notify_worker_ids=array(), $also_notify_ignore_self=false) {
+		// Target meta
+		if(!isset($target_meta)) {
+			if(null != ($target_ctx = DevblocksPlatform::getExtension($target_context, true))
+				&& $target_ctx instanceof Extension_DevblocksContext) {
+					$target_meta = $target_ctx->getMeta($target_context_id);
+			}
 		}
 
-		$entry_array['variables']['actor'] = $actor_name;
+		$actor = self::getCurrentActor($actor_context, $actor_context_id);
 
-		if(!empty($actor_url))
-			$entry_array['urls']['actor'] = $actor_url;
+		$entry_array['variables']['actor'] = $actor['name'];
+
+		if(isset($actor['url']) && !empty($actor['url']))
+			$entry_array['urls']['actor'] = $actor['url'];
 
 		// Activity Log
 		$activity_entry_id = DAO_ContextActivityLog::create(array(
 			DAO_ContextActivityLog::ACTIVITY_POINT => $activity_point,
 			DAO_ContextActivityLog::CREATED => time(),
-			DAO_ContextActivityLog::ACTOR_CONTEXT => $actor_context,
-			DAO_ContextActivityLog::ACTOR_CONTEXT_ID =>$actor_context_id,
+			DAO_ContextActivityLog::ACTOR_CONTEXT => $actor['context'],
+			DAO_ContextActivityLog::ACTOR_CONTEXT_ID => $actor['context_id'],
 			DAO_ContextActivityLog::TARGET_CONTEXT => $target_context,
 			DAO_ContextActivityLog::TARGET_CONTEXT_ID => $target_context_id,
 			DAO_ContextActivityLog::ENTRY_JSON => json_encode($entry_array),
@@ -1828,10 +1828,10 @@ class CerberusContexts {
 			}
 
 			// Merge in watchers of the actor (if not a worker)
-			if(CerberusContexts::CONTEXT_WORKER != $actor_context) {
+			if(CerberusContexts::CONTEXT_WORKER != $actor['context']) {
 				$watchers = array_merge(
 					$watchers,
-					array_keys(CerberusContexts::getWatchers($actor_context, $actor_context_id))
+					array_keys(CerberusContexts::getWatchers($actor['context'], $actor['context_id']))
 				);
 			}
 
@@ -1890,8 +1890,8 @@ class CerberusContexts {
 					// If not inside a VA
 					if(0 == EventListener_Triggers::getDepth()) {
 						// Skip a watcher if they are the actor
-						if($actor_context == CerberusContexts::CONTEXT_WORKER
-							&& $actor_context_id == $watcher_id) {
+						if($actor['context'] == CerberusContexts::CONTEXT_WORKER
+							&& $actor['context_id'] == $watcher_id) {
 								// If they explicitly added themselves to the notify, allow it.
 								// Otherwise, don't tell them what they just did.
 								if($also_notify_ignore_self || !in_array($watcher_id, $also_notify_worker_ids))
@@ -1948,8 +1948,12 @@ class CerberusContexts {
 	static private $_context_checkpoints = array();
 
 	static function checkpointChanges($context, $ids) {
-		$ids = DevblocksPlatform::importVar($ids, 'array:integer');
+		if(php_sapi_name() == 'cli')
+			return;
 
+		$ids = DevblocksPlatform::importVar($ids, 'array:integer');
+		$actor = CerberusContexts::getCurrentActor();
+		
 		if(!isset(self::$_context_checkpoints[$context]))
 			self::$_context_checkpoints[$context] = array();
 
@@ -1964,6 +1968,7 @@ class CerberusContexts {
 			
 			foreach($models as $model_id => $model) {
 				$model->custom_fields = @$values[$model_id] ?: array();
+				$model->_actor = $actor;
 				
 				self::$_context_checkpoints[$context][$model_id] =
 					json_decode(json_encode($model), true);
@@ -1990,9 +1995,8 @@ class CerberusContexts {
 		foreach(self::$_context_checkpoints as $context => &$old_models) {
 
 			// Do this in batches of 100 in order to save memory
-
 			$ids = array_keys($old_models);
-
+			
 			foreach(array_chunk($ids, 100) as $context_ids) {
 				$new_models = CerberusContexts::getModels($context, $context_ids);
 
@@ -2001,8 +2005,14 @@ class CerberusContexts {
 				foreach($new_models as $context_id => $new_model) {
 					$old_model = $old_models[$context_id];
 					$new_model->custom_fields = @$values[$context_id] ?: array();
+					$actor = null;
+					
+					if(isset($old_model['_actor'])) {
+						$actor = $old_model['_actor'];
+						unset($old_model['_actor']);
+					}
 
-					Event_RecordChanged::trigger($context, $new_model, $old_model);
+					Event_RecordChanged::trigger($context, $new_model, $old_model, $actor);
 				}
 			}
 		}
@@ -2043,6 +2053,7 @@ class Context_Application extends Extension_DevblocksContext {
 			'id' => 0,
 			'name' => 'Cerb',
 			'permalink' => null, //$url_writer->writeNoProxy('', true),
+			'updated' => APP_BUILD,
 		);
 	}
 
@@ -2201,7 +2212,7 @@ class CerberusLicense {
 	}
 
 	public static function getReleases() {
-		/*																																																																																																																														*/return array('5.0.0'=>1271894400,'5.1.0'=>1281830400,'5.2.0'=>1288569600,'5.3.0'=>1295049600,'5.4.0'=>1303862400,'5.5.0'=>1312416000,'5.6.0'=>1317686400,'5.7.0'=>1326067200,'6.0.0'=>1338163200,'6.1.0'=>1346025600,'6.2.0'=>1353888000,'6.3.0'=>1364169600,'6.4.0'=>1370217600,'6.5.0'=>1379289600,'6.6.0'=>1391126400,'6.7.0'=>1398124800,'6.8.0'=>1410739200,'6.9.0'=>1422230400,'7.0.0'=>1432598400);/*
+		/*																																																																																																																														*/return array('5.0.0'=>1271894400,'5.1.0'=>1281830400,'5.2.0'=>1288569600,'5.3.0'=>1295049600,'5.4.0'=>1303862400,'5.5.0'=>1312416000,'5.6.0'=>1317686400,'5.7.0'=>1326067200,'6.0.0'=>1338163200,'6.1.0'=>1346025600,'6.2.0'=>1353888000,'6.3.0'=>1364169600,'6.4.0'=>1370217600,'6.5.0'=>1379289600,'6.6.0'=>1391126400,'6.7.0'=>1398124800,'6.8.0'=>1410739200,'6.9.0'=>1422230400,'7.0.0'=>1432598400,'7.1.0'=>1448928000);/*
 		 * Major versions by release date in GMT
 		 */
 		return array(
@@ -2224,6 +2235,7 @@ class CerberusLicense {
 			'6.8.0' => gmmktime(0,0,0,9,15,2014),
 			'6.9.0' => gmmktime(0,0,0,1,26,2015),
 			'7.0.0' => gmmktime(0,0,0,5,26,2015),
+			'7.1.0' => gmmktime(0,0,0,12,1,2015),
 		);
 	}
 
@@ -2579,6 +2591,11 @@ class Cerb_ORMHelper extends DevblocksORMHelper {
 		return $fields;
 	}
 
+	/**
+	 * 
+	 * @param array $ids
+	 * @return Model_Address[]
+	 */
 	static function getIds($ids) {
 		if(!is_array($ids))
 			$ids = array($ids);
@@ -2623,32 +2640,6 @@ class Cerb_ORMHelper extends DevblocksORMHelper {
 		return $exists;
 	}
 	
-	static protected function _buildSortClause($sortBy, $sortAsc) {
-		$sort_sql = null;
-		
-		if(is_string($sortBy)) {
-			$sort_sql = (!empty($sortBy) ? sprintf("ORDER BY %s %s ",$sortBy,($sortAsc || is_null($sortAsc))?"ASC":"DESC") : " ");
-			
-		} elseif(is_array($sortBy) && is_array($sortAsc) && count($sortBy) == count($sortAsc)) {
-			$sorts = array();
-			
-			foreach($sortBy as $idx => $field) {
-				@$asc = $sortAsc[$idx];
-				
-				$sorts[] = sprintf("%s %s",
-					$field,
-					($asc || is_null($asc)) ? "ASC" : "DESC"
-				);
-			}
-			
-			if(!empty($sorts))
-				$sort_sql = sprintf('ORDER BY %s', implode(', ', $sorts));
-			
-		}
-		
-		return $sort_sql;
-	}
-
 	static protected function _getRandom($table, $pkey='id') {
 		$db = DevblocksPlatform::getDatabaseService();
 		$offset = $db->GetOneSlave(sprintf("SELECT ROUND(RAND()*(SELECT COUNT(*)-1 FROM %s))", $table));

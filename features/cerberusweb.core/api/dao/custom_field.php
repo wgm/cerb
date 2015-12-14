@@ -15,7 +15,7 @@
  |	http://www.cerbweb.com	    http://www.webgroupmedia.com/
  ***********************************************************************/
 
-class DAO_CustomField extends DevblocksORMHelper {
+class DAO_CustomField extends Cerb_ORMHelper {
 	const ID = 'id';
 	const NAME = 'name';
 	const TYPE = 'type';
@@ -206,7 +206,7 @@ class DAO_CustomField extends DevblocksORMHelper {
 	}
 };
 
-class DAO_CustomFieldValue extends DevblocksORMHelper {
+class DAO_CustomFieldValue extends Cerb_ORMHelper {
 	const FIELD_ID = 'field_id';
 	const CONTEXT = 'context';
 	const CONTEXT_ID = 'context_id';
@@ -1009,6 +1009,7 @@ class Context_CustomField extends Extension_DevblocksContext {
 			'id' => $field->id,
 			'name' => $field->name,
 			'permalink' => null, //$url_writer->writeNoProxy('', true),
+			'updated' => 0,
 		);
 	}
 	

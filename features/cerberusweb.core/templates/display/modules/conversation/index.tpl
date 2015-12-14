@@ -4,15 +4,14 @@
 </form>
 
 {if is_array($pending_drafts)}
-<div class="ui-widget">
-	<div class="ui-state-highlight ui-corner-all" style="padding: 0 .7em; margin: 0.2em; "> 
-		<p><span class="ui-icon ui-icon-info" style="float: left; margin-right: .3em;"></span> 
-		This ticket has <strong>{$drafts|count nofilter}</strong> pending draft(s): 
-		{foreach from=$pending_drafts item=draft name=drafts}
-			<a href="#draft{$draft->id}">{$draft->updated|devblocks_prettytime}</a>{if !$smarty.foreach.drafts.last}, {/if} 
-		{/foreach}
-		</p>
-	</div>
+<div style="color:rgb(236,87,29);">
+	<p>
+	<span class="glyphicons glyphicons-circle-exclamation-mark"></span> 
+	This ticket has <strong>{$drafts|count nofilter}</strong> pending draft{if $drafts|count == 1}{else}s{/if}: 
+	{foreach from=$pending_drafts item=draft name=drafts}
+		<a href="#draft{$draft->id}">{$draft->updated|devblocks_prettytime}</a>{if !$smarty.foreach.drafts.last}, {/if} 
+	{/foreach}
+	</p>
 </div>
 {/if}
 
@@ -23,7 +22,7 @@
 	<b>{'display.convo.order_newest'|devblocks_translate}</b>
 {/if}
 
-<div id="conversation">
+<div id="conversation" style="margin-top:10px;">
 {if !empty($ticket)}
 	{if !empty($convo_timeline)}
 		{$state = ''}

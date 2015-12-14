@@ -97,24 +97,19 @@
 		{if 1}
 		<tr>
 			<td width="0%" nowrap="nowrap" valign="top">{'common.owner'|devblocks_translate|capitalize}:</td>
-			<td width="100%"><select name="do_owner">
-				<option value=""></option>
-				<option value="0">{'common.nobody'|devblocks_translate|lower}</option>
-				{foreach from=$workers item=owner key=owner_id}
-				<option value="{$owner_id}">{$owner->getName()}</option>
-				{/foreach}
-			</select>
-			<button type="button" onclick="$(this).prev('select[name=do_owner]').val('{$active_worker->id}');">me</button>
-			<button type="button" onclick="$(this).prevAll('select[name=do_owner]').val('0');">nobody</button>
+			<td width="100%">
+				<button type="button" class="chooser-abstract" data-field-name="do_owner" data-context="{CerberusContexts::CONTEXT_WORKER}" data-single="true" data-query="" data-autocomplete="if-null"><span class="glyphicons glyphicons-search"></span></button>
+				<ul class="bubbles chooser-container"></ul>
 			</td>
 		</tr>
 		{/if}
 		
 		{if 1}
 		<tr>
-			<td width="0%" nowrap="nowrap" valign="top">{'contact_org.name'|devblocks_translate|capitalize}:</td>
+			<td width="0%" nowrap="nowrap" valign="top">{'common.organization'|devblocks_translate|capitalize}:</td>
 			<td width="100%">
-				<input type="text" name="do_org" value="" style="width:98%;">
+				<button type="button" class="chooser-abstract" data-field-name="do_org" data-context="{CerberusContexts::CONTEXT_ORG}" data-single="true" data-query="" data-autocomplete="if-null"><span class="glyphicons glyphicons-search"></span></button>
+				<ul class="bubbles chooser-container"></ul>
 			</td>
 		</tr>
 		{/if}
@@ -187,19 +182,27 @@
 </fieldset>
 {/if}
 	
-<button type="button" onclick="genericAjaxPopupClose('peek');genericAjaxPost('formBatchUpdate','view{$view_id}');"><span class="glyphicons glyphicons-circle-ok" style="color:rgb(0,180,0);"></span> {'common.save_changes'|devblocks_translate|capitalize}</button>
+<button type="button" class="submit"><span class="glyphicons glyphicons-circle-ok" style="color:rgb(0,180,0);"></span> {'common.save_changes'|devblocks_translate|capitalize}</button>
 <br>
 </form>
 
 <script type="text/javascript">
-	$popup = genericAjaxPopupFetch('peek');
+$(function() {
+	var $popup = genericAjaxPopupFind('#formBatchUpdate');
+	
 	$popup.one('popup_open', function(event,ui) {
 		var $this = $(this);
 		var $frm = $('#formBatchUpdate');
 		
-		$this.dialog('option','title',"{'common.bulk_update'|devblocks_translate|capitalize|escape:'javascript' nofilter}");
+		$popup.dialog('option','title',"{'common.bulk_update'|devblocks_translate|capitalize|escape:'javascript' nofilter}");
 		
-		ajax.orgAutoComplete('#formBatchUpdate input:text[name=do_org]');
+		$popup.find('button.chooser-abstract').cerbChooserTrigger();
+		
+		$popup.find('button.submit').click(function() {
+			genericAjaxPost('formBatchUpdate', 'view{$view_id}', null, function() {
+				genericAjaxPopupClose($popup);
+			});
+		});
 		
 		$frm.find('button.chooser_file').each(function() {
 			ajax.chooserFile(this,'broadcast_file_ids');
@@ -245,10 +248,10 @@
 				var $li = $('<li style="margin-left:10px;"></li>');
 				
 				var $select = $('<select name="broadcast_html_template_id"></select>');
-				$select.append($('<option value="0"> - {'common.default'|devblocks_translate|lower|escape:'javascript'} -</option>'));
+				$select.append($('<option value="0"/>').text(' - {'common.default'|devblocks_translate|lower|escape:'javascript'} -'));
 				
 				{foreach from=$html_templates item=html_template}
-				var $option = $('<option value="{$html_template->id}">{$html_template->name|escape:'javascript'}</option>');
+				var $option = $('<option/>').attr('value','{$html_template->id}').text('{$html_template->name|escape:'javascript'}');
 				$select.append($option);
 				{/foreach}
 				
@@ -326,4 +329,5 @@
 				console.log(e);
 		}
 	});
+});
 </script>

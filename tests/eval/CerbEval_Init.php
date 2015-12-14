@@ -90,7 +90,7 @@ class CerbEval_Init extends PHPUnit_Framework_TestCase {
 		$this->assertInstanceOf('Model_Address', $address);
 		
 		$worker_id = DAO_Worker::create(array(
-			DAO_Worker::EMAIL => 'kina@cerb.example',
+			DAO_Worker::EMAIL_ID => $address->id,
 			DAO_Worker::FIRST_NAME => 'Kina',
 			DAO_Worker::LAST_NAME => 'Halpue',
 			DAO_Worker::AT_MENTION_NAME => 'Kina',
@@ -101,6 +101,7 @@ class CerbEval_Init extends PHPUnit_Framework_TestCase {
 			DAO_Worker::TITLE => 'Support',
 			DAO_Worker::AUTH_EXTENSION_ID => 'login.password',
 			DAO_Worker::UPDATED => time(),
+			DAO_Worker::GENDER => 'F',
 		));
 		
 		$this->assertEquals(1, $worker_id);

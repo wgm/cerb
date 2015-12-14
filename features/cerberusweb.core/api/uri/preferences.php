@@ -56,7 +56,7 @@ class ChPreferencesPage extends CerberusPageExtension {
 					&& $worker_address->code == $code
 					&& $worker_address->code_expire > time()) {
 
-						DAO_AddressToWorker::update($worker_address->address,array(
+						DAO_AddressToWorker::update($worker_address->id, array(
 							DAO_AddressToWorker::CODE => '',
 							DAO_AddressToWorker::IS_CONFIRMED => 1,
 							DAO_AddressToWorker::CODE_EXPIRE => 0
@@ -145,43 +145,6 @@ class ChPreferencesPage extends CerberusPageExtension {
 		DevblocksPlatform::setHttpResponse(new DevblocksHttpResponse(array('preferences','watcher')));
 	}
 
-	function showMyNotificationsTabAction() {
-		$translate = DevblocksPlatform::getTranslationService();
-		$active_worker = CerberusApplication::getActiveWorker();
-		$tpl = DevblocksPlatform::getTemplateService();
-
-		// My Events
-		$defaults = C4_AbstractViewModel::loadFromClass('View_Notification');
-		$defaults->id = 'my_notifications';
-		$defaults->renderLimit = 25;
-		$defaults->renderPage = 0;
-		$defaults->renderSortBy = SearchFields_Notification::CREATED_DATE;
-		$defaults->renderSortAsc = false;
-
-		$myNotificationsView = C4_AbstractViewLoader::getView('my_notifications', $defaults);
-
-		$myNotificationsView->name = vsprintf($translate->_('home.my_notifications.view.title'), $active_worker->getName());
-
-		$myNotificationsView->addColumnsHidden(array(
-			SearchFields_Notification::ID,
-			SearchFields_Notification::WORKER_ID,
-		));
-
-		$myNotificationsView->addParamsHidden(array(
-			SearchFields_Notification::ID,
-			SearchFields_Notification::WORKER_ID,
-		), true);
-		$myNotificationsView->addParamsDefault(array(
-			SearchFields_Notification::IS_READ => new DevblocksSearchCriteria(SearchFields_Notification::IS_READ,'=',0),
-		), true);
-		$myNotificationsView->addParamsRequired(array(
-			SearchFields_Notification::WORKER_ID => new DevblocksSearchCriteria(SearchFields_Notification::WORKER_ID,'=',$active_worker->id),
-		), true);
-
-		$tpl->assign('view', $myNotificationsView);
-		$tpl->display('devblocks:cerberusweb.core::preferences/tabs/notifications/index.tpl');
-	}
-
 	function showNotificationsBulkPanelAction() {
 		@$ids = DevblocksPlatform::importGPC($_REQUEST['ids']);
 		@$view_id = DevblocksPlatform::importGPC($_REQUEST['view_id']);
@@ -239,7 +202,6 @@ class ChPreferencesPage extends CerberusPageExtension {
 		}
 
 		$view->doBulkUpdate($filter, $do, $ids);
-
 		$view->render();
 		return;
 	}
@@ -617,14 +579,16 @@ class ChPreferencesPage extends CerberusPageExtension {
 		
 		// Alternate Email Addresses
 		@$new_email = DevblocksPlatform::importGPC($_REQUEST['new_email'],'string','');
-		@$worker_emails = DevblocksPlatform::importGPC($_REQUEST['worker_emails'],'array',array());
+		@$worker_email_ids = DevblocksPlatform::importGPC($_REQUEST['worker_email_ids'],'array',array());
 
 		$current_addresses = DAO_AddressToWorker::getByWorker($worker->id);
-		$removed_addresses = array_diff(array_keys($current_addresses), $worker_emails);
-
+		$removed_addresses = array_diff(array_keys($current_addresses), $worker_email_ids);
+		
 		// Confirm deletions are assigned to the current worker
+		if(is_array($removed_addresses))
 		foreach($removed_addresses as $removed_address) {
-			if($removed_address == $worker->email)
+			// Don't remove the primary
+			if($removed_address == $worker->email_id)
 				continue;
 
 			DAO_AddressToWorker::unassign($removed_address);
@@ -633,7 +597,7 @@ class ChPreferencesPage extends CerberusPageExtension {
 		// Assign a new e-mail address if it's legitimate
 		if(!empty($new_email)) {
 			if(null != ($addy = DAO_Address::lookupAddress($new_email, true))) {
-				if(null == ($assigned = DAO_AddressToWorker::getByAddress($new_email))) {
+				if(null == ($assigned = DAO_AddressToWorker::getByEmail($new_email))) {
 					$this->_sendConfirmationEmail($new_email, $worker);
 				} else {
 					$pref_errors[] = vsprintf($translate->_('prefs.address.exists'), $new_email);
@@ -663,12 +627,15 @@ class ChPreferencesPage extends CerberusPageExtension {
 		$url_writer = DevblocksPlatform::getUrlService();
 		$tpl = DevblocksPlatform::getTemplateService();
 
+		if(false == ($addy = DAO_Address::lookupAddress($to, true)))
+			return false;
+		
 		// Tentatively assign the e-mail address to this worker
-		DAO_AddressToWorker::assign($to, $worker->id);
+		DAO_AddressToWorker::assign($addy->id, $worker->id);
 
 		// Create a confirmation code and save it
 		$code = CerberusApplication::generatePassword(20);
-		DAO_AddressToWorker::update($to, array(
+		DAO_AddressToWorker::update($addy->id, array(
 			DAO_AddressToWorker::CODE => $code,
 			DAO_AddressToWorker::CODE_EXPIRE => (time() + 24*60*60)
 		));
@@ -676,7 +643,7 @@ class ChPreferencesPage extends CerberusPageExtension {
 		// Email the confirmation code to the address
 		// [TODO] This function can return false, and we need to do something different if it does.
 		CerberusMail::quickSend(
-			$to,
+			$addy->email,
 			vsprintf($translate->_('prefs.address.confirm.mail.subject'),
 				$settings->get('cerberusweb.core',CerberusSettings::HELPDESK_TITLE,CerberusSettingsDefaults::HELPDESK_TITLE)
 			),
@@ -688,7 +655,7 @@ class ChPreferencesPage extends CerberusPageExtension {
 			)
 		);
 
-		$output = array(vsprintf($translate->_('prefs.address.confirm.mail.subject'), $to));
+		$output = array(vsprintf($translate->_('prefs.address.confirm.mail.subject'), $addy->email));
 		$tpl->assign('pref_success', $output);
 	}
 

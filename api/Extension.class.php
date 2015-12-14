@@ -211,14 +211,6 @@ abstract class Extension_ExplorerToolbar extends DevblocksExtension {
 	function render(Model_ExplorerSet $item) { }
 };
 
-abstract class Extension_CommentBadge extends DevblocksExtension {
-	function render(Model_Comment $comment) {}
-};
-
-abstract class Extension_MessageBadge extends DevblocksExtension {
-	function render(Model_Message $message) {}
-};
-
 abstract class Extension_MailTransport extends DevblocksExtension {
 	const POINT = 'cerberusweb.mail.transport';
 	
@@ -256,6 +248,7 @@ abstract class Extension_MailTransport extends DevblocksExtension {
 	abstract function renderConfig(Model_MailTransport $model);
 	abstract function testConfig(array $params, &$error=null);
 	abstract function send(Swift_Message $message, Model_MailTransport $model);
+	abstract function getLastError();
 };
 
 abstract class Extension_ContextProfileTab extends DevblocksExtension {
@@ -590,6 +583,13 @@ abstract class Extension_WorkspaceWidget extends DevblocksExtension {
 		$view_model = $params['worklist_model'];
 		
 		if(false != ($view = C4_AbstractViewLoader::unserializeViewFromAbstractJson($view_model, $view_id))) {
+			// Check for quick search
+			@$mode = $params['search_mode'];
+			@$q = $params['quick_search'];
+			
+			if($mode == 'quick_search' && $q)
+				$view->addParamsWithQuickSearch($q, true);
+			
 			$view->persist();
 			return $view;
 		}

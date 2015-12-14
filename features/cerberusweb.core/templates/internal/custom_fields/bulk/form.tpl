@@ -84,7 +84,7 @@
 					<ul class="bubbles chooser-container">
 						{if $custom_field_values.$f_id}
 							{CerberusContexts::getContext($f->params.context, $custom_field_values.$f_id, $cf_link_labels, $cf_link_values, null, true)}
-							<li><input type="hidden" name="{$field_name}" value="{$custom_field_values.$f_id}">{$cf_link_values._label} <a href="javascript:;" onclick="$(this).parent().remove();"><span class="ui-icon ui-icon-trash" style="display:inline-block;width:14px;height:14px;"></span></a></li>
+							<li><input type="hidden" name="{$field_name}" value="{$custom_field_values.$f_id}">{$cf_link_values._label} <a href="javascript:;" onclick="$(this).parent().remove();"><span class="glyphicons glyphicons-circle-remove"></span></a></li>
 						{/if}
 					</ul>
 				{elseif $f->type==Model_CustomField::TYPE_FILE}
@@ -94,7 +94,7 @@
 					{if $custom_field_values.$f_id}
 						{$file_id = $custom_field_values.$f_id}
 						{$file = DAO_Attachment::get($file_id)}
-						<li><input type="hidden" name="{$field_name}" value="{$file->id}"><a href="{devblocks_url}c=files&guid={$file->storage_sha1hash}&file={$file->display_name|escape:'url'}{/devblocks_url}" target="_blank">{$file->display_name}</a> ({$file->storage_size|devblocks_prettybytes}) <a href="javascript:;" onclick="$(this).parent().remove();"><span class="ui-icon ui-icon-trash" style="display:inline-block;width:14px;height:14px;"></span></a></li>
+						<li><input type="hidden" name="{$field_name}" value="{$file->id}"><a href="{devblocks_url}c=files&guid={$file->storage_sha1hash}&file={$file->display_name|escape:'url'}{/devblocks_url}" target="_blank">{$file->display_name}</a> ({$file->storage_size|devblocks_prettybytes}) <a href="javascript:;" onclick="$(this).parent().remove();"><span class="glyphicons glyphicons-circle-remove"></span></a></li>
 					{/if}
 					</ul>
 				{elseif $f->type==Model_CustomField::TYPE_FILES}
@@ -102,7 +102,7 @@
 					<ul class="bubbles chooser-container">
 					{foreach from=$custom_field_values.$f_id item=file_id}
 						{$file = DAO_Attachment::get($file_id)}
-						<li><input type="hidden" name="{$field_name}[]" value="{$file->id}"><a href="{devblocks_url}c=files&guid={$file->storage_sha1hash}&file={$file->display_name|escape:'url'}{/devblocks_url}" target="_blank">{$file->display_name}</a> ({$file->storage_size|devblocks_prettybytes}) <a href="javascript:;" onclick="$(this).parent().remove();"><span class="ui-icon ui-icon-trash" style="display:inline-block;width:14px;height:14px;"></span></a></li>
+						<li><input type="hidden" name="{$field_name}[]" value="{$file->id}"><a href="{devblocks_url}c=files&guid={$file->storage_sha1hash}&file={$file->display_name|escape:'url'}{/devblocks_url}" target="_blank">{$file->display_name}</a> ({$file->storage_size|devblocks_prettybytes}) <a href="javascript:;" onclick="$(this).parent().remove();"><span class="glyphicons glyphicons-circle-remove"></span></a></li>
 					{/foreach}
 					</ul>
 				{elseif $f->type==Model_CustomField::TYPE_DATE}
@@ -147,7 +147,7 @@ $cfields.find('button.chooser-abstract').each(function() {
 		var $button = $(this);
 		var ctx = $button.attr('context');
 		
-		$chooser = genericAjaxPopup('chooser' + new Date().getTime(),'c=internal&a=chooserOpen&context=' + encodeURIComponent(ctx) + '&single=1',null,true,'750');
+		var $chooser = genericAjaxPopup('chooser' + new Date().getTime(),'c=internal&a=chooserOpen&context=' + encodeURIComponent(ctx) + '&single=1',null,true,'750');
 		$chooser.one('chooser_save', function(event) {
 			if(typeof event.values == "object" && event.values.length > 0) {
 				var context_label = event.labels[0];
@@ -162,9 +162,9 @@ $cfields.find('button.chooser-abstract').each(function() {
 				
 				// Add new bubble
 				for(i in event.labels) {
-					$li = $('<li>' + event.labels[i] + '</li>'); // + ' (' + $context_name + ')
-					$li.append($('<input type="hidden" name="' + field_name + '" value="' + event.values[i] + '">'));
-					$li.append($('<span class="ui-icon ui-icon-trash" style="display:inline-block;vertical-align:middle;pointer:middle;" onclick="$(this).closest(\'li\').remove();"></span>'));
+					$li = $('<li/>').text(event.labels[i]);
+					$li.append($('<input type="hidden">').attr('name',field_name).attr('value',event.values[i]));
+					$li.append($('<span class="glyphicons glyphicons-circle-remove" onclick="$(this).closest(\'li\').remove();"></span>'));
 					
 					$ul.append($li);
 				}

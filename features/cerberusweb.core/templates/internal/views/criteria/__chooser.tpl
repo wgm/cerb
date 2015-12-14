@@ -19,7 +19,7 @@
 			{$meta = $context_ext->getMeta($context_id)}
 			<b>{$meta.name}</b><!--
 			--><input type="hidden" name="context_id[]" value="{$context_id}"><!--
-			--><span class="ui-icon ui-icon-trash" style="display:inline-block;vertical-align:middle;" onclick="$(this).closest('li').remove();"></span>
+			--><span class="glyphicons glyphicons-circle-remove" onclick="$(this).closest('li').remove();"></span>
 		</li>
 	{/foreach}
 	</ul>
@@ -28,26 +28,26 @@
 
 <script type="text/javascript">
 $("#container_{$random}").find('button.chooser').click(function(e) {
-	$this = $(this);
+	var $this = $(this);
 	
-	$popup = genericAjaxPopup("chooser{$random}",'c=internal&a=chooserOpen&context={$context}',null,true,'750');
+	var $popup = genericAjaxPopup("chooser{$random}",'c=internal&a=chooserOpen&context={$context}',null,true,'750');
 	$popup.one('popup_close',function(event) {
 		event.stopPropagation();
-		$container = $('#container_{$random}');
+		var $container = $('#container_{$random}');
 	});
 	$popup.one('chooser_save',function(event) {
 		event.stopPropagation();
 		
-		$container = $("#container_{$random}");
-		$chooser = $container.find('button.chooser');
-		$ul = $container.find('ul.chooser-container');
+		var $container = $("#container_{$random}");
+		var $chooser = $container.find('button.chooser');
+		var $ul = $container.find('ul.chooser-container');
 		
 		for(i in event.labels) {
 			// Look for dupes
 			if(0 == $ul.find('input:hidden[value="' + event.values[i] + '"]').length) {
-				$li = $('<li><b>' + event.labels[i] + '</b></li>');
-				$li.append($('<input type="hidden" name="context_id[]" value="' + event.values[i] + '">'));
-				$li.append($('<span class="ui-icon ui-icon-trash" style="display:inline-block;vertical-align:middle;" onclick="$(this).closest(\'li\').remove();"></span>'));
+				var $li = $('<li/>').append($('<b/>').text(event.labels[i]));
+				$li.append($('<input type="hidden" name="context_id[]">').attr('value',event.values[i]));
+				$li.append($('<span class="glyphicons glyphicons-circle-remove" onclick="$(this).closest(\'li\').remove();"></span>'));
 				
 				$ul.append($li);
 			}

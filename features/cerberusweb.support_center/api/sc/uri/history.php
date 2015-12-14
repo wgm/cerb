@@ -173,7 +173,7 @@ class UmScHistoryController extends Extension_UmScController {
 		if(empty($shared_address_ids))
 			$shared_address_ids = array(-1);
 		
-		CerberusContexts::pushActivityDefaultActor(CerberusContexts::CONTEXT_ADDRESS, $active_contact->email_id);
+		CerberusContexts::pushActivityDefaultActor(CerberusContexts::CONTEXT_ADDRESS, $active_contact->primary_email_id);
 		
 		if(false == ($ticket = DAO_Ticket::getTicketByMask($mask)))
 			return;
@@ -213,7 +213,7 @@ class UmScHistoryController extends Extension_UmScController {
 		if(null == ($from_address = DAO_Address::lookupAddress($from, false)))
 			return false;
 		
-		if($from_address->contact_person_id != $active_contact->id)
+		if($from_address->contact_id != $active_contact->id)
 			return false;
 		
 		if(false == ($ticket = DAO_Ticket::getTicketByMask($mask)))
@@ -392,14 +392,8 @@ class UmSc_TicketHistoryView extends C4_AbstractView {
 			case SearchFields_Ticket::VIRTUAL_STATUS:
 				$tpl->display('devblocks:cerberusweb.support_center::support_center/history/criteria/status.tpl');
 				break;
-//			default:
-//				// Custom Fields
-//				if('cf_' == substr($field,0,3)) {
-//					$this->_renderCriteriaCustomField($tpl, substr($field,3));
-//				} else {
-//					echo ' ';
-//				}
-//				break;
+			default:
+				break;
 		}
 	}
 	
@@ -419,7 +413,7 @@ class UmSc_TicketHistoryView extends C4_AbstractView {
 				
 				foreach($values as $val) {
 					if(isset($addresses[$val]))
-						$strings[] = $addresses[$val]->email;
+						$strings[] = DevblocksPlatform::strEscapeHtml($addresses[$val]->email);
 				}
 				echo implode('</b> or <b>', $strings);
 				break;
@@ -431,13 +425,13 @@ class UmSc_TicketHistoryView extends C4_AbstractView {
 				foreach($values as $val) {
 					switch($val) {
 						case 'open':
-							$strings[] = $translate->_('status.waiting');
+							$strings[] = DevblocksPlatform::strEscapeHtml($translate->_('status.waiting'));
 							break;
 						case 'waiting':
-							$strings[] = $translate->_('status.open');
+							$strings[] = DevblocksPlatform::strEscapeHtml($translate->_('status.open'));
 							break;
 						case 'closed':
-							$strings[] = $translate->_('status.closed');
+							$strings[] = DevblocksPlatform::strEscapeHtml($translate->_('status.closed'));
 							break;
 					}
 				}

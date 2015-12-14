@@ -14,20 +14,26 @@
 
 <b>Load </b>
 
-<select class="context">
+<select name="params{$params_prefix}[context]" class="context">
 	<option value=""> - {'common.choose'|devblocks_translate|lower} - </option>
 	{foreach from=$context_mfts item=context_mft key=context_id}
 	<option value="{$context_id}" {if $series_ctx_id==$context_id}selected="selected"{/if}>{$context_mft->name}</option>
 	{/foreach}
 </select>
 
- data using  
+ data using 
 
 <div id="popup{$div_popup_worklist}" class="badge badge-lightgray" style="font-weight:bold;color:rgb(80,80,80);cursor:pointer;display:inline;"><span class="name">Worklist</span> &#x25be;</div>
 
 <input type="hidden" name="params{$params_prefix}[worklist_model_json]" value="{$params.worklist_model|json_encode}" class="model">
 
-<br>
+<div style="margin-left:10px;">
+	<label><input type="checkbox" name="params{$params_prefix}[search_mode]" value="quick_search" class="mode" {if $params.search_mode == "quick_search"}checked="checked"{/if}> Filter using quick search:</label>
+	
+	<div>
+		<input type="text" name="params{$params_prefix}[quick_search]" value="{$params.quick_search}" class="quicksearch" style="width:95%;padding:5px;border-radius:5px;" autocomplete="off" spellcheck="off">
+	</div>
+</div>
 
 <abbr title="horizontal axis" style="font-weight:bold;">X-axis</abbr> is 
 
@@ -109,13 +115,14 @@
 </select>
 
 <script type="text/javascript">
+$(function() {
 	// [TODO] Limit to the series we're adding now
-	$fieldset = $('fieldset#widget{$widget->id}Datasource{$series_idx}');
+	var $fieldset = $('fieldset#widget{$widget->id}Datasource{$series_idx}');
 	
 	$fieldset.find('select.xaxis_field').change(function(e) {
-		$this = $(this);
+		var $this = $(this);
 		
-		$xaxis_tick = $this.siblings('select.xaxis_tick');
+		var $xaxis_tick = $this.siblings('select.xaxis_tick');
 		
 		if($(this).find('option:selected').is('.date')) {
 			$xaxis_tick.show();
@@ -125,7 +132,7 @@
 	});
 	
 	$fieldset.find('select.yaxis_func').change(function(e) {
-		val = $(this).val();
+		var val = $(this).val();
 		
 		var $select_yaxis = $(this).siblings('select.yaxis_field');
 		
@@ -140,7 +147,7 @@
 	});
 	
 	$fieldset.find('select.context').change(function(e) {
-		ctx = $(this).val();
+		var ctx = $(this).val();
 		
 		// [TODO] Hide options until we know the context
 		var $select = $(this);
@@ -150,17 +157,17 @@
 		
 		genericAjaxGet('','c=internal&a=handleSectionAction&section=dashboards&action=getContextFieldsJson&context=' + ctx, function(json) {
 			if('object' == typeof(json) && json.length > 0) {
-				$select_xaxis = $select.siblings('select.xaxis_field').html('');
-				$select_yaxis = $select.siblings('select.yaxis_field').html('');
+				var $select_xaxis = $select.siblings('select.xaxis_field').html('');
+				var $select_yaxis = $select.siblings('select.yaxis_field').html('');
 				
-				$option = $('<option value="_id">(each record)</option>');
+				var $option = $('<option value="_id">(each record)</option>');
 				$select_xaxis.append($option);
 				
 				for(idx in json) {
-					field = json[idx];
-					field_type = (field.type=='E') ? 'date' : ((field.type=='N') ? 'number' : '');
+					var field = json[idx];
+					var field_type = (field.type=='E') ? 'date' : ((field.type=='N') ? 'number' : '');
 					
-					$option = $('<option value="'+field.key+'" class="'+field_type+'">'+field.label+'</option>');
+					var $option = $('<option/>').attr('value',field.key).addClass(field_type).text(field.label);
 
 					// X-Axis
 					// Number or date
@@ -181,18 +188,26 @@
 	$('#popup{$div_popup_worklist}').click(function(e) {
 		var $select = $(this).siblings('select.context');
 		var context = $select.val();
+		var $mode = $fieldset.find('input.mode');
+		var q = '';
 		
 		if(context.length == 0) {
 			$select.effect('highlight','slow');
 			return;
 		}
 		
-		$chooser=genericAjaxPopup("chooser{uniqid()}",'c=internal&a=chooserOpenParams&context='+context+'&view_id={"widget{$widget->id}_worklist{$series_idx}"}',null,true,'750');
+		if($mode.is(':checked')) {
+			q = $fieldset.find('input.quicksearch').val();
+		}
+		
+		var $chooser = genericAjaxPopup("chooser{uniqid()}",'c=internal&a=chooserOpenParams&context='+context+'&view_id={"widget{$widget->id}_worklist{$series_idx}"}&q=' + encodeURIComponent(q),null,true,'750');
+		
 		$chooser.bind('chooser_save',function(event) {
 			if(null != event.worklist_model) {
-				$('#popup{$div_popup_worklist}').parent().find('input:hidden.model').val(event.worklist_model);
+				$fieldset.find('input:hidden.model').val(event.worklist_model);
+				$fieldset.find('input:text.quicksearch').val(event.worklist_quicksearch);
 			}
 		});
 	});
-</script>
-			
+});
+</script>	

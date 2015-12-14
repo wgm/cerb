@@ -1,14 +1,15 @@
 {$owner_meta = $comment->getOwnerMeta()}
 <div id="comment{$comment->id}">
 	<div class="block" style="overflow:auto;margin-bottom:10px;">
-		<span class="tag" style="color:rgb(71,133,210);">{'common.comment'|devblocks_translate|lower}</span>
+		<span class="tag" style="background-color:rgb(71,133,210);color:white;margin-right:5px;">{'common.comment'|devblocks_translate|lower}</span>
 		
 		<b style="font-size:1.3em;">
 			{if empty($owner_meta)}
 				(system)
 			{else}
 				{if $owner_meta.context_ext instanceof IDevblocksContextPeek} 
-				<a href="javascript:;" onclick="genericAjaxPopup('peek','c=internal&a=showPeekPopup&context={$comment->owner_context}&context_id={$comment->owner_context_id}', null, false, '500');">{$owner_meta.name}</a>
+				{* [TODO] Use peek triggers? *}
+				<a href="javascript:;" onclick="genericAjaxPopup('peek','c=internal&a=showPeekPopup&context={$comment->owner_context}&context_id={$comment->owner_context_id}', null, false, '50%');">{$owner_meta.name}</a>
 				{elseif !empty($owner_meta.permalink)} 
 				<a href="{$owner_meta.permalink}" target="_blank">{$owner_meta.name}</a>
 				{else}
@@ -21,18 +22,20 @@
 		
 		<div class="toolbar" style="display:none;float:right;margin-right:20px;">
 			{if $comment->context == CerberusContexts::CONTEXT_TICKET}
-				<a href="{devblocks_url}c=profiles&type=ticket&mask={$ticket->mask}&focus=comment&focus_id={$comment->id}{/devblocks_url}">{'common.permalink'|devblocks_translate|lower}</a>
+				<button type="button" onclick="document.location='{devblocks_url}c=profiles&type=ticket&mask={$ticket->mask}&focus=comment&focus_id={$comment->id}{/devblocks_url}';"><span class="glyphicons glyphicons-link" title="{'common.permalink'|devblocks_translate|lower}"></span></button>
 			{/if}
 			
 			{if !$readonly && ($active_worker->is_superuser || ($comment->owner_context == CerberusContexts::CONTEXT_WORKER && $comment->owner_context_id == $active_worker->id))}
-				 <a href="javascript:;" style="margin-left:10px;" onclick="if(confirm('Are you sure you want to permanently delete this comment?')) { genericAjaxGet('', 'c=internal&a=commentDelete&id={$comment->id}', function(o) { $('#comment{$comment->id}').remove(); } ); } ">{'common.delete'|devblocks_translate|lower}</a>
+				 <button type="button" onclick="if(confirm('Are you sure you want to permanently delete this comment?')) { genericAjaxGet('', 'c=internal&a=commentDelete&id={$comment->id}', function(o) { $('#comment{$comment->id}').remove(); } ); } "><span class="glyphicons glyphicons-circle-remove" title="{'common.delete'|devblocks_translate|lower}"></span></button>
 			{/if}
 		</div>
 		
-		{$extensions = DevblocksPlatform::getExtensions('cerberusweb.comment.badge', true)}
-		{foreach from=$extensions item=extension}
-			{$extension->render($comment)}
-		{/foreach}
+		{if isset($owner_meta.context_ext->manifest->params.alias)}
+		<div style="float:left;margin:0px 5px 5px 0px;">
+			<img src="{devblocks_url}c=avatars&context={$owner_meta.context_ext->manifest->params.alias}&context_id={$owner_meta.id}{/devblocks_url}?v=" style="height:64px;width:64px;border-radius:64px;">
+		</div>
+		{/if}
+		
 		<br>
 		
 		{if isset($comment->created)}<b>{'message.header.date'|devblocks_translate|capitalize}:</b> {$comment->created|devblocks_date} ({$comment->created|devblocks_prettytime})<br>{/if}

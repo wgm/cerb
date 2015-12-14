@@ -268,10 +268,6 @@ foreach($fields as $field_name => $field_type) {
 	public static function getSearchQueryComponents($columns, $params, $sortBy=null, $sortAsc=null) {
 		$fields = SearchFields_<?php echo $class_name; ?>::getFields();
 		
-		// Sanitize
-		if('*'==substr($sortBy,0,1) || !isset($fields[$sortBy]))
-			$sortBy=null;
-
 		list($tables,$wheres) = parent::_parseSearchParams($params, $columns, $fields, $sortBy);
 		
 		$select_sql = sprintf("SELECT ".
@@ -313,7 +309,7 @@ foreach($fields as $field_name => $field_type) {
 		$where_sql = "".
 			(!empty($wheres) ? sprintf("WHERE %s ",implode(' AND ',$wheres)) : "WHERE 1 ");
 			
-		$sort_sql = (!empty($sortBy)) ? sprintf("ORDER BY %s %s ",$sortBy,($sortAsc || is_null($sortAsc))?"ASC":"DESC") : " ";
+		$sort_sql = self::_buildSortClause($sortBy, $sortAsc, $fields);
 	
 		// Virtuals
 		
@@ -461,7 +457,7 @@ foreach($fields as $field_name => $field_type) {
 		$columns = array(
 <?php
 foreach($fields as $field_name => $field_type) {
-	printf("\t\t\tself::%s => new DevblocksSearchField(self::%s, '%s', '%s', \$translate->_('dao.%s.%s')),\n",
+	printf("\t\t\tself::%s => new DevblocksSearchField(self::%s, '%s', '%s', \$translate->_('dao.%s.%s'), null, true),\n",
 		strtoupper($field_name),
 		strtoupper($field_name),
 		$table_name,
@@ -472,12 +468,12 @@ foreach($fields as $field_name => $field_type) {
 }
 ?>
 
-			self::VIRTUAL_CONTEXT_LINK => new DevblocksSearchField(self::VIRTUAL_CONTEXT_LINK, '*', 'context_link', $translate->_('common.links'), null),
-			self::VIRTUAL_HAS_FIELDSET => new DevblocksSearchField(self::VIRTUAL_HAS_FIELDSET, '*', 'has_fieldset', $translate->_('common.fieldset'), null),
-			self::VIRTUAL_WATCHERS => new DevblocksSearchField(self::VIRTUAL_WATCHERS, '*', 'workers', $translate->_('common.watchers'), 'WS'),
+			self::VIRTUAL_CONTEXT_LINK => new DevblocksSearchField(self::VIRTUAL_CONTEXT_LINK, '*', 'context_link', $translate->_('common.links'), null, false),
+			self::VIRTUAL_HAS_FIELDSET => new DevblocksSearchField(self::VIRTUAL_HAS_FIELDSET, '*', 'has_fieldset', $translate->_('common.fieldset'), null, false),
+			self::VIRTUAL_WATCHERS => new DevblocksSearchField(self::VIRTUAL_WATCHERS, '*', 'workers', $translate->_('common.watchers'), 'WS', false),
 			
-			self::CONTEXT_LINK => new DevblocksSearchField(self::CONTEXT_LINK, 'context_link', 'from_context', null),
-			self::CONTEXT_LINK_ID => new DevblocksSearchField(self::CONTEXT_LINK_ID, 'context_link', 'from_context_id', null),
+			self::CONTEXT_LINK => new DevblocksSearchField(self::CONTEXT_LINK, 'context_link', 'from_context', null, null, false),
+			self::CONTEXT_LINK_ID => new DevblocksSearchField(self::CONTEXT_LINK_ID, 'context_link', 'from_context_id', null, null, false),
 		);
 		
 		// Custom Fields
@@ -645,6 +641,7 @@ foreach($fields as $field_name => $field_type) {
 	
 	function getQuickSearchFields() {
 		// [TODO] Implement quick search fields
+		$search_fields = SearchFields_<?php echo $class_name; ?>::getFields();
 	
 		/*
 		$fields = array(
@@ -680,6 +677,10 @@ foreach($fields as $field_name => $field_type) {
 		
 		$fields = self::_appendFieldsFromQuickSearchContext('<?php echo $ctx_ext_id; ?>', $fields, null);
 		
+		// Add is_sortable
+		
+		$fields = self::_setSortableQuickSearchFields($fields, $search_fields);
+		
 		// Sort by keys
 		ksort($fields);
 		
@@ -698,9 +699,6 @@ foreach($fields as $field_name => $field_type) {
 				// ...
 			}
 		}
-		
-		$this->renderPage = 0;
-		$this->addParams($params, true);
 		
 		return $params;
 	}
@@ -1019,6 +1017,7 @@ class Context_<?php echo $class_name;?> extends Extension_DevblocksContext imple
 			'id' => $<?php echo $ctx_var_model; ?>->id,
 			'name' => $<?php echo $ctx_var_model; ?>->name,
 			'permalink' => $url,
+			//'updated' => $<?php echo $ctx_var_model; ?>->updated_at, // [TODO]
 		);
 	}
 	
@@ -1182,7 +1181,7 @@ class Context_<?php echo $class_name;?> extends Extension_DevblocksContext imple
 		return $view;
 	}
 	
-	function renderPeekPopup($context_id=0, $view_id='') {
+	function renderPeekPopup($context_id=0, $view_id='', $edit=false) {
 		$tpl = DevblocksPlatform::getTemplateService();
 		$tpl->assign('view_id', $view_id);
 		
@@ -1361,17 +1360,6 @@ class Context_<?php echo $class_name;?> extends Extension_DevblocksContext imple
 		});
 		
 		$(this).find('input:text:first').focus();
-		
-		// Form hints
-		
-		$textarea
-			.focusin(function() {
-				$(this).siblings('div.cerb-form-hint').fadeIn();
-			})
-			.focusout(function() {
-				$(this).siblings('div.cerb-form-hint').fadeOut();
-			})
-			;
 		
 		// @mentions
 		
@@ -2025,14 +2013,7 @@ $(document).keypress(function(event) {
 {/if}
 </script>
 
-{$profile_scripts = Extension_ContextProfileScript::getExtensions(true, $page_context)}
-{if !empty($profile_scripts)}
-{foreach from=$profile_scripts item=renderer}
-	{if method_exists($renderer,'renderScript')}
-		{$renderer->renderScript($page_context, $page_context_id)}
-	{/if}
-{/foreach}
-{/if}
+{include file="devblocks:cerberusweb.core::internal/profiles/profile_common_scripts.tpl"}
 </textarea>
 
 <?php } ?>

@@ -91,21 +91,11 @@
 			var loader = this;
 			var $div = $('#widget' + widget_id);
 			
-			var cb = function(html) {
-				if(null != $div) {
-					$div.html(html);
-					$div.fadeTo("fast", 1.0);
-					
-					if($div.is('DIV[id^=view]'))
-						$div.trigger('view_refresh');
-				}
-				
+			var cb = function() {
 				loader.is_running = false;
 				loader.next();
 			}
 
-			$div.fadeTo("fast", 0.2);
-			
 			this.is_running = true;
 			genericAjaxGet('widget' + widget_id,'c=internal&a=handleSectionAction&section=dashboards&action=renderWidget&widget_id=' + widget_id, cb);
 		},
@@ -149,7 +139,7 @@
 			var widget_id = e.widget_id;
 			
 			// Create the widget DOM
-			$new_widget = $('<div class="dashboard-widget" id="widget' + widget_id + '"></div>');
+			$new_widget = $('<div class="dashboard-widget"></div>').attr('id','widget' + widget_id);
 			
 			// Append it to the first column
 			$dashboard = $('#dashboard{$workspace_tab->id}');

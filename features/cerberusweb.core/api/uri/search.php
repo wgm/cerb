@@ -73,24 +73,48 @@ class Page_Search extends CerberusPageExtension {
 		
 		// Placeholders
 		
-		$labels = array();
-		$values = array();
-		
-		$labels['current_worker_id'] = array(
-			'label' => 'Current Worker',
-			'context' => CerberusContexts::CONTEXT_WORKER,
-		);
-		
-		$values['current_worker_id'] = $active_worker->id;
-		
-		$view->setPlaceholderLabels($labels);
-		$view->setPlaceholderValues($values);
+		if($active_worker) {
+			$labels = array();
+			$values = array();
+			$active_worker->getPlaceholderLabelsValues($labels, $values);
+			
+			$view->setPlaceholderLabels($labels);
+			$view->setPlaceholderValues($values);
+		}
 		
 		// Template
 		
 		$tpl->assign('view', $view);
 		
 		$tpl->display('devblocks:cerberusweb.core::search/index.tpl');
+	}
+	
+	function openSearchPopupAction() {
+		@$context = DevblocksPlatform::importGPC($_REQUEST['context'],'string','');
+		@$query = DevblocksPlatform::importGPC($_REQUEST['q'],'string','');
+
+		if(false == ($context_ext = Extension_DevblocksContext::get($context)))
+			return;
+		
+		// Verify that this context is publicly searchable
+		@$context_options = $context_ext->manifest->params['options'][0];
+		
+		if(!is_array($context_options) || !isset($context_options['workspace']))
+			return;
+		
+		if(false == ($view = $context_ext->getSearchView()) || !($view instanceof IAbstractView_QuickSearch))
+			return;
+		
+		if(isset($_REQUEST['q']))
+			$view->addParamsWithQuickSearch($query, true);
+		
+		$tpl = DevblocksPlatform::getTemplateService();
+		$tpl->assign('context_ext', $context_ext);
+		$tpl->assign('popup_title', $context_ext->manifest->name . ' Search');
+		$tpl->assign('quick_search_query', $query);
+		$tpl->assign('view', $view);
+		
+		$tpl->display('devblocks:cerberusweb.core::search/popup.tpl');
 	}
 	
 	function ajaxQuickSearchAction() {
@@ -104,7 +128,15 @@ class Page_Search extends CerberusPageExtension {
 			return;
 		}
 		
-		$view->addParamsWithQuickSearch($query);
+		$replace_params = true;
+		
+		// Allow parameters to be added incrementally with a leading '+' character
+		if('+' == substr($query,0,1)) {
+			$replace_params = false;
+			$query = ltrim($query, '+ ');
+		}
+		
+		$view->addParamsWithQuickSearch($query, $replace_params);
 		
 		$tpl = DevblocksPlatform::getTemplateService();
 		$tpl->assign('view', $view);

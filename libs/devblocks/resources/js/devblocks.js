@@ -1,4 +1,9 @@
 function DevblocksClass() {
+	// Source: http://stackoverflow.com/a/16693578
+	this.uniqueId = function() {
+		return (Math.random().toString(16)+"000000000").substr(2,8);
+	}
+	
 	/* Source: http://bytes.com/forum/thread90068.html */
 	// [TODO] Does this matter with caret.js anymore?
 	this.getSelectedText = function() {
@@ -47,8 +52,17 @@ function DevblocksClass() {
 	}
 	
 	this.showError = function(target, message, animate) {
-		$html = $('<div class="ui-widget"><div class="ui-state-error ui-corner-all" style="padding:0 0.5em;margin:0.5em;"><p><span class="ui-icon ui-icon-alert" style="margin-right:.3em;float:left;"></span>'+message+'</p></div></div>');
-		$status = $(target).html($html).show();
+		$html = $('<div class="ui-widget"/>')
+			.append(
+				$('<div class="ui-state-error ui-corner-all" style="padding:0 0.5em;margin:0.5em;"/>')
+				.append(
+					$('<p/>').html(message)
+						.prepend($('<span class="glyphicons glyphicons-circle-exclamation-mark" style="margin-right:5px;"></span>'))
+				)
+			)
+		;
+		
+		var $status = $(target).html($html).show();
 		
 		animate = (null == animate || false != animate) ? true: false;
 		if(animate)
@@ -58,8 +72,17 @@ function DevblocksClass() {
 	}
 	
 	this.showSuccess = function(target, message, autohide, animate) {
-		$html = $('<div class="ui-widget"><div class="ui-state-highlight ui-corner-all" style="padding:0 0.5em;margin:0.5em;"><p><span class="ui-icon ui-icon-info" style="margin-right:.3em;float:left;"></span>'+message+'</p></div></div>');
-		$status = $(target).html($html).show();
+		$html = $('<div class="ui-widget"/>')
+			.append(
+				$('<div class="ui-state-highlight ui-corner-all" style="padding:0 0.5em;margin:0.5em;"/>')
+				.append(
+					$('<p/>').html(message)
+						.prepend($('<span class="glyphicons glyphicons-circle-ok" style="margin-right:5px;"></span>'))
+				)
+			)
+		;
+		
+		var $status = $(target).html($html).show();
 		
 		animate = (null == animate || false != animate) ? true: false; 
 		if(animate)
@@ -87,7 +110,12 @@ function DevblocksClass() {
 			beforeLoad: function(event, ui) {
 				var tab_title = ui.tab.find('> a').first().clone();
 				tab_title.find('div.tab-badge').remove();
-				ui.panel.html('<div style="font-size:18px;font-weight:bold;text-align:center;padding:10px;margin:10px;">Loading: ' + $.trim(tab_title.text()) + '<br><span class="cerb-ajax-spinner"></span></div>');
+				var $div = $('<div style="font-size:18px;font-weight:bold;text-align:center;padding:10px;margin:10px;"/>')
+					.text('Loading: ' + $.trim(tab_title.text()))
+					.append($('<br>'))
+					.append($('<span class="cerb-ajax-spinner"/>'))
+					;
+				ui.panel.html($div);
 			},
 		};
 	}
@@ -112,9 +140,75 @@ function DevblocksClass() {
 		
 		return selectedTabs[tabsId];
 	}
+	
+	this.callbackPeekEditSave = function(e) {
+		if(!(typeof e == 'object'))
+			return false;
+		
+		var $button = $(this);
+		var $popup = genericAjaxPopupFind($button);
+		var $frm = $popup.find('form').first();
+		var $status = $popup.find('div.status');
+		var is_delete = (e.data && e.data.mode == 'delete');
+		
+		if(!($popup instanceof jQuery))
+			return false;
+		
+		if(!($frm instanceof jQuery))
+			return false;
+		
+		// Clear the status div
+		if($status instanceof jQuery)
+			$status.html('').hide();
+		
+		// Are we deleting the record?
+		if(is_delete) {
+			$frm.find('input:hidden[name=do_delete]').val('1');
+		} else {
+			$frm.find('input:hidden[name=do_delete]').val('0');
+		}
+		
+		genericAjaxPost($frm, '', '', function(e) {
+			if(!(typeof e == 'object'))
+				return;
+			
+			if(e.status) {
+				var event;
+				
+				if(is_delete) {
+					event = new jQuery.Event('peek_deleted');
+				} else {
+					event = new jQuery.Event('peek_saved');
+				}
+				
+				// Meta fields
+				if(e.id)
+					event.context_id = e.id;
+				if(e.label)
+					event.context_label = e.label;
+				
+				// Reload the associated view (underlying helper)
+				if(e.view_id)
+					genericAjaxGet('view'+e.view_id, 'c=internal&a=viewRefresh&id=' + e.view_id);
+				
+				genericAjaxPopupClose($popup, event);
+				
+			} else {
+				// Output errors
+				if(e.error && ($status instanceof jQuery))
+					Devblocks.showError($status, e.error);
+				
+				// Highlight the failing field
+				if(e.field)
+					$frm.find('[name=' + e.field + ']').focus();
+			}
+		});
+	}
+	
 };
 var Devblocks = new DevblocksClass();
 
+// [TODO] Remove this in favor of jQuery $(select).val()
 function selectValue(e) {
 	return e.options[e.selectedIndex].value;
 }
@@ -256,7 +350,14 @@ function genericAjaxPopupFetch($layer) {
 }
 
 function genericAjaxPopupClose($layer, $event) {
-	var $popup = genericAjaxPopupFetch($layer);
+	var $popup = null;
+	
+	if($layer instanceof jQuery) {
+		$popup = $layer;
+	} else if(typeof $layer == 'string') {
+		$popup = genericAjaxPopupFetch($layer);
+	}
+	
 	if(null != $popup) {
 		try {
 			if(null != $event)
@@ -273,9 +374,16 @@ function genericAjaxPopupClose($layer, $event) {
 }
 
 function genericAjaxPopupDestroy($layer) {
-	var $popup = genericAjaxPopupFetch($layer);
+	var $popup = null;
+	
+	if($layer instanceof jQuery) {
+		$popup = $layer;
+	} else if(typeof $layer == 'string') {
+		$popup = genericAjaxPopupFetch($layer);
+	}
+
 	if(null != $popup) {
-		genericAjaxPopupClose($layer);
+		genericAjaxPopupClose($popup);
 		try {
 			$popup.dialog('destroy');
 			$popup.unbind();
@@ -307,9 +415,12 @@ function genericAjaxPopup($layer,request,target,modal,width,cb) {
 		draggable : true,
 		modal : false,
 		resizable : true,
-		width : '600px',
+		width : Math.max(Math.floor($(window).width()/2), 500) + 'px', // Larger of 50% of browser width or 500px
 		close: function(event, ui) {
-			$(this).unbind().find(':focus').blur();
+			var $this = $(this);
+			$('#devblocksPopups').removeData($layer);
+			$this.unbind().find(':focus').blur();
+			$this.closest('.ui-dialog').remove();
 		}
 	};
 	
@@ -353,8 +464,16 @@ function genericAjaxPopup($layer,request,target,modal,width,cb) {
 	// Reset (if exists)
 	genericAjaxPopupDestroy($layer);
 	
-	if(null != width) options.width = width + 'px'; // [TODO] Fixed the forced 'px' later
-	if(null != modal) options.modal = modal;
+	if(undefined != width && null != width) {
+		if(typeof width == 'string' && width.substr(-1) == '%') {
+			width = Math.floor($(window).width() * parseInt(width)/100);
+		}
+		
+		options.width = Math.max(parseInt(width), 500) + 'px';
+	}
+	
+	if(null != modal)
+		options.modal = modal;
 	
 	// Load the popup content
 	var $options = { async: false }
@@ -366,7 +485,7 @@ function genericAjaxPopup($layer,request,target,modal,width,cb) {
 				$("body").append("<div id='popup"+$layer+"' class='devblocks-popup' style='display:none;'></div>");
 				$popup = $('#popup'+$layer);
 			}
-
+			
 			// Persist
 			genericAjaxPopupRegister($layer, $popup);
 			
@@ -379,13 +498,11 @@ function genericAjaxPopup($layer,request,target,modal,width,cb) {
 				};
 			}
 			
-			// Max height
-			//var max_height = Math.round($(window).height() * 0.85);
-			//$popup.css('max-height', max_height + 'px');
-			//options.maxHeight = max_height + 75;
-			
 			// Render
 			$popup.dialog(options);
+			
+			// Layer
+			$popup.attr('data-layer', $layer);
 			
 			// Open
 			$popup.dialog('open');
@@ -415,7 +532,7 @@ function genericAjaxPopupPostCloseReloadView($layer, frm, view_id, has_output, $
 	if(has_view)
 		$('#view'+view_id).fadeTo("fast", 0.2);
 	
-	genericAjaxPost(frm,view_id,'',
+	genericAjaxPost(frm,'','',
 		function(html) {
 			if(has_view && has_output) { // Reload from post content
 				if(html.length > 0)
@@ -429,15 +546,13 @@ function genericAjaxPopupPostCloseReloadView($layer, frm, view_id, has_output, $
 
 			if(null == $layer) {
 				$popup = genericAjaxPopupFind('#'+frm);
-				if(null != $popup)
-					$layer = $popup.attr('id').substring(5);
 			} else {
 				$popup = genericAjaxPopupFetch($layer);
 			}
 			
 			if(null != $popup) {
 				$popup.trigger('popup_saved');
-				genericAjaxPopupClose($layer, $event);
+				genericAjaxPopupClose($popup, $event);
 			}
 		}
 	);
@@ -447,25 +562,10 @@ function genericAjaxGet(divRef,args,cb,options) {
 	var div = null;
 
 	// Polymorph div
-	if(typeof divRef=="object")
+	if(divRef instanceof jQuery)
 		div = divRef;
 	else if(typeof divRef=="string" && divRef.length > 0)
 		div = $('#'+divRef);
-	
-	if(null == cb) {
-		if(null != div)
-			div.fadeTo("fast", 0.2);
-		
-		var cb = function(html) {
-			if(null != div) {
-				div.html(html);
-				div.fadeTo("fast", 1.0);
-				
-				if(div.is('DIV[id^=view]'))
-					div.trigger('view_refresh');
-			}
-		}
-	}
 	
 	// Allow custom options
 	if(null == options)
@@ -474,40 +574,11 @@ function genericAjaxGet(divRef,args,cb,options) {
 	options.type = 'GET';
 	options.url = DevblocksAppPath+'ajax.php?'+args;
 	options.cache = false;
-	options.success = cb;
 	
-	if(null == options.headers)
-		options.headers = {};
+	if(null != div) {
+		div.fadeTo("fast", 0.2);
 		
-	options.headers['X-CSRF-Token'] = $('meta[name="_csrf_token"]').attr('content');
-	
-	$.ajax(options);
-}
-
-function genericAjaxPost(formRef,divRef,args,cb,options) {
-	var frm = null;
-	var div = null;
-	
-	// Polymorph form
-	if(typeof formRef=="object")
-		frm = formRef;
-	else if(typeof formRef=="string" && formRef.length > 0)
-		frm = $('#'+formRef);
-	
-	// Polymorph div
-	if(typeof divRef=="object")
-		div = divRef;
-	else if(typeof divRef=="string" && divRef.length > 0)
-		div = $('#'+divRef);
-	
-	if(null == frm)
-		return;
-	
-	if(null == cb) {
-		if(null != div)
-			div.fadeTo("fast", 0.2);
-		
-		var cb = function(html) {
+		options.success = function(html) {
 			if(null != div) {
 				div.html(html);
 				div.fadeTo("fast", 1.0);
@@ -517,7 +588,38 @@ function genericAjaxPost(formRef,divRef,args,cb,options) {
 			}
 		};
 	}
+	
+	if(null == options.headers)
+		options.headers = {};
+		
+	options.headers['X-CSRF-Token'] = $('meta[name="_csrf_token"]').attr('content');
+	
+	var $ajax = $.ajax(options);
+	
+	if(typeof cb == 'function') {
+		$ajax.done(cb);
+	}
+}
 
+function genericAjaxPost(formRef,divRef,args,cb,options) {
+	var frm = null;
+	var div = null;
+	
+	// Polymorph form
+	if(formRef instanceof jQuery)
+		frm = formRef;
+	else if(typeof formRef=="string" && formRef.length > 0)
+		frm = $('#'+formRef);
+	
+	// Polymorph div
+	if(divRef instanceof jQuery)
+		div = divRef;
+	else if(typeof divRef=="string" && divRef.length > 0)
+		div = $('#'+divRef);
+	
+	if(null == frm)
+		return;
+	
 	// Allow custom options
 	if(null == options)
 		options = { };
@@ -526,14 +628,31 @@ function genericAjaxPost(formRef,divRef,args,cb,options) {
 	options.data = $(frm).serialize();
 	options.url = DevblocksAppPath+'ajax.php'+(null!=args?('?'+args):''),
 	options.cache = false;
-	options.success = cb;
+	
+	if(null != div) {
+		div.fadeTo("fast", 0.2);
+		
+		options.success = function(html) {
+			if(null != div) {
+				div.html(html);
+				div.fadeTo("fast", 1.0);
+				
+				if(div.is('DIV[id^=view]'))
+					div.trigger('view_refresh');
+			}
+		};
+	}
 	
 	if(null == options.headers)
 		options.headers = {};
 		
 	options.headers['X-CSRF-Token'] = $('meta[name="_csrf_token"]').attr('content');
 	
-	$.ajax(options);
+	var $ajax = $.ajax(options);
+	
+	if(typeof cb == 'function') {
+		$ajax.done(cb);
+	}
 }
 
 function devblocksAjaxDateChooser(field, div, options) {

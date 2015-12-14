@@ -61,14 +61,32 @@
 	<textarea name="{$namePrefix}[headers]" rows="3" cols="45" style="width:100%;" class="placeholders">{$params.headers}</textarea>
 </div>
 
-<b>{'common.attachments'|devblocks_translate|capitalize}:</b>
+{* Check for attachment list variables *}
+{capture name="attachment_vars"}
+{foreach from=$trigger->variables item=var key=var_key}
+{if $var.type == "ctx_{CerberusContexts::CONTEXT_ATTACHMENT}"}
+<div>
+	<label><input type="checkbox" name="{$namePrefix}[attachment_vars][]" value="{$var_key}" {if in_array($var_key, $params.attachment_vars)}checked="checked"{/if}>{$var.label}</label>
+</div>
+{/if}
+{/foreach}
+{/capture}
+
+{if $smarty.capture.attachment_vars}
+<b>Attach the files from these variables:</b>
+<div style="margin-left:10px;margin-bottom:0.5em;">
+{$smarty.capture.attachment_vars nofilter}
+</div>
+{/if}
+
+<b>Attach these file bundles:</b>
 <div style="margin-left:10px;margin-bottom:0.5em;">
 	<button type="button" class="chooser-file-bundle"><span class="glyphicons glyphicons-paperclip"></span></button>
 	<ul class="bubbles chooser-container">
 	{foreach from=$params.bundle_ids item=bundle_id}
 		{$bundle = DAO_FileBundle::get($bundle_id)}
 		{if !empty($bundle)}
-		<li><input type="hidden" name="{$namePrefix}[bundle_ids][]" value="{$bundle_id}">{$bundle->name} <a href="javascript:;" onclick="$(this).parent().remove();"><span class="ui-icon ui-icon-trash" style="display:inline-block;width:14px;height:14px;"></span></a></li>
+		<li><input type="hidden" name="{$namePrefix}[bundle_ids][]" value="{$bundle_id}">{$bundle->name} <a href="javascript:;" onclick="$(this).parent().remove();"><span class="glyphicons glyphicons-circle-remove"></span></a></li>
 		{/if} 
 	{/foreach}
 	</ul>

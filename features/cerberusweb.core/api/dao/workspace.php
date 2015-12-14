@@ -144,6 +144,23 @@ class DAO_WorkspacePage extends Cerb_ORMHelper {
 
 		return $pages;
 	}
+	
+	static function getUsers($page_id) {
+		$results = array();
+		
+		if(false == ($instances = DAO_WorkerPref::getByKey('menu_json')) || !is_array($instances) || empty($instances))
+			return array();
+		
+		foreach($instances as $worker_id => $instance) {
+			if(false == ($menu = json_decode($instance)))
+				continue;
+			
+			if(in_array($page_id, $menu))
+				$results[] = $worker_id;
+		}
+		
+		return $results;
+	}
 
 	/**
 	 * @param integer $id
@@ -216,10 +233,6 @@ class DAO_WorkspacePage extends Cerb_ORMHelper {
 	public static function getSearchQueryComponents($columns, $params, $sortBy=null, $sortAsc=null) {
 		$fields = SearchFields_WorkspacePage::getFields();
 
-		// Sanitize
-		if('*'==substr($sortBy,0,1) || !isset($fields[$sortBy]))
-			$sortBy=null;
-
 		list($tables,$wheres) = parent::_parseSearchParams($params, $columns, $fields, $sortBy);
 
 		$select_sql = sprintf("SELECT ".
@@ -240,7 +253,7 @@ class DAO_WorkspacePage extends Cerb_ORMHelper {
 		$where_sql = "".
 			(!empty($wheres) ? sprintf("WHERE %s ",implode(' AND ',$wheres)) : "WHERE 1 ");
 			
-		$sort_sql = (!empty($sortBy)) ? sprintf("ORDER BY %s %s ",$sortBy,($sortAsc || is_null($sortAsc))?"ASC":"DESC") : " ";
+		$sort_sql = self::_buildSortClause($sortBy, $sortAsc, $fields);
 
 		return array(
 			'primary_table' => 'workspace_page',
@@ -561,10 +574,6 @@ class DAO_WorkspaceTab extends Cerb_ORMHelper {
 	public static function getSearchQueryComponents($columns, $params, $sortBy=null, $sortAsc=null) {
 		$fields = SearchFields_Workspace::getFields();
 		
-		// Sanitize
-		if('*'==substr($sortBy,0,1) || !isset($fields[$sortBy]))
-			$sortBy=null;
-
 		list($tables,$wheres) = parent::_parseSearchParams($params, $columns, $fields, $sortBy);
 		
 		$select_sql = sprintf("SELECT ".
@@ -585,7 +594,7 @@ class DAO_WorkspaceTab extends Cerb_ORMHelper {
 		$where_sql = "".
 			(!empty($wheres) ? sprintf("WHERE %s ",implode(' AND ',$wheres)) : "WHERE 1 ");
 			
-		$sort_sql = (!empty($sortBy)) ? sprintf("ORDER BY %s %s ",$sortBy,($sortAsc || is_null($sortAsc))?"ASC":"DESC") : " ";
+		$sort_sql = self::_buildSortClause($sortBy, $sortAsc, $fields);
 	
 		return array(
 			'primary_table' => 'workspace_tab',
@@ -691,13 +700,13 @@ class SearchFields_WorkspacePage implements IDevblocksSearchFields {
 		$translate = DevblocksPlatform::getTranslationService();
 		
 		$columns = array(
-			self::ID => new DevblocksSearchField(self::ID, 'workspace_page', 'id', $translate->_('common.id')),
-			self::NAME => new DevblocksSearchField(self::NAME, 'workspace_page', 'name', $translate->_('common.name'), Model_CustomField::TYPE_SINGLE_LINE),
-			self::OWNER_CONTEXT => new DevblocksSearchField(self::OWNER_CONTEXT, 'workspace_page', 'owner_context', null),
-			self::OWNER_CONTEXT_ID => new DevblocksSearchField(self::OWNER_CONTEXT_ID, 'workspace_page', 'owner_context_id', null),
-			self::EXTENSION_ID => new DevblocksSearchField(self::EXTENSION_ID, 'workspace_page', 'extension_id', null),
+			self::ID => new DevblocksSearchField(self::ID, 'workspace_page', 'id', $translate->_('common.id'), null, true),
+			self::NAME => new DevblocksSearchField(self::NAME, 'workspace_page', 'name', $translate->_('common.name'), Model_CustomField::TYPE_SINGLE_LINE, true),
+			self::OWNER_CONTEXT => new DevblocksSearchField(self::OWNER_CONTEXT, 'workspace_page', 'owner_context', null, null, false),
+			self::OWNER_CONTEXT_ID => new DevblocksSearchField(self::OWNER_CONTEXT_ID, 'workspace_page', 'owner_context_id', null, null, false),
+			self::EXTENSION_ID => new DevblocksSearchField(self::EXTENSION_ID, 'workspace_page', 'extension_id', null, null, true),
 				
-			self::VIRTUAL_OWNER => new DevblocksSearchField(self::VIRTUAL_OWNER, '*', 'owner', $translate->_('common.owner'), null),
+			self::VIRTUAL_OWNER => new DevblocksSearchField(self::VIRTUAL_OWNER, '*', 'owner', $translate->_('common.owner'), null, false),
 		);
 		
 		// Sort by label (translation-conscious)
@@ -721,11 +730,11 @@ class SearchFields_WorkspaceTab implements IDevblocksSearchFields {
 		$translate = DevblocksPlatform::getTranslationService();
 		
 		$columns = array(
-			self::ID => new DevblocksSearchField(self::ID, 'workspace_tab', 'id', $translate->_('common.id')),
-			self::NAME => new DevblocksSearchField(self::NAME, 'workspace_tab', 'name', $translate->_('common.name')),
-			self::WORKSPACE_PAGE_ID => new DevblocksSearchField(self::WORKSPACE_PAGE_ID, 'workspace_tab', 'workspace_page_id', null),
-			self::POS => new DevblocksSearchField(self::POS, 'workspace_tab', 'pos', null),
-			self::EXTENSION_ID => new DevblocksSearchField(self::EXTENSION_ID, 'workspace_tab', 'extension_id', null),
+			self::ID => new DevblocksSearchField(self::ID, 'workspace_tab', 'id', $translate->_('common.id'), null, true),
+			self::NAME => new DevblocksSearchField(self::NAME, 'workspace_tab', 'name', $translate->_('common.name'), null, true),
+			self::WORKSPACE_PAGE_ID => new DevblocksSearchField(self::WORKSPACE_PAGE_ID, 'workspace_tab', 'workspace_page_id', null, null, true),
+			self::POS => new DevblocksSearchField(self::POS, 'workspace_tab', 'pos', null, null, true),
+			self::EXTENSION_ID => new DevblocksSearchField(self::EXTENSION_ID, 'workspace_tab', 'extension_id', null, null, true),
 		);
 		
 		// Sort by label (translation-conscious)
@@ -781,6 +790,10 @@ class Model_WorkspacePage {
 		}
 		
 		return $tabs;
+	}
+	
+	function getUsers() {
+		return DAO_WorkspacePage::getUsers($this->id);
 	}
 	
 	function isReadableByWorker($worker) {
@@ -895,7 +908,7 @@ class Model_WorkspaceTab {
 	}
 };
 
-class DAO_WorkspaceList extends DevblocksORMHelper {
+class DAO_WorkspaceList extends Cerb_ORMHelper {
 	const ID = 'id';
 	const WORKSPACE_TAB_ID = 'workspace_tab_id';
 	const CONTEXT = 'context';
@@ -1085,6 +1098,8 @@ class View_WorkspacePage extends C4_AbstractView implements IAbstractView_QuickS
 	}
 	
 	function getQuickSearchFields() {
+		$search_fields = SearchFields_WorkspacePage::getFields();
+		
 		$fields = array(
 			'_fulltext' => 
 				array(
@@ -1101,6 +1116,10 @@ class View_WorkspacePage extends C4_AbstractView implements IAbstractView_QuickS
 		// Add searchable custom fields
 		
 		$fields = self::_appendFieldsFromQuickSearchContext(CerberusContexts::CONTEXT_WORKSPACE_PAGE, $fields, null);
+		
+		// Add is_sortable
+		
+		$fields = self::_setSortableQuickSearchFields($fields, $search_fields);
 		
 		// Sort by keys
 		
@@ -1120,9 +1139,6 @@ class View_WorkspacePage extends C4_AbstractView implements IAbstractView_QuickS
 				// ...
 			}
 		}
-		
-		$this->renderPage = 0;
-		$this->addParams($params, true);
 		
 		return $params;
 	}
@@ -1181,8 +1197,8 @@ class View_WorkspacePage extends C4_AbstractView implements IAbstractView_QuickS
 		switch($key) {
 			case SearchFields_WorkspacePage::VIRTUAL_OWNER:
 				echo sprintf("%s %s ",
-					mb_convert_case($translate->_('common.owner'), MB_CASE_TITLE),
-					$param->operator
+					DevblocksPlatform::strEscapeHtml(mb_convert_case($translate->_('common.owner'), MB_CASE_TITLE)),
+					DevblocksPlatform::strEscapeHtml($param->operator)
 				);
 				
 				$objects = array();
@@ -1203,8 +1219,8 @@ class View_WorkspacePage extends C4_AbstractView implements IAbstractView_QuickS
 						return;
 					
 					$objects[] = sprintf("<b>%s (%s)</b>",
-						$meta['name'],
-						$ext->manifest->name
+						DevblocksPlatform::strEscapeHtml($meta['name']),
+						DevblocksPlatform::strEscapeHtml($ext->manifest->name)
 					);
 				}
 				
@@ -1287,6 +1303,7 @@ class Context_WorkspacePage extends Extension_DevblocksContext {
 			'id' => $workspace_page->id,
 			'name' => $workspace_page->name,
 			'permalink' => $url,
+			'updated' => 0, // [TODO]
 		);
 	}
 	
@@ -1449,22 +1466,6 @@ class Context_WorkspacePage extends Extension_DevblocksContext {
 		$view = C4_AbstractViewLoader::getView($view_id, $defaults);
 		$view->name = 'Pages';
 		
-		/*
-		$view->view_columns = array(
-			SearchFields_Address::FIRST_NAME,
-			SearchFields_Address::LAST_NAME,
-			SearchFields_Address::ORG_NAME,
-		);
-		*/
-		
-		/*
-		$view->addParamsDefault(array(
-			SearchFields_Address::IS_BANNED => new DevblocksSearchCriteria(SearchFields_Address::IS_BANNED,'=',0),
-			SearchFields_Address::IS_DEFUNCT => new DevblocksSearchCriteria(SearchFields_Address::IS_DEFUNCT,'=',0),
-		), true);
-		$view->addParams($view->getParamsDefault(), true);
-		*/
-		
 		$view->renderSortBy = SearchFields_WorkspacePage::ID;
 		$view->renderSortAsc = true;
 		$view->renderLimit = 10;
@@ -1520,6 +1521,7 @@ class Context_WorkspaceTab extends Extension_DevblocksContext {
 			'id' => $workspace_tab->id,
 			'name' => $workspace_tab->name,
 			'permalink' => $url,
+			'updated' => 0, // [TODO]
 		);
 	}
 	
@@ -1696,22 +1698,6 @@ class Context_WorkspaceTab extends Extension_DevblocksContext {
 		
 		$view = C4_AbstractViewLoader::getView($view_id, $defaults);
 		$view->name = 'Tabs';
-		
-		/*
-		$view->view_columns = array(
-			SearchFields_Address::FIRST_NAME,
-			SearchFields_Address::LAST_NAME,
-			SearchFields_Address::ORG_NAME,
-		);
-		*/
-		
-		/*
-		$view->addParamsDefault(array(
-			SearchFields_Address::IS_BANNED => new DevblocksSearchCriteria(SearchFields_Address::IS_BANNED,'=',0),
-			SearchFields_Address::IS_DEFUNCT => new DevblocksSearchCriteria(SearchFields_Address::IS_DEFUNCT,'=',0),
-		), true);
-		$view->addParams($view->getParamsDefault(), true);
-		*/
 		
 		$view->renderSortBy = SearchFields_WorkspaceTab::ID;
 		$view->renderSortAsc = true;

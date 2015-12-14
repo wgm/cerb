@@ -482,6 +482,8 @@ class View_Translation extends C4_AbstractView implements IAbstractView_Subtotal
 	}
 	
 	function getQuickSearchFields() {
+		$search_fields = SearchFields_Translation::getFields();
+		
 		$fields = array(
 			'_fulltext' => 
 				array(
@@ -509,6 +511,10 @@ class View_Translation extends C4_AbstractView implements IAbstractView_Subtotal
 					'options' => array('param_key' => SearchFields_Translation::STRING_DEFAULT, 'match' => DevblocksSearchCriteria::OPTION_TEXT_PARTIAL),
 				),
 		);
+		
+		// Add is_sortable
+		
+		$fields = self::_setSortableQuickSearchFields($fields, $search_fields);
 		
 		// Sort by keys
 		
@@ -554,9 +560,6 @@ class View_Translation extends C4_AbstractView implements IAbstractView_Subtotal
 					break;
 			}
 		}
-		
-		$this->renderPage = 0;
-		$this->addParams($params, true);
 		
 		return $params;
 	}
@@ -626,7 +629,7 @@ class View_Translation extends C4_AbstractView implements IAbstractView_Subtotal
 				foreach($values as $val) {
 					if(!isset($langs[$val]))
 						continue;
-					$strings[] = $langs[$val];
+					$strings[] = DevblocksPlatform::strEscapeHtml($langs[$val]);
 				}
 				echo implode(", ", $strings);
 				

@@ -74,8 +74,11 @@
 <label><input type="radio" name="params{$params_prefix}[is_available]" value="0" {if empty($params.is_available)}checked="checked"{/if}> busy</label>
 </div>
 
+<div>
 <b>Color</b> it 
 <input type="hidden" name="params{$params_prefix}[color]" value="{$params.color|default:'#A0D95B'}" style="width:100%;" class="color-picker">
+</div>
+
 </div>
 
 <script type="text/javascript">
@@ -109,7 +112,7 @@ $div.find('select.context').change(function(e) {
 					var field = json[idx];
 					var field_type = (field.type=='E') ? 'date' : ((field.type=='N') ? 'number' : '');
 					
-					var $option = $('<option value="'+field.key+'" class="'+field_type+'">'+field.label+'</option>');
+					var $option = $('<option/>').attr('value', field.key).addClass(field_type).text(field.label);
 	
 					// Field: Start Date
 					if(field_type == 'date') {

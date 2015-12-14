@@ -1,3 +1,7 @@
+{$show_image = empty($widget->params.chart_display) || 'image' == $widget->params.chart_display}
+{$show_table = empty($widget->params.chart_display) || 'table' == $widget->params.chart_display}
+
+{if $show_image}
 <div class="chart-tooltip" style="margin-top:2px;">&nbsp;</div>
 
 <canvas id="widget{$widget->id}_axes_canvas" width="300" height="125" style="position:absolute;cursor:crosshair;" class="overlay">
@@ -7,7 +11,9 @@
 <canvas id="widget{$widget->id}_canvas" width="300" height="125">
 	Your browser does not support HTML5 Canvas.
 </canvas>
+{/if}
 
+{if !$show_table}
 <div style="margin-top:5px;">
 {foreach from=$widget->params.series item=series key=series_idx name=series}
 {if 0 != strlen($series.label)}
@@ -18,7 +24,47 @@
 {/if}
 {/foreach}
 </div>
+{/if}
 
+{if $show_table}
+<table cellspacing="0" cellpadding="2">
+<thead>
+<tr>
+	<td></td>
+	{foreach from=$widget->params.series item=series}
+	<td style="border-bottom:1px solid rgb(200,200,200);"><b style="color:{$series.line_color};">{$series.label}</b></td>
+	{/foreach}
+	<td></td>
+</tr>
+</thead>
+<tbody>
+{$col_sum = []}
+{foreach from=$widget->params.series.0.data item=data key=idx}
+	<tr>
+		<td align="right">{$data.x_label}</td>
+		{$sum = 0}
+		{foreach from=$widget->params.series item=series key=series_idx}
+		{if $series.data}
+		<td align="center"><span style="color:{$series.line_color};{if $series.data.$idx.y_label}font-weight:bold;{else}opacity:0.5;{/if}">{$series.data.$idx.y_label}</span></td>
+		{$sum = $sum + $series.data.$idx.y}
+		{$col_sum.$series_idx = $col_sum.$series_idx + $series.data.$idx.y}
+		{/if}
+		{/foreach}
+		<td style="padding-left:5px;border-left:1px solid rgb(200,200,200);" align="center"><b>{$sum}</b></td>
+		{$col_sum.total = $col_sum.total + $sum}
+	</tr>
+{/foreach}
+<tr>
+	<td></td>
+	{foreach from=$col_sum key=idx item=sum name=sums}
+	<td style="border-top:1px solid rgb(200,200,200);{if $smarty.foreach.sums.last}padding-left:5px; border-left:1px solid rgb(200,200,200);{/if}" align="center"><b>{$sum}</b></td>
+	{/foreach}
+</tr>
+</tbody>
+</table>
+{/if}
+
+{if $show_image}
 <script type="text/javascript">
 $(function() {
 try {
@@ -72,7 +118,8 @@ try {
 		context.lineTo(chart_x, chart_height);
 		context.fill();
 		
-		var $label = $('<span style="background-color:rgb(240,240,240);padding:2px 2px 2px 7px;font-weight:bold;"><span style="margin-right:5px;">'+options.series[0].data[closest.data.index].x_label+':</span></span>');
+		var $label = $('<span style="background-color:rgb(240,240,240);padding:2px 2px 2px 7px;font-weight:bold;"/>');
+		$label.append($('<span style="margin-right:5px;"/>').text(options.series[0].data[closest.data.index].x_label+':'));
 		
 		for(series_idx in options.series) {
 			var series = options.series[series_idx];
@@ -81,7 +128,7 @@ try {
 			if(null == series || null == series.data)
 				continue;
 
-			var $metric_label = $('<span style="color:'+series.options.color+';margin-right:5px;">'+series.data[index].y_label+'</span>');
+			var $metric_label = $('<span/>').css('color',series.options.color).css('margin-right','5px').text(series.data[index].y_label);
 			$label.append($metric_label);
 		}
 		
@@ -103,3 +150,4 @@ try {
 }
 });
 </script>
+{/if}

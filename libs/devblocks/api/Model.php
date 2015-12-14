@@ -288,12 +288,14 @@ class DevblocksSearchCriteria {
 					$worker_ids = array();
 					
 					foreach($patterns as $pattern) {
-						if($active_worker && 0 == strcasecmp($pattern, 'me')) {
+						if(is_numeric($pattern) && isset($workers[$pattern])) {
+							$worker_ids[intval($pattern)] = true;
+						
+						} elseif($active_worker && 0 == strcasecmp($pattern, 'me')) {
 							$worker_ids[$active_worker->id] = true;
 							continue;
-						}
-						
-						if(in_array(strtolower($pattern), array('none','noone','nobody'))) {
+							
+						} elseif(in_array(strtolower($pattern), array('none','noone','nobody'))) {
 							$oper = self::OPER_IN_OR_NULL;
 							$worker_ids[0] = true;
 						}
@@ -743,13 +745,15 @@ class DevblocksSearchField {
 	public $db_column;
 	public $db_label;
 	public $type;
+	public $is_sortable = false;
 	
-	function __construct($token, $db_table, $db_column, $label=null, $type=null) {
+	function __construct($token, $db_table, $db_column, $label=null, $type=null, $is_sortable=false) {
 		$this->token = $token;
 		$this->db_table = $db_table;
 		$this->db_column = $db_column;
 		$this->db_label = $label;
 		$this->type = $type;
+		$this->is_sortable = $is_sortable;
 	}
 	
 	static function getCustomSearchFieldsByContexts($contexts) {
@@ -776,7 +780,8 @@ class DevblocksSearchField {
 					$key, // table
 					'field_value', // column
 					$label, // label
-					$field->type // type
+					$field->type, // type
+					true // is sortable // [TODO] By type?
 				);
 			}
 		}

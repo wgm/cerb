@@ -14,6 +14,44 @@
 	</div>
 	
 	<ul class="cerb-quick-search-menu" style="position:absolute;float:right;margin-right:10px;z-index:5;display:none;">
+		{$placeholder_labels = $view->getPlaceholderLabels()}
+		
+		{if !empty($placeholder_labels)}
+		<li field="">
+			(placeholders)
+			<ul style="width:200px;">
+				{foreach from=$placeholder_labels item=v key=k}
+				<li value="{literal}{{{/literal}{$k}{literal}}}{/literal}">{$v.label}</li>
+				{/foreach}
+			</ul>
+		</li>
+		{/if}
+
+		{capture name=sortable_fields}{*
+		*}{if !empty($search_fields)}{*
+		*}{foreach from=$search_fields key=field_key item=field}{*
+		*}{if $field.is_sortable}
+			<li field="">
+				{$field_key}
+				<ul style="width:200px;">
+					<li value="sort:{$field_key}">ascending</li>
+					<li value="sort:-{$field_key}">descending</li>
+				</ul>
+			</li>
+		{/if}{*
+		*}{/foreach}{*
+		*}{/if}{*
+		*}{/capture}
+		
+		{if $smarty.capture.sortable_fields}
+		<li field="">
+			(sort)
+			<ul style="width:200px;">
+				{$smarty.capture.sortable_fields nofilter}
+			</ul>
+		</li>
+		{/if}
+		
 		{if !empty($search_fields)}
 		{foreach from=$search_fields key=field_key item=field}
 		<li field="{$field_key}">
@@ -79,14 +117,13 @@
 		{/foreach}
 		{/if}
 	</ul>
-	
+
 </form>
 
 <script type="text/javascript">
 $(function() {
-var $frm = $('#{$uniqid}').each(function(e) {
-	var $frm = $(this);
-	var $input = $frm.find('input:text');
+	var $div = $('#{$uniqid}');
+	var $input = $div.find('input:text');
 	var $popup = $input.closest('.ui-dialog');
 	var isInPopup = ($popup.length > 0);
 	
@@ -106,7 +143,7 @@ var $frm = $('#{$uniqid}').each(function(e) {
 		}
 	});
 	
-	var $menu = $frm.find('ul.cerb-quick-search-menu')
+	var $menu = $div.find('ul.cerb-quick-search-menu')
 		.menu({
 			items: "> :not(.ui-widget-header)",
 			select: function(event, ui) {
@@ -114,30 +151,41 @@ var $frm = $('#{$uniqid}').each(function(e) {
 				
 				if(undefined == ui.item.attr('field')) {
 					var field_key = ui.item.parent().closest('li').attr('field');
-					var field_value = ui.item.text();
-					var insert_txt = field_key + ':' + field_value;
+					var field_value = '';
+
+					if(ui.item.attr('value')) {
+						field_value = ui.item.attr('value');
+					} else {
+						field_value = ui.item.text();
+					}
+					
+					var insert_txt = (field_key ? (field_key + ':') : '') + field_value;
 					
 				} else {
-					var insert_txt = ui.item.attr('field') + ':';
+					var field_key = ui.item.attr('field');
+					var insert_txt = (field_key ? (field_key + ':') : '');
 					
 				}
 				
 				if(val.length > 0 && val.substr(-1) != " ")
 					insert_txt = " " + insert_txt;
 				
-				$input.insertAtCursor(insert_txt).scrollLeft(2000);
+				if(insert_txt.length > 0) {
+					$input.insertAtCursor(insert_txt).scrollLeft(2000);
+					$menu.hide();
+				}
 			}
 		})
 		.css('width', $input.width())
 		.hide()
 		;
 	
-	var $menu_trigger = $frm.find('a.cerb-quick-search-menu-trigger').click(function() {
+	var $menu_trigger = $div.find('a.cerb-quick-search-menu-trigger').click(function() {
 		$menu.toggle();
 		$input.insertAtCursor('').scrollLeft(2000);
 	});
 	
-	$frm.submit(function() {
+	$div.submit(function() {
 		genericAjaxPost('{$uniqid}','',null,function(json) {
 			if(json.status == true) {
 				{if !empty($return_url)}
@@ -155,7 +203,6 @@ var $frm = $('#{$uniqid}').each(function(e) {
 			$input.focus();
 		});
 	});
-});
 });
 </script>
 {/if}

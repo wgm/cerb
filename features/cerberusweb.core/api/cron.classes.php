@@ -136,13 +136,6 @@ class ParseCron extends CerberusCronPageExtension {
 		$time = microtime(true) - $time;
 		$logger->info("Decoded! (".sprintf("%d",($time*1000))." ms)");
 
-		//		echo "<b>Plaintext:</b> ", $message->body,"<BR>";
-		//		echo "<BR>";
-		//		echo "<b>HTML:</b> ", htmlspecialchars($message->htmlbody), "<BR>";
-		//		echo "<BR>";
-		//		echo "<b>Files:</b> "; print_r($message->files); echo "<BR>";
-		//		echo "<HR>";
-
 		$time = microtime(true);
 		$ticket_id = CerberusParser::parseMessage($message);
 		$time = microtime(true) - $time;
@@ -162,8 +155,6 @@ class ParseCron extends CerberusCronPageExtension {
 		}
 		
 		mailparse_msg_free($mime);
-
-		//		flush();
 	}
 
 	function configure($instance) {
@@ -493,15 +484,12 @@ class ImportCron extends CerberusCronPageExtension {
 			foreach($eCategories->category as $eCategory) {
 				$catName = (string) $eCategory;
 				
-	//			echo "Looking for '", $catName, "' under $pid ...<br>";
-				
 				if(NULL == ($categoryId = $this->_getCategoryChildByName($categoryList, $ptr, $catName))) {
 					$fields = array(
 						DAO_KbCategory::NAME => $catName,
 						DAO_KbCategory::PARENT_ID => $pid,
 					);
 					$categoryId = DAO_KbCategory::create($fields);
-	//				echo " - Not found, inserted as $categoryId<br>";
 					
 					$categoryList[$categoryId] = DAO_KbCategory::get($categoryId);
 					
@@ -514,7 +502,6 @@ class ImportCron extends CerberusCronPageExtension {
 					
 				} else {
 					$categoryIds[] = $categoryId;
-	//				echo " - Found at $categoryId !<br>";
 					
 				}
 				
@@ -560,7 +547,7 @@ class ImportCron extends CerberusCronPageExtension {
 			
 			if(is_array($workers))
 			foreach($workers as $worker) { /* @var $worker Model_Worker */
-				$email_to_worker_id[strtolower($worker->email)] = intval($worker->id);
+				$email_to_worker_id[strtolower($worker->getEmailString())] = intval($worker->id);
 			}
 		}
 		
@@ -737,9 +724,6 @@ class ImportCron extends CerberusCronPageExtension {
 		);
 		$ticket_id = DAO_Ticket::create($fields);
 
-//		echo "Ticket: ",$ticket_id,"<BR>";
-//		print_r($fields);
-		
 		// Create requesters
 		if(!is_null($xml->requesters))
 		foreach($xml->requesters->address as $eAddress) { /* @var $eAddress SimpleXMLElement */
@@ -932,8 +916,11 @@ class ImportCron extends CerberusCronPageExtension {
 			return true;
 		}
 		
+		if(false == ($addy_model = DAO_Address::getByEmail($sEmail)))
+			return false;
+		
 		$fields = array(
-			DAO_Worker::EMAIL => $sEmail,
+			DAO_Worker::EMAIL_ID => $addy_model->id,
 			DAO_Worker::FIRST_NAME => $sFirstName,
 			DAO_Worker::LAST_NAME => $sLastName,
 			DAO_Worker::IS_SUPERUSER => intval($isSuperuser),
@@ -944,9 +931,6 @@ class ImportCron extends CerberusCronPageExtension {
 		// Set pasword auth, if exists
 		if(!empty($sPassword))
 			DAO_Worker::setAuth($worker_id, $sPassword, true);
-		
-		// Address to Worker
-		DAO_AddressToWorker::assign($sEmail, $worker_id, true);
 		
 		$logger->info('[Importer] Imported worker #'.$worker_id.' ('.$sEmail.')');
 		
@@ -1011,28 +995,28 @@ class ImportCron extends CerberusCronPageExtension {
 		
 		if(!$addy_exists) {
 			$fields = array(
-				DAO_Address::FIRST_NAME => $sFirstName,
-				DAO_Address::LAST_NAME => $sLastName,
 				DAO_Address::EMAIL => $sEmail,
 			);
 			$address_id = DAO_Address::create($fields);
 		}
 		
 		if(!empty($sPassword)) {
-			if(null == ($contact = DAO_ContactPerson::getWhere(sprintf("%s = %d", DAO_ContactPerson::EMAIL_ID, $address_id)))) {
+			if(null == ($contact = DAO_Contact::getWhere(sprintf("%s = %d", DAO_Contact::PRIMARY_EMAIL_ID, $address_id)))) {
 				$salt = CerberusApplication::generatePassword(8);
 				$fields = array(
-					DAO_ContactPerson::EMAIL_ID => $address_id,
-					DAO_ContactPerson::LAST_LOGIN => time(),
-					DAO_ContactPerson::CREATED => time(),
-					DAO_ContactPerson::AUTH_SALT => $salt,
-					DAO_ContactPerson::AUTH_PASSWORD => md5($salt.$sPassword)
+					DAO_Contact::PRIMARY_EMAIL_ID => $address_id,
+					DAO_Contact::FIRST_NAME => $sFirstName,
+					DAO_Contact::LAST_NAME => $sLastName,
+					DAO_Contact::LAST_LOGIN_AT => time(),
+					DAO_Contact::CREATED_AT => time(),
+					DAO_Contact::AUTH_SALT => $salt,
+					DAO_Contact::AUTH_PASSWORD => md5($salt.$sPassword)
 				);
 				
-				$contact_person_id = DAO_ContactPerson::create($fields);
+				$contact_id = DAO_Contact::create($fields);
 				
 				DAO_Address::update($address_id, array(
-					DAO_Address::CONTACT_PERSON_ID => $contact_person_id
+					DAO_Address::CONTACT_ID => $contact_id
 				));
 				$logger->info('[Importer] Imported contact '. $sEmail);
 			}
@@ -1066,10 +1050,6 @@ class ImportCron extends CerberusCronPageExtension {
 		if(empty($note) || empty($author_address) || empty($mask)) {
 			return false;
 		}
-
-//		echo "MASK: ",$mask,"<BR>";
-//		echo " -- Author: ",$author_address->email,"<BR>";
-//		echo " -- Note: ",$note,"<BR>";
 
 		if(null !== ($ticket = DAO_Ticket::getTicketByMask($mask))) {
 			$fields = array(

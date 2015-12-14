@@ -56,6 +56,25 @@ class DAO_Bucket extends Cerb_ORMHelper {
 		return $group_buckets;
 	}
 	
+	static function getNames(Model_Worker $for_worker=null) {
+		$groups = DAO_Group::getAll();
+		$names = array();
+		
+		foreach($groups as $group) {
+			$buckets = $group->getBuckets();
+			
+			if(is_null($for_worker) || $for_worker->isGroupMember($group->id)) {
+				foreach($buckets as $bucket) {
+					$names[$bucket->id] = $bucket->name;
+				}
+			}
+		}
+		
+		$names = array_unique($names);
+		
+		return $names;
+	}
+	
 	/**
 	 *
 	 * @param bool $nocache
@@ -263,6 +282,15 @@ class DAO_Bucket extends Cerb_ORMHelper {
 		return self::_getRandom('bucket');
 	}
 	
+	static function countByGroupId($group_id) {
+		$db = DevblocksPlatform::getDatabaseService();
+		
+		$sql = sprintf("SELECT count(id) FROM bucket WHERE group_id = %d",
+			$group_id
+		);
+		return intval($db->GetOneSlave($sql));
+	}
+	
 	static function delete($ids) {
 		if(!is_array($ids))
 			$ids = array($ids);
@@ -372,10 +400,6 @@ class DAO_Bucket extends Cerb_ORMHelper {
 	public static function getSearchQueryComponents($columns, $params, $sortBy=null, $sortAsc=null) {
 		$fields = SearchFields_Bucket::getFields();
 		
-		// Sanitize
-		if('*'==substr($sortBy,0,1) || !isset($fields[$sortBy]))
-			$sortBy=null;
-
 		list($tables,$wheres) = parent::_parseSearchParams($params, $columns, $fields, $sortBy);
 		
 		$select_sql = sprintf("SELECT ".
@@ -415,7 +439,7 @@ class DAO_Bucket extends Cerb_ORMHelper {
 		$where_sql = "".
 			(!empty($wheres) ? sprintf("WHERE %s ",implode(' AND ',$wheres)) : "WHERE 1 ");
 			
-		$sort_sql = (!empty($sortBy)) ? sprintf("ORDER BY %s %s ",$sortBy,($sortAsc || is_null($sortAsc))?"ASC":"DESC") : " ";
+		$sort_sql = self::_buildSortClause($sortBy, $sortAsc, $fields);
 	
 		// Virtuals
 		
@@ -559,22 +583,22 @@ class SearchFields_Bucket implements IDevblocksSearchFields {
 		$translate = DevblocksPlatform::getTranslationService();
 		
 		$columns = array(
-			self::ID => new DevblocksSearchField(self::ID, 'bucket', 'id', $translate->_('common.id')),
-			self::GROUP_ID => new DevblocksSearchField(self::GROUP_ID, 'bucket', 'group_id', $translate->_('common.group')),
-			self::NAME => new DevblocksSearchField(self::NAME, 'bucket', 'name', $translate->_('common.name')),
-			self::REPLY_ADDRESS_ID => new DevblocksSearchField(self::REPLY_ADDRESS_ID, 'bucket', 'reply_address_id', $translate->_('dao.bucket.reply_address_id')),
-			self::REPLY_PERSONAL => new DevblocksSearchField(self::REPLY_PERSONAL, 'bucket', 'reply_personal', $translate->_('dao.bucket.reply_personal')),
-			self::REPLY_SIGNATURE => new DevblocksSearchField(self::REPLY_SIGNATURE, 'bucket', 'reply_signature', $translate->_('dao.bucket.reply_signature')),
-			self::REPLY_HTML_TEMPLATE_ID => new DevblocksSearchField(self::REPLY_HTML_TEMPLATE_ID, 'bucket', 'reply_html_template_id', $translate->_('dao.bucket.reply_html_template_id')),
-			self::UPDATED_AT => new DevblocksSearchField(self::UPDATED_AT, 'bucket', 'updated_at', $translate->_('common.updated')),
-			self::IS_DEFAULT => new DevblocksSearchField(self::IS_DEFAULT, 'bucket', 'is_default', $translate->_('common.default')),
+			self::ID => new DevblocksSearchField(self::ID, 'bucket', 'id', $translate->_('common.id'), Model_CustomField::TYPE_NUMBER, true),
+			self::GROUP_ID => new DevblocksSearchField(self::GROUP_ID, 'bucket', 'group_id', $translate->_('common.group'), null, true),
+			self::NAME => new DevblocksSearchField(self::NAME, 'bucket', 'name', $translate->_('common.name'), null, true),
+			self::REPLY_ADDRESS_ID => new DevblocksSearchField(self::REPLY_ADDRESS_ID, 'bucket', 'reply_address_id', $translate->_('dao.bucket.reply_address_id'), null, true),
+			self::REPLY_PERSONAL => new DevblocksSearchField(self::REPLY_PERSONAL, 'bucket', 'reply_personal', $translate->_('dao.bucket.reply_personal'), null, true),
+			self::REPLY_SIGNATURE => new DevblocksSearchField(self::REPLY_SIGNATURE, 'bucket', 'reply_signature', $translate->_('dao.bucket.reply_signature'), null, true),
+			self::REPLY_HTML_TEMPLATE_ID => new DevblocksSearchField(self::REPLY_HTML_TEMPLATE_ID, 'bucket', 'reply_html_template_id', $translate->_('dao.bucket.reply_html_template_id'), null, true),
+			self::UPDATED_AT => new DevblocksSearchField(self::UPDATED_AT, 'bucket', 'updated_at', $translate->_('common.updated'), Model_CustomField::TYPE_DATE, true),
+			self::IS_DEFAULT => new DevblocksSearchField(self::IS_DEFAULT, 'bucket', 'is_default', $translate->_('common.default'), Model_CustomField::TYPE_CHECKBOX, true),
 				
-			self::VIRTUAL_CONTEXT_LINK => new DevblocksSearchField(self::VIRTUAL_CONTEXT_LINK, '*', 'context_link', $translate->_('common.links'), null),
-			self::VIRTUAL_HAS_FIELDSET => new DevblocksSearchField(self::VIRTUAL_HAS_FIELDSET, '*', 'has_fieldset', $translate->_('common.fieldset'), null),
-			self::VIRTUAL_WATCHERS => new DevblocksSearchField(self::VIRTUAL_WATCHERS, '*', 'workers', $translate->_('common.watchers'), 'WS'),
+			self::VIRTUAL_CONTEXT_LINK => new DevblocksSearchField(self::VIRTUAL_CONTEXT_LINK, '*', 'context_link', $translate->_('common.links'), null, false),
+			self::VIRTUAL_HAS_FIELDSET => new DevblocksSearchField(self::VIRTUAL_HAS_FIELDSET, '*', 'has_fieldset', $translate->_('common.fieldset'), null, false),
+			self::VIRTUAL_WATCHERS => new DevblocksSearchField(self::VIRTUAL_WATCHERS, '*', 'workers', $translate->_('common.watchers'), 'WS', false),
 			
-			self::CONTEXT_LINK => new DevblocksSearchField(self::CONTEXT_LINK, 'context_link', 'from_context', null),
-			self::CONTEXT_LINK_ID => new DevblocksSearchField(self::CONTEXT_LINK_ID, 'context_link', 'from_context_id', null),
+			self::CONTEXT_LINK => new DevblocksSearchField(self::CONTEXT_LINK, 'context_link', 'from_context', null, null, false),
+			self::CONTEXT_LINK_ID => new DevblocksSearchField(self::CONTEXT_LINK_ID, 'context_link', 'from_context_id', null, null, false),
 		);
 		
 		// Custom Fields
@@ -811,6 +835,7 @@ class Context_Bucket extends Extension_DevblocksContext implements IDevblocksCon
 			'id' => $bucket->id,
 			'name' => $bucket->name,
 			'permalink' => $url,
+			'updated' => $bucket->updated_at,
 		);
 	}
 	
@@ -1006,7 +1031,7 @@ class Context_Bucket extends Extension_DevblocksContext implements IDevblocksCon
 		return $view;
 	}
 	
-	function renderPeekPopup($context_id=0, $view_id='') {
+	function renderPeekPopup($context_id=0, $view_id='', $edit=false) {
 		@$context_id = DevblocksPlatform::importGPC($_REQUEST['context_id'],'integer',0);
 		@$view_id = DevblocksPlatform::importGPC($_REQUEST['view_id'],'string','');
 		
@@ -1022,20 +1047,6 @@ class Context_Bucket extends Extension_DevblocksContext implements IDevblocksCon
 				$tpl->assign('group', $group);
 				$tpl->assign('members', $group->getMembers());
 			}
-		}
-		
-		// Permissions
-		
-		if(empty($bucket) && !$active_worker->isGroupManager()) {
-			$tpl->assign('error_message', "You can only create new buckets if you're the manager of at least one group.");
-			$tpl->display('devblocks:cerberusweb.core::internal/peek/peek_error.tpl');
-			return;
-		}
-		
-		if(!empty($bucket) && !$active_worker->isGroupManager($bucket->group_id)) {
-			$tpl->assign('error_message', "Only group managers can modify this bucket.");
-			$tpl->display('devblocks:cerberusweb.core::internal/peek/peek_error.tpl');
-			return;
 		}
 		
 		// Groups
@@ -1078,7 +1089,47 @@ class Context_Bucket extends Extension_DevblocksContext implements IDevblocksCon
 
 		// Template
 		
-		$tpl->display('devblocks:cerberusweb.core::internal/bucket/peek.tpl');
+		if($edit) {
+			// ACL
+			
+			if(empty($bucket) && !$active_worker->isGroupManager()) {
+				$tpl->assign('error_message', "You can only create new buckets if you're the manager of at least one group.");
+				$tpl->display('devblocks:cerberusweb.core::internal/peek/peek_error.tpl');
+				return;
+			}
+			
+			if(!empty($bucket) && !$active_worker->isGroupManager($bucket->group_id)) {
+				$tpl->assign('error_message', "Only group managers can modify this bucket.");
+				$tpl->display('devblocks:cerberusweb.core::internal/peek/peek_error.tpl');
+				return;
+			}
+			
+			$tpl->display('devblocks:cerberusweb.core::internal/bucket/peek_edit.tpl');
+			
+		} else {
+			$activity_counts = array(
+				'tickets' => DAO_Ticket::countsByBucketId($context_id),
+				'comments' => DAO_Comment::count(CerberusContexts::CONTEXT_BUCKET, $context_id),
+				'links' => DAO_ContextLink::count(CerberusContexts::CONTEXT_BUCKET, $context_id),
+			);
+			$tpl->assign('activity_counts', $activity_counts);
+			
+			$links = array(
+				CerberusContexts::CONTEXT_BUCKET => array(
+					$context_id => 
+						DAO_ContextLink::getContextLinkCounts(
+							CerberusContexts::CONTEXT_BUCKET,
+							$context_id,
+							array(CerberusContexts::CONTEXT_WORKER, CerberusContexts::CONTEXT_CUSTOM_FIELDSET)
+						),
+				),
+			);
+			$tpl->assign('links', $links);
+			
+			$tpl->display('devblocks:cerberusweb.core::internal/bucket/peek.tpl');
+			
+		}
+		
 	}
 };
 
@@ -1214,13 +1265,19 @@ class View_Bucket extends C4_AbstractView implements IAbstractView_Subtotals, IA
 	}
 	
 	function getQuickSearchFields() {
-		// [TODO] Group
+		$search_fields = SearchFields_Bucket::getFields();
+		// [TODO] Group name
 	
 		$fields = array(
 			'_fulltext' => 
 				array(
 					'type' => DevblocksSearchCriteria::TYPE_TEXT,
 					'options' => array('param_key' => SearchFields_Bucket::NAME, 'match' => DevblocksSearchCriteria::OPTION_TEXT_PARTIAL),
+				),
+			'group' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_VIRTUAL,
+					'options' => array('param_key' => SearchFields_Bucket::GROUP_ID),
 				),
 			'name' => 
 				array(
@@ -1245,6 +1302,10 @@ class View_Bucket extends C4_AbstractView implements IAbstractView_Subtotals, IA
 		
 		$fields = self::_appendFieldsFromQuickSearchContext(CerberusContexts::CONTEXT_BUCKET, $fields, null);
 		
+		// Add is_sortable
+		
+		$fields = self::_setSortableQuickSearchFields($fields, $search_fields);
+		
 		// Sort by keys
 		ksort($fields);
 		
@@ -1259,12 +1320,63 @@ class View_Bucket extends C4_AbstractView implements IAbstractView_Subtotals, IA
 		if(is_array($fields))
 		foreach($fields as $k => $v) {
 			switch($k) {
-				// ...
+				case 'group':
+					$field_key = SearchFields_Bucket::GROUP_ID;
+					
+					$oper = DevblocksSearchCriteria::OPER_IN;
+					
+					if(preg_match('#^([\!\=]+)(.*)#', $v, $matches)) {
+						$oper_hint = trim($matches[1]);
+						$v = trim($matches[2]);
+						
+						switch($oper_hint) {
+							case '!':
+							case '!=':
+								$oper = DevblocksSearchCriteria::OPER_NIN;
+								break;
+								
+							default:
+								$oper = DevblocksSearchCriteria::OPER_IN;
+								break;
+						}
+					}
+					
+					$groups = DAO_Group::getAll();
+					$patterns = DevblocksPlatform::parseCsvString($v);
+					
+					if(!is_array($patterns))
+						break;
+					
+					$group_ids = array();
+					
+					foreach($patterns as $pattern) {
+						// Match IDs
+						if(is_numeric($pattern) && isset($groups[$pattern])) {
+							$group_id = intval($pattern);
+							$group_ids[$group_id] = true;
+							continue;
+						}
+							
+						foreach($groups as $group_id => $group) {
+							if(isset($group_ids[$group_id]))
+								continue;
+							
+							if(false !== stristr($group->name, $pattern)) {
+								$group_ids[$group_id] = true;
+							}
+						}
+					}
+					
+					if(!empty($group_ids)) {
+						$params[$field_key] = new DevblocksSearchCriteria(
+							$field_key,
+							$oper,
+							array_keys($group_ids)
+						);
+					}
+					break;
 			}
 		}
-		
-		$this->renderPage = 0;
-		$this->addParams($params, true);
 		
 		return $params;
 	}
@@ -1347,6 +1459,19 @@ class View_Bucket extends C4_AbstractView implements IAbstractView_Subtotals, IA
 		$values = !is_array($param->value) ? array($param->value) : $param->value;
 
 		switch($field) {
+			case SearchFields_Bucket::GROUP_ID:
+				$groups = DAO_Group::getAll();
+				$strings = array();
+
+				foreach($values as $val) {
+					if(!isset($groups[$val]))
+						continue;
+
+					$strings[] = DevblocksPlatform::strEscapeHtml($groups[$val]->name);
+				}
+				echo implode(", ", $strings);
+				break;
+			
 			default:
 				parent::renderCriteriaParam($param);
 				break;

@@ -29,11 +29,11 @@
 	{/if}
 
 	<li class="tour-navmenu-search{if $page->id=='core.page.search'} selected{/if}" style="float:right;">
-		<a href="javascript:;" class="submenu">{'common.search'|devblocks_translate|lower} <span class="glyphicons glyphicons-chevron-down" style="{if $page->id=='core.page.search'}color:white;{else}{/if}"></span></a>
-		<ul class="cerb-popupmenu cerb-float">
+		<a href="javascript:;" class="submenu"><span class="glyphicons glyphicons-search"></span> <span class="glyphicons glyphicons-chevron-down" style="{if $page->id=='core.page.search'}color:white;{else}{/if}"></span></a>
+		<ul class="cerb-popupmenu cerb-float" style="margin-top:-2px;">
 			{foreach from=$contexts item=context key=context_id}
 			{if isset($context->params.options.0.workspace)}
-			<li><a href="{devblocks_url}c=search&context={if isset($context->params.alias)}{$context->params.alias}{else}{$context_id}{/if}{/devblocks_url}">{$context->name}</a></li>
+			<li><a href="javascript:;" data-context="{$context_id}">{$context->name}</a></li>
 			{/if}
 			{/foreach}
 		</ul>
@@ -120,15 +120,22 @@ $(function() {
 		.find('.cerb-popupmenu > li')
 			.click(function(e) {
 				e.stopPropagation();
-				if(!$(e.target).is('li'))
-					return;
 
-				$link = $(this).find('a');
-
-				if($link.length > 0)
-					window.location.href = $link.attr('href');
+				var $this = $(this);
+				var $search_menu = $this.closest('.cerb-popupmenu');
+				var $link = $this.find('> a');
 				
-				$(this).closest('.cerb-popupmenu').hide();
+				if($link.length == 0)
+					return;
+				
+				var search_context = $link.attr('data-context');
+				
+				if(search_context.length == 0)
+					return;
+				
+				var $window = genericAjaxPopup('search' + Devblocks.uniqueId(),'c=search&a=openSearchPopup&context=' + encodeURIComponent(search_context), null, false, '90%');
+				
+				$search_menu.hide();
 			})
 		;
 });

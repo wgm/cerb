@@ -12,7 +12,7 @@
 		{$meta = $context_ext->getMeta($param->value)}
 		<b>{$meta.name}</b> ({$context_ext->manifest->name})<!--
 		--><input type="hidden" name="context_id" value="{$param->value}"><!--
-		--><span class="ui-icon ui-icon-trash" style="display:inline-block;vertical-align:middle;" onclick="$(this).closest('li').remove();"></span>
+		--><span class="glyphicons glyphicons-circle-remove" onclick="$(this).closest('li').remove();"></span>
 	</li>
 {/if}
 </ul>
@@ -21,7 +21,7 @@
 
 <script type="text/javascript">
 $("#container_{$random}").find('button.chooser').click(function(e) {
-	$popup = genericAjaxPopup("chooser{$random}",'c=internal&a=chooserOpen&context={$field->params.context}&single=1',null,true,'750');
+	var $popup = genericAjaxPopup("chooser{$random}",'c=internal&a=chooserOpen&context={$field->params.context}&single=1',null,true,'750');
 	$popup.one('popup_close',function(event) {
 		event.stopPropagation();
 	});
@@ -29,16 +29,16 @@ $("#container_{$random}").find('button.chooser').click(function(e) {
 	$popup.one('chooser_save',function(event) {
 		event.stopPropagation();
 		
-		$container = $("#container_{$random}");
-		$ul = $container.find('ul.chooser-container');
+		var $container = $("#container_{$random}");
+		var $ul = $container.find('ul.chooser-container');
 		
 		for(i in event.labels) {
 			// One link at a time
 			$ul.find('li').remove();
 			
-			$li = $('<li><b>' + event.labels[i] + '</b></li>');
-			$li.append($('<input type="hidden" name="context_id" value="' + event.values[i] + '">'));
-			$li.append($('<span class="ui-icon ui-icon-trash" style="display:inline-block;vertical-align:middle;" onclick="$(this).closest(\'li\').remove();"></span>'));
+			var $li = $('<li/>').append($('<b/>').text(event.labels[i]));
+			$li.append($('<input type="hidden" name="context_id">').attr('value',event.values[i]));
+			$li.append($('<span class="glyphicons glyphicons-circle-remove" onclick="$(this).closest(\'li\').remove();"></span>'));
 				
 			$ul.append($li);
 		}

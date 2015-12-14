@@ -1123,6 +1123,8 @@ class ChDisplayPage extends CerberusPageExtension {
 			$tpl->assign('timestamp', time());
 			$html = $tpl->fetch('devblocks:cerberusweb.core::mail/queue/saved.tpl');
 			
+			header('Content-Type: application/json;');
+			
 			// Response
 			echo json_encode(array('draft_id'=>$draft_id, 'html'=>$html));
 			
@@ -1420,6 +1422,18 @@ class ChDisplayPage extends CerberusPageExtension {
 			$message_notes[$note->context_id][$note->id] = $note;
 		}
 		$tpl->assign('message_notes', $message_notes);
+		
+		// Draft Notes
+		$notes = DAO_Comment::getByContext(CerberusContexts::CONTEXT_DRAFT, array_keys($drafts));
+		$draft_notes = array();
+		// Index notes by draft id
+		if(is_array($notes))
+		foreach($notes as $note) {
+			if(!isset($draft_notes[$note->context_id]))
+				$draft_notes[$note->context_id] = array();
+			$draft_notes[$note->context_id][$note->id] = $note;
+		}
+		$tpl->assign('draft_notes', $draft_notes);
 		
 		// Message toolbar items
 		$messageToolbarItems = DevblocksPlatform::getExtensions('cerberusweb.message.toolbaritem', true);

@@ -70,7 +70,7 @@
 					{if !empty($attachment->mime_type)}{$attachment->mime_type}{else}{'display.convo.unknown_format'|devblocks_translate|capitalize}{/if}
 					 )
 					<input type="hidden" name="file_ids[]" value="{$attachment->id}">
-					<a href="javascript:;" onclick="$(this).parent().remove();"><span class="ui-icon ui-icon-trash" style="display:inline-block;width:14px;height:14px;"></span></a>
+					<a href="javascript:;" onclick="$(this).parent().remove();"><span class="glyphicons glyphicons-circle-remove"></span></a>
 				</li>
 			{/if}
 			{/foreach}
@@ -116,14 +116,15 @@ $(function() {
 						// Add an attachment link
 						
 						if(0 == $attachments_container.find('input:hidden[value=' + event.response[0].id + ']').length) {
-							var $li = $('<li></li>');
-							$li.html(event.response[0].name + ' ( ' + event.response[0].size + ' bytes - ' + event.response[0].type + ' )');
+							var $li = $('<li/>');
+							$li.text(event.response[0].name + ' ( ' + event.response[0].size + ' bytes - ' + event.response[0].type + ' )');
 							
-							var $hidden = $('<input type="hidden" name="file_ids[]" value="">');
-							$hidden.val(event.response[0].id);
-							$hidden.appendTo($li);
+							var $hidden = $('<input type="hidden" name="file_ids[]">')
+								.val(event.response[0].id)
+								.appendTo($li)
+								;
 							
-							var $a = $('<a href="javascript:;"><span class="ui-icon ui-icon-trash" style="display:inline-block;width:14px;height:14px;"></span></a>');
+							var $a = $('<a href="javascript:;"><span class="glyphicons glyphicons-circle-remove"></span></a>');
 							$a.click(function() {
 								$(this).parent().remove();
 							});
@@ -154,14 +155,15 @@ $(function() {
 						// Add an attachment link
 						
 						if(0 == $attachments_container.find('input:hidden[value=' + event.response[0].id + ']').length) {
-							var $li = $('<li></li>');
-							$li.html(event.response[0].name + ' ( ' + event.response[0].size + ' bytes - ' + event.response[0].type + ' )');
+							var $li = $('<li/>');
+							$li.text(event.response[0].name + ' ( ' + event.response[0].size + ' bytes - ' + event.response[0].type + ' )');
 							
-							var $hidden = $('<input type="hidden" name="file_ids[]" value="">');
-							$hidden.val(event.response[0].id);
-							$hidden.appendTo($li);
+							var $hidden = $('<input type="hidden" name="file_ids[]" value="">')
+								.val(event.response[0].id)
+								.appendTo($li)
+								;
 							
-							var $a = $('<a href="javascript:;"><span class="ui-icon ui-icon-trash" style="display:inline-block;width:14px;height:14px;"></span></a>');
+							var $a = $('<a href="javascript:;"><span class="glyphicons glyphicons-circle-remove"></span></a>');
 							$a.click(function() {
 								$(this).parent().remove();
 							});
@@ -182,7 +184,7 @@ $(function() {
 		$content.markItUp(markitupMarkdownSettings);
 		{/if}
 
-		$frm = $('#frmKbEditPanel');	
+		$frm = $('#frmKbEditPanel');
 
 		$frm.find('input[name=format]').bind('click', function(event) {
 			$content.markItUpRemove();
@@ -195,7 +197,7 @@ $(function() {
 		
 		$('#btnKbArticleEditSave').bind('click', function() {
 			genericAjaxPost('frmKbEditPanel', '', '', function(json) {
-				genericAjaxPopupClose('peek', 'article_save');
+				genericAjaxPopupClose($popup, 'article_save');
 				{if !empty($view_id)}
 				genericAjaxGet('view{$view_id}','c=internal&a=viewRefresh&id={$view_id}');
 				{/if}

@@ -20,6 +20,8 @@ class UmScAjaxController extends Extension_UmScController {
 		@$path = $request->path;
 		@$a = DevblocksPlatform::importGPC($_REQUEST['a'],'string');
 		
+		@array_shift($path); // ajax
+		
 		if(empty($a)) {
 			@$action = array_shift($path) . 'Action';
 		} else {
@@ -34,6 +36,8 @@ class UmScAjaxController extends Extension_UmScController {
 				}
 				break;
 		}
+		
+		exit;
 	}
 	
 	function viewRefreshAction(DevblocksHttpRequest $request) {
@@ -167,7 +171,7 @@ class UmScAjaxController extends Extension_UmScController {
 				$addresses = array();
 				if(!empty($active_contact) && !empty($active_contact->id)) {
 					$addresses = DAO_Address::getWhere(sprintf("%s = %d",
-						DAO_Address::CONTACT_PERSON_ID,
+						DAO_Address::CONTACT_ID,
 						$active_contact->id
 					));
 				}
@@ -203,14 +207,11 @@ class UmScAjaxController extends Extension_UmScController {
 		header("Expires: Mon, 26 Nov 1962 00:00:00 GMT");
 		header("Last-Modified: " . gmdate("D, d M Y H:i:s") . " GMT");
 		header("Accept-Ranges: bytes");
-//		header("Keep-Alive: timeout=5, max=100");
-//		header("Connection: Keep-Alive");
 		header("Content-Type: " . $attachment->mime_type);
 		header("Content-Length: " . strlen($contents));
 		
 		// Dump contents
 		echo $contents;
-		unset($contents);
 		exit;
 	}
 };

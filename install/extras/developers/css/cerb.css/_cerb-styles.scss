@@ -216,6 +216,7 @@ DIV.cerb-delta-slider-container {
 // Special links
 
 A.no-underline {
+	cursor: pointer;
 	text-decoration: none;
 
 	&:hover {
@@ -350,22 +351,6 @@ DIV.emailbody SPAN.placeholder {
 // Buttons
 
 BUTTON {
-	DIV.badge-count {
-		font-size: 12px;
-
-		padding: 0px 5px;
-		font-weight: 500;
-		display: inline-block;
-		vertical-align: middle;
-
-		margin-top: -1px;
-
-		@include border-radius(10px);
-
-		background-color: rgb(120,120,120);
-		color: $white;
-	}
-
 	&:hover DIV.badge-count {
 		background-color: rgb(71,133,210);
 		color: $white;
@@ -839,12 +824,11 @@ DIV.help-box {
 
 DIV.message_note {
 	padding: 5px;
-	background-image: url(bg_yellow.jpg?v=#{$timestamp});
-	background-position: left top;
-	background-repeat: repeat-x;
-	background-color: rgb(252,242,191);
+	background-color: rgb(252,242,173);
 	border: 0;
 
+	@include border-radius(5px);
+	
 	H3 {
 		font-weight: bold;
 		font-size: 18px;
@@ -918,24 +902,35 @@ DIV.subtle2 {
 // Bubbles
 
 DIV.bubble {
-	line-height:1.9em;
+	line-height:1.5em;
 	white-space:nowrap;
 	padding:0 0.2em 0 0.2em;
-	margin:2px;
+	margin:0px;
 	display:inline-block;
-	color:rgb(50,115,185);
-	background-color:rgb(232,242,254);
-	border:1px solid rgb(197,219,236);
+	color:rgb(0,0,0);
+	background-color:rgb(220,220,220);
+	border:1px solid rgb(200,200,200);
 
 	@include border-radius(5px);
-	@include linear-gradient($white, rgb(232,242,254));
+	@include linear-gradient($white, rgb(220,220,220));
 
 	A {
-		color:rgb(50,115,185);
+		color:rgb(0,0,0);
 		text-decoration:none;
 
 		&:hover {
 			text-decoration:underline;
+		}
+	}
+	
+	&.bubble-blue {
+		@include linear-gradient($white, rgb(232,242,254));
+		color:rgb(50,115,185);
+		background-color:rgb(232,242,254);
+		border:1px solid rgb(197,219,236);
+		
+		A {
+			color:rgb(50,115,185);
 		}
 	}
 }
@@ -947,21 +942,22 @@ UL.bubbles {
 
 	LI {
 		display:inline-block;
+		position: relative;
 		list-style-type:none;
 		list-style:none;
-		line-height:1.9em;
+		line-height:1.5em;
 		white-space:nowrap;
-		padding:0 0.2em 0 0.2em;
-		margin:2px;
-		color:rgb(50,115,185);
-		border:1px solid rgb(197,219,236);
+		padding:0 0.5em;
+		margin:0;
+		color:rgb(0,0,0);
+		border:1px solid rgb(200,200,200);
 
 		@include border-radius(5px);
 
-		@include linear-gradient($white, rgb(232,242,254));
+		@include linear-gradient($white, rgb(220,220,220));
 
 		A {
-			color:rgb(49,116,165);
+			color:rgb(0,0,0);
 			text-decoration:none;
 
 			&:hover {
@@ -979,10 +975,70 @@ UL.bubbles {
 				color:rgb(0,0,0);
 			}
 		}
+		
+		&.bubble-blue {
+			@include linear-gradient($white, rgb(232,242,254));
+			border:1px solid rgb(197,219,236);
+			color:rgb(50,115,185);
+			
+			A {
+				color:rgb(49,116,165);
+			}
+		}
+	}
+	
+	&.chooser-container {
+		LI {
+			@include linear-gradient($white, rgb(220,220,220));
+			
+			color:rgb(0,0,0);
+			
+			A {
+				color:rgb(0,0,0);
+			}
+		
+			IMG.cerb-avatar {
+				height:16px;
+				width:16px;
+				margin-right:3px;
+				@include border-radius(16px);
+				vertical-align:middle;
+			}
+			
+			.glyphicons-circle-remove {
+				cursor: pointer;
+				position: absolute;
+				top: -0.5em;
+				right: -0.5em;
+				visibility: hidden;
+			}
+			
+			&:hover {
+				.glyphicons-circle-remove {
+					visibility: visible;
+				}
+			}
+		}
 	}
 }
 
 // Badges
+
+DIV.badge-count {
+	font-size: 12px;
+
+	padding: 0px 5px;
+	font-weight: 500;
+	display: inline-block;
+	vertical-align: middle;
+
+	margin-top: -1px;
+
+	@include border-radius(10px);
+
+	background-color: rgb(120,120,120);
+	color: $white;
+}
 
 DIV.badge {
 	display:inline-block;
@@ -1065,14 +1121,6 @@ SPAN.tag {
 	}
 }
 
-// Form hints
-
-DIV.cerb-form-hint {
-	margin: 0px 0px 5px 0px;
-	display: none;
-	font-weight: bold;
-}
-
 // Property List
 
 DIV.cerb-properties {
@@ -1105,11 +1153,38 @@ FIELDSET.properties {
 		margin-bottom: 0.25em;
 		display: inline;
 		float: left;
+		line-height: 1.5em;
 	}
 
 	SMALL {
 		font-size:90%;
 		color:rgb(100,100,100);
+	}
+}
+
+DIV.cerb-properties-grid {
+	font-size: 0px;
+	letter-spacing: 0px;
+	word-spacing: 0px;
+
+	> DIV {
+		display:inline-block;
+		font-size: $cerb-base-font-size;
+		letter-spacing: 0px;
+		word-spacing: 0px;
+		padding:0px 0px 5px 0px;
+		vertical-align: top;
+	}
+	
+	LABEL {
+		display:block;
+		font-weight:bold;
+		width:100%;
+		margin:0;
+		padding:0;
+		overflow:hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 }
 
@@ -1146,6 +1221,26 @@ FIELDSET.black {
 
 // Profiles
 
+DIV.cerb-profile-header H1 {
+	color:black;
+}
+
+DIV.cerb-profile-header H1 > SMALL {
+	color:rgb(100,100,100);
+	font-weight:normal;
+	margin-left:5px;
+}
+
+DIV.cerb-profile-header span.glyphicons-male {
+	color:rgb(2,139,212);
+	vertical-align:middle;
+}
+
+DIV.cerb-profile-header span.glyphicons-female {
+ 	color:rgb(243,80,157);
+	vertical-align:middle;
+}
+
 DIV.cerb-profile-toolbar {
 	margin-bottom: 10px;
 
@@ -1159,13 +1254,13 @@ DIV.cerb-profile-toolbar {
 
 DIV.cerb-popupmenu {
 	min-width:200px;
-	margin:0px;
+	margin:5px 0px 20px 0px;
 	padding:5px;
 	display:none;
 	background-color:$white;
-	border:1px solid rgb(100,135,225);
+	border:1px solid rgb(204,204,204);
 	
-	@include box-shadow-trbl(0px, 5px, 15px, 0px, rgb(175,175,175));
+	@include box-shadow-trbl(0px, 0px, 15px, 0px, rgb(175,175,175));
 	
 	&.cerb-float {
 		position: absolute;
@@ -1173,18 +1268,47 @@ DIV.cerb-popupmenu {
 		float: left;
 		border: 0;
 	}
+	
+	> div.cerb-popupmenu-item {
+		padding:2px;
+		font-weight:normal;
+		cursor:pointer;
+
+		A {
+			text-decoration:none;
+			color:rgb(74,110,158);
+			font-weight:bold;
+		}
+
+		HR {
+			height:1px;
+			padding:0px;
+			margin:5px 5px;
+			border:0px;
+			border-top:1px dashed rgb(200,200,200);
+		}
+
+		&:hover {
+			background-color:rgb(105,140,221);
+			color:$white;
+
+			A {
+				color:$white;
+			}
+		}
+	}
 }
 
 UL.cerb-popupmenu {
 	min-width:200px;
 	list-style:none;
-	margin:0px;
+	margin:5px 0px 20px 0px;
 	padding:5px;
 	display:none;
 	background-color:$white;
-	border:1px solid rgb(100,135,225);
+	border:1px solid rgb(204,204,204);
 
-	@include box-shadow-trbl(0px, 5px, 15px, 0px, rgb(175,175,175));
+	@include box-shadow-trbl(0px, 0px, 15px, 0px, rgb(175,175,175));
 
 	&.cerb-float {
 		position: absolute;

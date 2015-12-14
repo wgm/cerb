@@ -53,7 +53,7 @@
 		{include file="devblocks:cerberusweb.core::internal/macros/display/button.tpl" context=$page_context context_id=$page_context_id macros=$macros return_url=$return_url}
 		
 		<!-- Edit -->		
-		<button type="button" id="btnDisplayTicketEdit" title="{'common.edit'|devblocks_translate|capitalize} (E)"><span class="glyphicons glyphicons-cogwheel"></span></button>
+		<button type="button" id="btnDisplayTicketEdit" title="{'common.edit'|devblocks_translate|capitalize} (E)" class="cerb-peek-trigger" data-context="{CerberusContexts::CONTEXT_TICKET}" data-context-id="{$ticket->id}" data-edit="true"><span class="glyphicons glyphicons-cogwheel"></span></button>
 		
 		{if !$ticket->is_deleted}
 			{if $ticket->is_closed}
@@ -73,7 +73,7 @@
 			{if $active_worker->hasPriv('core.ticket.actions.delete')}<button title="{'display.shortcut.delete'|devblocks_translate}" id="btnDelete" type="button" onclick="this.form.deleted.value=1;this.form.closed.value=1;this.form.submit();"><span class="glyphicons glyphicons-circle-remove"></span></button>{/if}
 		{/if}
 		
-		{if $active_worker->hasPriv('core.ticket.view.actions.merge')}<button id="btnMerge" type="button" onclick="genericAjaxPopup('merge','c=display&a=showMergePanel&ticket_id={$ticket->id}',null,false,'500');" title="{'mail.merge'|devblocks_translate|capitalize}"><span class="glyphicons glyphicons-git-merge"></span></button>{/if}
+		{if $active_worker->hasPriv('core.ticket.view.actions.merge')}<button id="btnMerge" type="button" onclick="genericAjaxPopup('merge','c=display&a=showMergePanel&ticket_id={$ticket->id}',null,false,'50%');" title="{'mail.merge'|devblocks_translate|capitalize}"><span class="glyphicons glyphicons-git-merge"></span></button>{/if}
 		
 		<button id="btnPrint" title="{'display.shortcut.print'|devblocks_translate}" type="button" onclick="document.frmPrint.action='{devblocks_url}c=print&a=ticket&id={$ticket->mask}{/devblocks_url}';document.frmPrint.submit();"><span class="glyphicons glyphicons-print"></span></button>
 		<button type="button" title="{'common.refresh'|devblocks_translate|capitalize}" onclick="document.location='{devblocks_url}c=profiles&type=ticket&id={$ticket->mask}{/devblocks_url}';"><span class="glyphicons glyphicons-refresh"></span></button>
@@ -85,7 +85,7 @@
 	<small>
 		{'common.keyboard'|devblocks_translate|lower}:
 		(<b>e</b>) {'common.edit'|devblocks_translate|lower} 
-		(<b>i</b>) {'ticket.requesters'|devblocks_translate|lower} 
+		(<b>i</b>) {'common.participants'|devblocks_translate|lower} 
 		(<b>w</b>) {'common.watch'|devblocks_translate|lower}  
 		{if $active_worker->hasPriv('core.display.actions.comment')}(<b>o</b>) {'common.comment'|devblocks_translate} {/if}
 		{if !empty($macros)}(<b>m</b>) {'common.macros'|devblocks_translate|lower} {/if}
@@ -135,27 +135,15 @@
 				<div style="display:inline-block;margin-left:5px;width:40px;height:8px;background-color:rgb(220,220,220);border-radius:8px;">
 					<div style="position:relative;margin-left:-5px;top:-1px;left:{$ticket->importance}%;width:10px;height:10px;border-radius:10px;background-color:{if $ticket->importance < 50}rgb(0,200,0);{elseif $ticket->importance > 50}rgb(230,70,70);{else}rgb(175,175,175);{/if}"></div>
 				</div>
-			{elseif $k == 'org'}
-				{$ticket_org = $ticket->getOrg()}
-				<b>{'contact_org.name'|devblocks_translate|capitalize}:</b>
-				{if !empty($ticket_org)}
-				<a href="javascript:;" onclick="genericAjaxPopup('peek','c=internal&a=showPeekPopup&context={CerberusContexts::CONTEXT_ORG}&context_id={$ticket->org_id}',null,false,'500');">{$ticket_org->name}</a>
-				{/if}
 			{elseif $k == 'bucket'}
+				{$ticket_group = $groups.$ticket_group_id}
 				<b>{'common.bucket'|devblocks_translate|capitalize}:</b>
-				[{$groups.$ticket_group_id->name}]  
+				<ul class="bubbles">
+					<li class="bubble-gray"><img src="{devblocks_url}c=avatars&context=group&context_id={$ticket_group->id}{/devblocks_url}?v={$ticket_group->updated}" style="height:16px;width:16px;vertical-align:middle;border-radius:16px;"> <a href="javascript:;" class="cerb-peek-trigger no-underline" data-context="{CerberusContexts::CONTEXT_GROUP}" data-context-id="{$ticket_group->id}">{$ticket_group->name}</a></li> 
 				{if !empty($ticket_bucket_id)}
-					{$ticket_bucket->name}
+					<li class="bubble-gray"><a href="javascript:;" class="cerb-peek-trigger no-underline" data-context="{CerberusContexts::CONTEXT_BUCKET}" data-context-id="{$ticket_bucket->id}">{$ticket_bucket->name}</a></li>
 				{/if}
-			{elseif $k == 'owner'}
-				{if !empty($ticket->owner_id) && isset($workers.{$ticket->owner_id})}
-					{$owner = $workers.{$ticket->owner_id}}
-					<b>{'common.owner'|devblocks_translate|capitalize}:</b>
-					<a href="{devblocks_url}c=profiles&p=worker&id={$owner->id}-{$owner->getName()|devblocks_permalink}{/devblocks_url}" target="_blank">{$owner->getName()}</a>
-				{else}
-					<b>{'common.owner'|devblocks_translate|capitalize}:</b>
-					{'common.nobody'|devblocks_translate|lower}
-				{/if}
+				</ul>
 			{else}
 				{include file="devblocks:cerberusweb.core::internal/custom_fields/profile_cell_renderer.tpl"}
 			{/if}
@@ -166,11 +154,13 @@
 	{/foreach}
 	<br clear="all">
 	
-	<a style="color:black;font-weight:bold;" href="javascript:;" id="aRecipients" onclick="genericAjaxPopup('peek','c=display&a=showRequestersPanel&ticket_id={$ticket->id}',null,true,'500');">{'ticket.requesters'|devblocks_translate|capitalize}</a>:
-	<span id="displayTicketRequesterBubbles">
-		{include file="devblocks:cerberusweb.core::display/rpc/requester_list.tpl" ticket_id=$ticket->id}
-	</span>
-	<br clear="all">
+	<div style="line-height:1.5em;">
+		<a style="color:black;font-weight:bold;" href="javascript:;" id="aRecipients" onclick="genericAjaxPopup('peek','c=display&a=showRequestersPanel&ticket_id={$ticket->id}',null,false,'50%');">{'common.participants'|devblocks_translate|capitalize}</a>:
+		<span id="displayTicketRequesterBubbles">
+			{include file="devblocks:cerberusweb.core::display/rpc/requester_list.tpl" ticket_id=$ticket->id}
+		</span>
+	</div>
+	
 	</div>
 </fieldset>
 
@@ -219,13 +209,25 @@ $(function() {
 	
 	var tabs = $("#profileTicketTabs").tabs(tabOptions);
 	
-	$('#btnDisplayTicketEdit').bind('click', function() {
-		$popup = genericAjaxPopup('peek','c=internal&a=showPeekPopup&context={$page_context}&context_id={$page_context_id}&edit=1',null,false,'650');
-		$popup.one('ticket_save', function(event) {
-			event.stopPropagation();
-			document.location.href = '{devblocks_url}c=profiles&type=ticket&id={$ticket->mask}{/devblocks_url}';
-		});
-	})
+	// Edit
+	
+	{if $active_worker->is_superuser}
+	$('#btnDisplayTicketEdit')
+		.cerbPeekTrigger()
+		.on('cerb-peek-opened', function(e) {
+		})
+		.on('cerb-peek-saved', function(e) {
+			e.stopPropagation();
+			document.location.reload();
+		})
+		.on('cerb-peek-deleted', function(e) {
+			document.location.href = '{devblocks_url}{/devblocks_url}';
+			
+		})
+		.on('cerb-peek-closed', function(e) {
+		})
+		;
+	{/if}
 });
 
 // Page title
@@ -236,14 +238,7 @@ document.title = "[#{$ticket->mask|escape:'javascript' nofilter}] {$ticket->subj
 {include file="devblocks:cerberusweb.core::internal/macros/display/menu_script.tpl" selector_button=null selector_menu=null}
 </script>
 
-{$profile_scripts = Extension_ContextProfileScript::getExtensions(true, $page_context)}
-{if !empty($profile_scripts)}
-{foreach from=$profile_scripts item=renderer}
-	{if method_exists($renderer,'renderScript')}
-		{$renderer->renderScript($page_context, $page_context_id)}
-	{/if}
-{/foreach}
-{/if}
+{include file="devblocks:cerberusweb.core::internal/profiles/profile_common_scripts.tpl"}
 
 <script type="text/javascript">
 {if $pref_keyboard_shortcuts}

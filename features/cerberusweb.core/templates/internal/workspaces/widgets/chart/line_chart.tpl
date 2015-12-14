@@ -1,3 +1,7 @@
+{$show_image = empty($widget->params.chart_display) || 'image' == $widget->params.chart_display}
+{$show_table = empty($widget->params.chart_display) || 'table' == $widget->params.chart_display}
+
+{if $show_image}
 <div class="chart-tooltip" style="margin-top:2px;">&nbsp;</div>
 
 <canvas id="widget{$widget->id}_axes_canvas" width="300" height="125" style="position:absolute;cursor:crosshair;" class="overlay">
@@ -7,7 +11,9 @@
 <canvas id="widget{$widget->id}_canvas" width="300" height="125">
 	Your browser does not support HTML5 Canvas.
 </canvas>
+{/if}
 
+{if !$show_table}
 <div style="margin-top:5px;">
 {foreach from=$widget->params.series item=series key=series_idx name=series}
 {if !empty($series.datasource) && !empty($series.label)}
@@ -18,7 +24,35 @@
 {/if}
 {/foreach}
 </div>
+{/if}
 
+{if $show_table}
+<div>
+{foreach from=$widget->params.series item=series key=series_idx name=series}
+	{if $series.data}
+	<div style="display:inline-block;margin-right:10px;vertical-align:top;">
+	<b style="color:{$series.line_color};">{$series.label}</b>
+	<table cellpadding="2" cellspacing="0" style="margin-top:5px;">
+		{$sum = 0}
+		{foreach from=$series.data item=data}
+		<tr>
+			<td valign="middle" align="right">{$data.x_label}</td>
+			<td valign="middle" align="center" style="padding-left:5px;"><b>{$data.y_label}</b></td>
+		</tr>
+		{$sum = $sum + $data.y_label}
+		{/foreach}
+		<tr>
+			<td></td>
+			<td valign="middle" align="center" style="border-top:1px solid rgb(200,200,200);"><b>{$sum}</b></td>
+		</tr>
+	</table>
+	</div>
+	{/if}
+{/foreach}
+</div>
+{/if}
+
+{if $show_image}
 <script type="text/javascript">
 $(function() {
 try {
@@ -84,7 +118,8 @@ try {
 		context.arc(chart_x, chart_y, 4, 0, 2 * Math.PI, false);
 		context.fill();
 		
-		var $label = $('<span style="padding:2px;font-weight:bold;background-color:rgb(240,240,240);">'+closest.data.x_label+': <span style="color:'+series.options.line_color+'">'+closest.data.y_label+'</span></span>');
+		var $label = $('<span style="padding:2px;font-weight:bold;background-color:rgb(240,240,240);"/>').text(closest.data.x_label + ': ');
+		$label.append($('<span/>').css('color',series.options.line_color).text(closest.data.y_label));
 		
 		var $tooltip = $canvas.siblings('DIV.chart-tooltip');
 		$tooltip.html('').append($label);
@@ -106,3 +141,4 @@ try {
 }
 });
 </script>
+{/if}

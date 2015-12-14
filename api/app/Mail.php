@@ -953,7 +953,26 @@ class CerberusMail {
 					DAO_MailQueue::IS_QUEUED => empty($worker_id) ? 1 : 0,
 					DAO_MailQueue::QUEUE_DELIVERY_DATE => time(),
 				);
-				DAO_MailQueue::create($fields);
+				$draft_id = DAO_MailQueue::create($fields);
+			}
+			
+			$last_error_message = $mail_service->getLastErrorMessage();
+			
+			if($e instanceof Swift_TransportException && !$last_error_message) {
+				$last_error_message = $e->getMessage();
+			}
+			
+			// If we have an error message, log it on the draft
+			if($draft_id && !empty($last_error_message)) {
+				$fields = array(
+					DAO_Comment::OWNER_CONTEXT => CerberusContexts::CONTEXT_APPLICATION,
+					DAO_Comment::OWNER_CONTEXT_ID => 0,
+					DAO_Comment::CONTEXT => CerberusContexts::CONTEXT_DRAFT,
+					DAO_Comment::CONTEXT_ID => $draft_id,
+					DAO_Comment::COMMENT => 'Error sending message: ' . $last_error_message,
+					DAO_Comment::CREATED => time(),
+				);
+				DAO_Comment::create($fields);
 			}
 			
 			return false;
@@ -1245,10 +1264,10 @@ class CerberusMail {
 		if(is_array($emails))
 		foreach($emails as $to) {
 			try {
-				if(false == ($to_model = DAO_AddressToWorker::getByAddress($to)))
+				if(false == ($to_model = DAO_AddressToWorker::getByEmail($to)))
 					continue;
 				
-				if(false == ($worker = $workers[$to_model->worker_id]))
+				if(false == ($worker = $to_model->getWorker()))
 					continue;
 				
 				$mail = $mail_service->createMessage();
@@ -1319,7 +1338,7 @@ class CerberusMail {
 					'variables' => array(
 						'target' => sprintf("[%s] %s", $ticket->mask, $ticket->subject),
 						'worker' => $worker->getName(),
-						'worker_email' => $to_model->address,
+						'worker_email' => $to,
 						),
 					'urls' => array(
 						'target' => sprintf("ctx://%s:%d", CerberusContexts::CONTEXT_TICKET, $ticket->id),

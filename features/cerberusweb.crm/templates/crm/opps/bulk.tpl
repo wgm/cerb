@@ -141,17 +141,25 @@
 </fieldset>
 {/if}
 
-<button type="button" onclick="genericAjaxPopupClose('peek');genericAjaxPost('formBatchUpdate','view{$view_id}');"><span class="glyphicons glyphicons-circle-ok" style="color:rgb(0,180,0);"></span> {'common.save_changes'|devblocks_translate|capitalize}</button>
+<button type="button" class="submit"><span class="glyphicons glyphicons-circle-ok" style="color:rgb(0,180,0);"></span> {'common.save_changes'|devblocks_translate|capitalize}</button>
 </form>
 
 <script type="text/javascript">
-	$popup = genericAjaxPopupFetch('peek');
+$(function() {
+	var $popup = genericAjaxPopupFetch('peek');
+	
 	$popup.one('popup_open', function(event,ui) {
 		var $this = $(this);
 		
-		$this.dialog('option','title',"{'common.bulk_update'|devblocks_translate|capitalize|escape:'javascript' nofilter}");
+		$popup.dialog('option','title',"{'common.bulk_update'|devblocks_translate|capitalize|escape:'javascript' nofilter}");
 	
 		var $content = $this.find('textarea[name=broadcast_message]');
+		
+		$popup.find('button.submit').click(function() {
+			genericAjaxPost('formBatchUpdate', 'view{$view_id}', null, function() {
+				genericAjaxPopupClose($popup);
+			});
+		});
 		
 		$this.find('select.insert-placeholders').change(function(e) {
 			var $select = $(this);
@@ -195,10 +203,10 @@
 				var $li = $('<li style="margin-left:10px;"></li>');
 				
 				var $select = $('<select name="broadcast_html_template_id"></select>');
-				$select.append($('<option value="0"> - {'common.default'|devblocks_translate|lower|escape:'javascript'} -</option>'));
+				$select.append($('<option value="0"/>').text(' - {'common.default'|devblocks_translate|lower|escape:'javascript'} -'));
 				
 				{foreach from=$html_templates item=html_template}
-				var $option = $('<option value="{$html_template->id}">{$html_template->name|escape:'javascript'}</option>');
+				var $option = $('<option/>').attr('value','{$html_template->id}').text('{$html_template->name|escape:'javascript'}');
 				$select.append($option);
 				{/foreach}
 				
@@ -277,4 +285,5 @@
 		}
 		
 	});
+});
 </script>

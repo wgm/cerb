@@ -4,14 +4,14 @@
 	<name>Support Center</name>
 	<description>Adds a Support Center community portal for public-facing support.</description>
 	<author>Webgroup Media, LLC.</author>
-	<version>7.0.5</version>
+	<version>7.1.0</version>
 	<link>http://wiki.cerbweb.com/Support_Center</link>
 	<image>plugin.png</image>
  
 	<!-- Requirements -->
 
 	<requires>
-		<app_version min="7.0" max="7.0.99" />
+		<app_version min="7.1" max="7.1.99" />
 	</requires>
  
 	<!-- Plugin Dependencies -->
@@ -37,7 +37,6 @@
 	<class_loader>
 		<file path="api/Extension.php">
 			<class name="Extension_ScLoginAuthenticator" />
-			<class name="Extension_SupportCenterMessageBadge" />
 			<class name="Extension_UmScController" />
 			<class name="Extension_UmScRssController" />
 		</file>
@@ -47,9 +46,6 @@
 		<file path="api/dao/supportcenter_address_share.php">
 			<class name="DAO_SupportCenterAddressShare" />
 			<class name="Model_SupportCenterAddressShare" />
-		</file>
-		<file path="api/sc/uri/ajax.php">
-			<class name="UmScAjaxController" />
 		</file>
 		<file path="api/sc/uri/history.php">
 			<class name="UmSc_TicketHistoryView" />
@@ -71,8 +67,6 @@
 		<template path="support_center/account/email/confirm.tpl" />
 		<template path="support_center/account/email/display.tpl" />
 		<template path="support_center/account/email/index.tpl" />
-		<template path="support_center/account/openid/display.tpl" />
-		<template path="support_center/account/openid/index.tpl" />
 		<template path="support_center/account/password/index.tpl" />
 		<template path="support_center/account/sharing/index.tpl" />
 		<template path="support_center/announcements/index.tpl" />
@@ -89,11 +83,6 @@
 		<template path="support_center/login/default/login.tpl" />
 		<template path="support_center/login/default/register_confirm.tpl" />
 		<template path="support_center/login/default/register.tpl" />
-		<template path="support_center/login/openid/forgot_confirm.tpl" />
-		<template path="support_center/login/openid/forgot.tpl" />
-		<template path="support_center/login/openid/login.tpl" />
-		<template path="support_center/login/openid/register_confirm.tpl" />
-		<template path="support_center/login/openid/register.tpl" />
 		<template path="support_center/login/switcher.tpl" />
 	</templates>
 	
@@ -137,7 +126,7 @@
 		
 		<extension point="usermeet.login.authenticator">
 			<id>sc.login.auth.default</id>
-			<name>Cerb6 (Default)</name>
+			<name>Cerb (Default)</name>
 			<class>
 				<file>api/UmScApp.php</file>
 				<name>UmScLoginAuthenticator</name>
@@ -148,21 +137,32 @@
 			</params>
 		</extension>
 		
-		<extension point="usermeet.login.authenticator">
-			<id>sc.login.auth.openid</id>
-			<name>OpenID (Recommended)</name>
+		<!-- Support Center Modules -->
+
+		<extension point="usermeet.sc.controller">
+			<id>sc.controller.ajax</id>
+			<name>Ajax</name>
 			<class>
-				<file>api/UmScApp.php</file>
-				<name>ScOpenIDLoginAuthenticator</name>
+				<file>api/sc/uri/ajax.php</file>
+				<name>UmScAjaxController</name>
 			</class>
 			<params>
-				<param key="switcher_icon" value="images/openid.gif" />
-				<param key="switcher_label" value="Log in with OpenID" />
+				<param key="uri" value="ajax" />
 			</params>
 		</extension>
 		
-		<!-- Support Center Modules -->
-
+		<extension point="usermeet.sc.controller">
+			<id>sc.controller.avatar</id>
+			<name>Avatar</name>
+			<class>
+				<file>api/sc/uri/avatar.php</file>
+				<name>UmScAvatarController</name>
+			</class>
+			<params>
+				<param key="uri" value="avatar" />
+			</params>
+		</extension>
+		
 		<extension point="usermeet.sc.controller">
 			<id>sc.controller.home</id>
 			<name>Home</name>

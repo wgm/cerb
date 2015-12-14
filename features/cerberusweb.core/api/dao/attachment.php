@@ -15,7 +15,7 @@
 |	http://www.cerbweb.com	    http://www.webgroupmedia.com/
 ***********************************************************************/
 
-class DAO_Attachment extends DevblocksORMHelper {
+class DAO_Attachment extends Cerb_ORMHelper {
 	const ID = 'id';
 	const DISPLAY_NAME = 'display_name';
 	const MIME_TYPE = 'mime_type';
@@ -189,10 +189,6 @@ class DAO_Attachment extends DevblocksORMHelper {
 	public static function getSearchQueryComponents($columns, $params, $sortBy=null, $sortAsc=null) {
 		$fields = SearchFields_Attachment::getFields();
 		
-		// Sanitize
-		if('*'==substr($sortBy,0,1) || !isset($fields[$sortBy]) || !in_array($sortBy,$columns))
-			$sortBy=null;
-
 		list($tables,$wheres) = parent::_parseSearchParams($params, array(),$fields,$sortBy);
 		
 		$select_sql = sprintf("SELECT ".
@@ -224,7 +220,7 @@ class DAO_Attachment extends DevblocksORMHelper {
 		$where_sql = "".
 			(!empty($wheres) ? sprintf("WHERE %s ",implode(' AND ',$wheres)) : "WHERE 1 ");
 			
-		$sort_sql = (!empty($sortBy) ? sprintf("ORDER BY %s %s ",$sortBy,($sortAsc || is_null($sortAsc))?"ASC":"DESC") : " ");
+		$sort_sql = self::_buildSortClause($sortBy, $sortAsc, $fields);
 		
 		$result = array(
 			'primary_table' => 'a',
@@ -316,18 +312,18 @@ class SearchFields_Attachment implements IDevblocksSearchFields {
 		$translate = DevblocksPlatform::getTranslationService();
 		
 		$columns = array(
-			self::ID => new DevblocksSearchField(self::ID, 'a', 'id', $translate->_('attachment.id')),
-			self::DISPLAY_NAME => new DevblocksSearchField(self::DISPLAY_NAME, 'a', 'display_name', $translate->_('attachment.display_name')),
-			self::MIME_TYPE => new DevblocksSearchField(self::MIME_TYPE, 'a', 'mime_type', $translate->_('attachment.mime_type')),
-			self::STORAGE_SIZE => new DevblocksSearchField(self::STORAGE_SIZE, 'a', 'storage_size', $translate->_('attachment.storage_size')),
-			self::STORAGE_EXTENSION => new DevblocksSearchField(self::STORAGE_EXTENSION, 'a', 'storage_extension', $translate->_('attachment.storage_extension')),
-			self::STORAGE_KEY => new DevblocksSearchField(self::STORAGE_KEY, 'a', 'storage_key', $translate->_('attachment.storage_key')),
-			self::STORAGE_PROFILE_ID => new DevblocksSearchField(self::STORAGE_PROFILE_ID, 'a', 'storage_profile_id', $translate->_('attachment.storage_profile_id')),
-			self::STORAGE_SHA1HASH => new DevblocksSearchField(self::STORAGE_SHA1HASH, 'a', 'storage_sha1hash', $translate->_('attachment.storage_sha1hash')),
-			self::UPDATED => new DevblocksSearchField(self::UPDATED, 'a', 'updated', $translate->_('common.updated')),
+			self::ID => new DevblocksSearchField(self::ID, 'a', 'id', $translate->_('attachment.id'), Model_CustomField::TYPE_NUMBER, true),
+			self::DISPLAY_NAME => new DevblocksSearchField(self::DISPLAY_NAME, 'a', 'display_name', $translate->_('attachment.display_name'), Model_CustomField::TYPE_SINGLE_LINE, true),
+			self::MIME_TYPE => new DevblocksSearchField(self::MIME_TYPE, 'a', 'mime_type', $translate->_('attachment.mime_type'), Model_CustomField::TYPE_SINGLE_LINE, true),
+			self::STORAGE_SIZE => new DevblocksSearchField(self::STORAGE_SIZE, 'a', 'storage_size', $translate->_('attachment.storage_size'), Model_CustomField::TYPE_NUMBER, true),
+			self::STORAGE_EXTENSION => new DevblocksSearchField(self::STORAGE_EXTENSION, 'a', 'storage_extension', $translate->_('attachment.storage_extension'), Model_CustomField::TYPE_SINGLE_LINE, true),
+			self::STORAGE_KEY => new DevblocksSearchField(self::STORAGE_KEY, 'a', 'storage_key', $translate->_('attachment.storage_key'), Model_CustomField::TYPE_SINGLE_LINE, true),
+			self::STORAGE_PROFILE_ID => new DevblocksSearchField(self::STORAGE_PROFILE_ID, 'a', 'storage_profile_id', $translate->_('attachment.storage_profile_id'), Model_CustomField::TYPE_NUMBER, true),
+			self::STORAGE_SHA1HASH => new DevblocksSearchField(self::STORAGE_SHA1HASH, 'a', 'storage_sha1hash', $translate->_('attachment.storage_sha1hash'), Model_CustomField::TYPE_SINGLE_LINE, true),
+			self::UPDATED => new DevblocksSearchField(self::UPDATED, 'a', 'updated', $translate->_('common.updated'), Model_CustomField::TYPE_DATE, true),
 
-			self::LINK_CONTEXT => new DevblocksSearchField(self::LINK_CONTEXT, 'al', 'context', $translate->_('common.context')),
-			self::LINK_CONTEXT_ID => new DevblocksSearchField(self::LINK_CONTEXT_ID, 'al', 'context_id', $translate->_('common.context_id')),
+			self::LINK_CONTEXT => new DevblocksSearchField(self::LINK_CONTEXT, 'al', 'context', $translate->_('common.context'), null, false),
+			self::LINK_CONTEXT_ID => new DevblocksSearchField(self::LINK_CONTEXT_ID, 'al', 'context_id', $translate->_('common.context_id'), null, false),
 		);
 		
 		// Sort by label (translation-conscious)
@@ -785,6 +781,8 @@ class View_AttachmentLink extends C4_AbstractView implements IAbstractView_Subto
 	}
 	
 	function getQuickSearchFields() {
+		$search_fields = SearchFields_AttachmentLink::getFields();
+		
 		$fields = array(
 			'_fulltext' => 
 				array(
@@ -835,6 +833,10 @@ class View_AttachmentLink extends C4_AbstractView implements IAbstractView_Subto
 					'options' => array('param_key' => SearchFields_AttachmentLink::ATTACHMENT_UPDATED),
 				),
 		);
+
+		// Add is_sortable
+		
+		$fields = self::_setSortableQuickSearchFields($fields, $search_fields);
 		
 		// Sort by keys
 		
@@ -854,9 +856,6 @@ class View_AttachmentLink extends C4_AbstractView implements IAbstractView_Subto
 				// ...
 			}
 		}
-		
-		$this->renderPage = 0;
-		$this->addParams($params, true);
 		
 		return $params;
 	}	
@@ -929,7 +928,7 @@ class View_AttachmentLink extends C4_AbstractView implements IAbstractView_Subto
 				$strings = array();
 				foreach($values as $v) {
 					if(isset($manifests[$v]))
-						$strings[] = $manifests[$v]->name;
+						$strings[] = DevblocksPlatform::strEscapeHtml($manifests[$v]->name);
 				}
 				if(!empty($strings))
 					echo implode(', ', $strings);
@@ -941,7 +940,7 @@ class View_AttachmentLink extends C4_AbstractView implements IAbstractView_Subto
 				$strings = array();
 				foreach($values as $v) {
 					if(isset($contexts[$v]))
-						$strings[] = $contexts[$v]->name;
+						$strings[] = DevblocksPlatform::strEscapeHtml($contexts[$v]->name);
 				}
 				if(!empty($strings))
 					echo implode(', ', $strings);
@@ -1348,10 +1347,6 @@ class DAO_AttachmentLink extends Cerb_ORMHelper {
 	public static function getSearchQueryComponents($columns, $params, $sortBy=null, $sortAsc=null) {
 		$fields = SearchFields_AttachmentLink::getFields();
 		
-		// Sanitize
-		if('*'==substr($sortBy,0,1) || !isset($fields[$sortBy])) // || !in_array($sortBy,$columns)
-			$sortBy=null;
-
 		list($tables,$wheres) = parent::_parseSearchParams($params, array(),$fields,$sortBy);
 		
 		$select_sql = sprintf("SELECT ".
@@ -1390,7 +1385,7 @@ class DAO_AttachmentLink extends Cerb_ORMHelper {
 		$where_sql = "".
 			(!empty($wheres) ? sprintf("WHERE %s ",implode(' AND ',$wheres)) : "WHERE 1 ");
 			
-		$sort_sql = (!empty($sortBy) ? sprintf("ORDER BY %s %s ",$sortBy,($sortAsc || is_null($sortAsc))?"ASC":"DESC") : " ");
+		$sort_sql = self::_buildSortClause($sortBy, $sortAsc, $fields);
 		
 		$result = array(
 			'primary_table' => 'al',
@@ -1483,18 +1478,18 @@ class SearchFields_AttachmentLink implements IDevblocksSearchFields {
 		$translate = DevblocksPlatform::getTranslationService();
 		
 		$columns = array(
-			self::ID => new DevblocksSearchField(self::ID, 'al', 'attachment_id', $translate->_('attachment.id'), null),
-			self::LINK_CONTEXT => new DevblocksSearchField(self::LINK_CONTEXT, 'al', 'context', $translate->_('common.context'), null),
-			self::LINK_CONTEXT_ID => new DevblocksSearchField(self::LINK_CONTEXT_ID, 'al', 'context_id', $translate->_('common.context_id'), null),
-			self::GUID => new DevblocksSearchField(self::GUID, 'al', 'guid', $translate->_('common.guid'), null),
-			self::ATTACHMENT_DISPLAY_NAME => new DevblocksSearchField(self::ATTACHMENT_DISPLAY_NAME, 'a', 'display_name', $translate->_('attachment.display_name'), Model_CustomField::TYPE_SINGLE_LINE),
-			self::ATTACHMENT_MIME_TYPE => new DevblocksSearchField(self::ATTACHMENT_MIME_TYPE, 'a', 'mime_type', $translate->_('attachment.mime_type'), Model_CustomField::TYPE_SINGLE_LINE),
-			self::ATTACHMENT_STORAGE_SIZE => new DevblocksSearchField(self::ATTACHMENT_STORAGE_SIZE, 'a', 'storage_size', $translate->_('attachment.storage_size'), Model_CustomField::TYPE_NUMBER),
-			self::ATTACHMENT_STORAGE_EXTENSION => new DevblocksSearchField(self::ATTACHMENT_STORAGE_EXTENSION, 'a', 'storage_extension', $translate->_('attachment.storage_extension'), null),
-			self::ATTACHMENT_STORAGE_KEY => new DevblocksSearchField(self::ATTACHMENT_STORAGE_KEY, 'a', 'storage_key', $translate->_('attachment.storage_key'), Model_CustomField::TYPE_SINGLE_LINE),
-			self::ATTACHMENT_STORAGE_PROFILE_ID => new DevblocksSearchField(self::ATTACHMENT_STORAGE_PROFILE_ID, 'a', 'storage_profile_id', $translate->_('attachment.storage_profile_id'), null),
-			self::ATTACHMENT_STORAGE_SHA1HASH => new DevblocksSearchField(self::ATTACHMENT_STORAGE_SHA1HASH, 'a', 'storage_sha1hash', $translate->_('attachment.storage_sha1hash'), null),
-			self::ATTACHMENT_UPDATED => new DevblocksSearchField(self::ATTACHMENT_UPDATED, 'a', 'updated', $translate->_('common.updated'), Model_CustomField::TYPE_DATE),
+			self::ID => new DevblocksSearchField(self::ID, 'al', 'attachment_id', $translate->_('attachment.id'), null, true),
+			self::LINK_CONTEXT => new DevblocksSearchField(self::LINK_CONTEXT, 'al', 'context', $translate->_('common.context'), null, true),
+			self::LINK_CONTEXT_ID => new DevblocksSearchField(self::LINK_CONTEXT_ID, 'al', 'context_id', $translate->_('common.context_id'), null, true),
+			self::GUID => new DevblocksSearchField(self::GUID, 'al', 'guid', $translate->_('common.guid'), null, true),
+			self::ATTACHMENT_DISPLAY_NAME => new DevblocksSearchField(self::ATTACHMENT_DISPLAY_NAME, 'a', 'display_name', $translate->_('attachment.display_name'), Model_CustomField::TYPE_SINGLE_LINE, true),
+			self::ATTACHMENT_MIME_TYPE => new DevblocksSearchField(self::ATTACHMENT_MIME_TYPE, 'a', 'mime_type', $translate->_('attachment.mime_type'), Model_CustomField::TYPE_SINGLE_LINE, true),
+			self::ATTACHMENT_STORAGE_SIZE => new DevblocksSearchField(self::ATTACHMENT_STORAGE_SIZE, 'a', 'storage_size', $translate->_('attachment.storage_size'), Model_CustomField::TYPE_NUMBER, true),
+			self::ATTACHMENT_STORAGE_EXTENSION => new DevblocksSearchField(self::ATTACHMENT_STORAGE_EXTENSION, 'a', 'storage_extension', $translate->_('attachment.storage_extension'), null, true),
+			self::ATTACHMENT_STORAGE_KEY => new DevblocksSearchField(self::ATTACHMENT_STORAGE_KEY, 'a', 'storage_key', $translate->_('attachment.storage_key'), Model_CustomField::TYPE_SINGLE_LINE, true),
+			self::ATTACHMENT_STORAGE_PROFILE_ID => new DevblocksSearchField(self::ATTACHMENT_STORAGE_PROFILE_ID, 'a', 'storage_profile_id', $translate->_('attachment.storage_profile_id'), null, true),
+			self::ATTACHMENT_STORAGE_SHA1HASH => new DevblocksSearchField(self::ATTACHMENT_STORAGE_SHA1HASH, 'a', 'storage_sha1hash', $translate->_('attachment.storage_sha1hash'), null, true),
+			self::ATTACHMENT_UPDATED => new DevblocksSearchField(self::ATTACHMENT_UPDATED, 'a', 'updated', $translate->_('common.updated'), Model_CustomField::TYPE_DATE, true),
 		);
 		
 		// Sort by label (translation-conscious)
@@ -1533,6 +1528,7 @@ class Context_Attachment extends Extension_DevblocksContext {
 			'id' => $attachment->id,
 			'name' => $attachment->display_name,
 			'permalink' => null,
+			'updated' => $attachment->updated,
 		);
 	}
 	
@@ -1682,6 +1678,9 @@ class Context_Attachment extends Extension_DevblocksContext {
 		if(empty($view_id))
 			$view_id = 'chooser_'.str_replace('.','_',$this->id).time().mt_rand(0,9999);
 		
+		if(false == $this->getViewClass())
+			return;
+		
 		// View
 		$defaults = C4_AbstractViewModel::loadFromClass($this->getViewClass());
 		$defaults->id = $view_id;
@@ -1700,6 +1699,9 @@ class Context_Attachment extends Extension_DevblocksContext {
 	
 	function getView($context=null, $context_id=null, $options=array(), $view_id=null) {
 		$view_id = !empty($view_id) ? $view_id : str_replace('.','_',$this->id);
+		
+		if(false == $this->getViewClass())
+			return;
 		
 		$defaults = C4_AbstractViewModel::loadFromClass($this->getViewClass());
 		$defaults->id = $view_id;
@@ -1731,6 +1733,7 @@ class Context_AttachmentLink extends Extension_DevblocksContext {
 			'id' => $link->guid,
 			'name' => $link->guid,
 			'permalink' => null,
+			'updated' => 0,
 		);
 	}
 	

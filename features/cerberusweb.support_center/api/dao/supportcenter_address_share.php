@@ -1,5 +1,5 @@
 <?php
-class DAO_SupportCenterAddressShare extends DevblocksORMHelper {
+class DAO_SupportCenterAddressShare extends Cerb_ORMHelper {
 	const SHARE_ADDRESS_ID = 'share_address_id';
 	const WITH_ADDRESS_ID = 'with_address_id';
 	const IS_ENABLED = 'is_enabled';
@@ -10,11 +10,11 @@ class DAO_SupportCenterAddressShare extends DevblocksORMHelper {
 		
 		$sql = sprintf("SELECT share_address_id AS id ".
 			"FROM supportcenter_address_share ".
-			"WHERE is_enabled = 1 AND with_address_id IN(SELECT id FROM address WHERE contact_person_id = %d) ".
+			"WHERE is_enabled = 1 AND with_address_id IN(SELECT id FROM address WHERE contact_id = %d) ".
 			"UNION ".
 			"SELECT id ".
 			"FROM address ".
-			"WHERE contact_person_id = %d",
+			"WHERE contact_id = %d",
 			$contact_id,
 			$contact_id
 		);
@@ -147,8 +147,8 @@ class DAO_SupportCenterAddressShare extends DevblocksORMHelper {
 		
 		// Clear orphaned address share rows
 		$db->ExecuteMaster("DELETE FROM supportcenter_address_share ".
-			"WHERE (share_address_id NOT IN (SELECT id FROM address WHERE contact_person_id != 0)) ".
-			"OR (with_address_id NOT IN (SELECT id FROM address WHERE contact_person_id != 0)) "
+			"WHERE (share_address_id NOT IN (SELECT id FROM address WHERE contact_id != 0)) ".
+			"OR (with_address_id NOT IN (SELECT id FROM address WHERE contact_id != 0)) "
 		);
 	}
 };

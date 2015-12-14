@@ -338,6 +338,7 @@ class VaAction_HttpRequest extends Extension_DevblocksEventAction {
 		$out = curl_exec($ch);
 		
 		$info = curl_getinfo($ch);
+		
 		$error = curl_error($ch);
 
 		if(curl_errno($ch)) {
@@ -350,11 +351,26 @@ class VaAction_HttpRequest extends Extension_DevblocksEventAction {
 						@$out = json_decode($out, true);
 						break;
 						
+					case 'application/octet-stream':
+					case 'application/pdf':
+					case 'application/zip':
+						@$out = base64_encode($out);
+						break;
+					
 					case 'image/gif':
 					case 'image/jpeg':
 					case 'image/jpg':
 					case 'image/png':
 						@$out = base64_encode($out);
+						break;
+						
+					case 'text/html':
+					case 'text/plain':
+					case 'text/xml':
+						break;
+						
+					default:
+						//@$out = base64_encode($out);
 						break;
 				}
 			}
@@ -372,9 +388,166 @@ class VaAction_HttpRequest extends Extension_DevblocksEventAction {
 };
 endif;
 
+if(class_exists('Extension_DevblocksEventAction')):
+class VaAction_CreateAttachment extends Extension_DevblocksEventAction {
+	function render(Extension_DevblocksEvent $event, Model_TriggerEvent $trigger, $params=array(), $seq=null) {
+		$tpl = DevblocksPlatform::getTemplateService();
+		$tpl->assign('params', $params);
+		
+		if(!is_null($seq))
+			$tpl->assign('namePrefix', 'action'.$seq);
+		
+		$tpl->display('devblocks:cerberusweb.core::internal/decisions/actions/_action_create_attachment.tpl');
+	}
+	
+	function simulate($token, Model_TriggerEvent $trigger, $params, DevblocksDictionaryDelegate $dict) {
+		$tpl_builder = DevblocksPlatform::getTemplateBuilder();
+
+		$out = null;
+		
+		@$file_name = $tpl_builder->build($params['file_name'], $dict);
+		@$file_type = $tpl_builder->build($params['file_type'], $dict);
+		@$content = $tpl_builder->build($params['content'], $dict);
+		@$content_encoding = $params['content_encoding'];
+		@$object_placeholder = $params['object_placeholder'] ?: '_attachment_meta';
+		@$object_var = $params['object_var'];
+		@$run_in_simulator = !empty($params['run_in_simulator']);
+		
+		if(empty($file_name))
+			return "[ERROR] File name is required.";
+		
+		if(empty($content))
+			return "[ERROR] File content is required.";
+		
+		// MIME Type
+		
+		if(empty($file_type))
+			$file_type = 'text/plain';
+
+		$out = sprintf(">>> Creating attachment: %s (%s)\n", $file_name, $file_type);
+		
+		// Set placeholder with object meta
+		
+		if(!empty($object_placeholder)) {
+			$out .= sprintf("\n>>> Saving metadata to {{%1\$s}}\n".
+				" * {{%1\$s.id}}\n".
+				" * {{%1\$s.name}}\n".
+				" * {{%1\$s.type}}\n".
+				" * {{%1\$s.size}}\n".
+				" * {{%1\$s.hash}}\n",
+				$object_placeholder
+			);
+		}
+		
+		// Set object variable
+		
+		if(!empty($object_var) && isset($trigger->variables[$object_var])) {
+			$out .= sprintf("\n>>> Adding object to variable: {{%s}}\n",
+				$object_var
+			);
+		}
+		
+		// Run in simulator
+		
+		if($run_in_simulator) {
+			$this->run($token, $trigger, $params, $dict);
+		}
+		
+		return $out;
+	}
+	
+	function run($token, Model_TriggerEvent $trigger, $params, DevblocksDictionaryDelegate $dict) {
+		$tpl_builder = DevblocksPlatform::getTemplateBuilder();
+		
+		@$file_name = $tpl_builder->build($params['file_name'], $dict);
+		@$file_type = $tpl_builder->build($params['file_type'], $dict);
+		@$content = $tpl_builder->build($params['content'], $dict);
+		@$content_encoding = $params['content_encoding'];
+		@$object_placeholder = $params['object_placeholder'] ?: '_attachment_meta';
+		@$object_var = $params['object_var'];
+		@$run_in_simulator = !empty($params['run_in_simulator']);
+		
+		// MIME Type
+		
+		if(empty($file_type))
+			$file_type = 'text/plain';
+		
+		// Encoding
+		
+		switch($content_encoding) {
+			case 'base64':
+				$content = base64_decode($content);
+				break;
+		}
+		
+		$file_size = strlen($content);
+
+		$sha1_hash = sha1($content, false);
+		
+		if(false == ($file_id = DAO_Attachment::getBySha1Hash($sha1_hash, $file_name))) {
+			$fields = array(
+				DAO_Attachment::DISPLAY_NAME => $file_name,
+				DAO_Attachment::MIME_TYPE => $file_type,
+				DAO_Attachment::STORAGE_SHA1HASH => $sha1_hash,
+			);
+				
+			$file_id = DAO_Attachment::create($fields);
+		}
+
+		if(empty($file_id))
+			return;
+		
+		if(false == Storage_Attachments::put($file_id, $content))
+			return;
+		
+		unset($content);
+		
+		// Set placeholder with object meta
+		
+		if(!empty($object_placeholder)) {
+			$dict->$object_placeholder = array(
+				'id' => $file_id,
+				'name' => $file_name,
+				'type' => $file_type,
+				'size' => $file_size,
+				'hash' => $sha1_hash,
+			);
+		}
+		
+		// Set object variable
+		
+		if(!empty($object_var) && isset($trigger->variables[$object_var])) {
+			CerberusContexts::getContext(CerberusContexts::CONTEXT_ATTACHMENT, $file_id, $labels, $values, null, true, true);
+			$dict->$object_var = array($file_id => new DevblocksDictionaryDelegate($values));
+		}
+	}
+	
+};
+endif;
+
+class Cerb_SwiftPlugin_TransportExceptionLogger implements Swift_Events_TransportExceptionListener {
+	private $_lastError = null;
+	
+	function exceptionThrown(Swift_Events_TransportExceptionEvent $evt) {
+		$exception = $evt->getException();
+		$this->_lastError = str_replace(array("\r","\n"),array('',' '), $exception->getMessage());
+	}
+	
+	function getLastError() {
+		return $this->_lastError;
+	}
+	
+	function clear() {
+		$this->_lastError = null;
+	}
+}
+
 if(class_exists('Extension_MailTransport')):
 class CerbMailTransport_Smtp extends Extension_MailTransport {
 	const ID = 'core.mail.transport.smtp';
+	
+	private $_lastErrorMessage = null;
+	private $_logger = null;
 	
 	function renderConfig(Model_MailTransport $model) {
 		$tpl = DevblocksPlatform::getTemplateService();
@@ -451,9 +624,19 @@ class CerbMailTransport_Smtp extends Extension_MailTransport {
 		
 		$failed_recipients = array();
 		
-		// [TODO] Actually use failed recipients
+		$result = $mailer->send($message, $failed_recipients);
 		
-		return $mailer->send($message, $failed_recipients);
+		if(!$result) {
+			$this->_lastErrorMessage = $this->_logger->getLastError();
+		}
+		
+		$this->_logger->clear();
+		
+		return $result;
+	}
+	
+	function getLastError() {
+		return $this->_lastErrorMessage;
 	}
 	
 	/**
@@ -514,6 +697,9 @@ class CerbMailTransport_Smtp extends Extension_MailTransport {
 			$mailer = Swift_Mailer::newInstance($smtp);
 			$mailer->registerPlugin(new Swift_Plugins_AntiFloodPlugin($smtp_max_sends, 1));
 			
+			$this->_logger = new Cerb_SwiftPlugin_TransportExceptionLogger();
+			$mailer->registerPlugin($this->_logger);
+			
 			$connections[$hash] = $mailer;
 		}
 		
@@ -549,6 +735,10 @@ class CerbMailTransport_Null extends Extension_MailTransport {
 			return false;
 		
 		return $mailer->send($message);
+	}
+	
+	function getLastError() {
+		return null;
 	}
 	
 	private function _getMailer() {

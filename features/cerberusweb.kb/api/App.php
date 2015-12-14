@@ -189,7 +189,7 @@ class WorkspaceTab_KbBrowse extends Extension_WorkspaceTab {
 		$root_id = intval($category_id);
 		$tpl->assign('root_id', $root_id);
 
-		$tree = DAO_KbCategory::getTreeMap($root_id);
+		$tree = DAO_KbCategory::getTreeMap(false);
 		$tpl->assign('tree', $tree);
 
 		$categories = DAO_KbCategory::getAll();
@@ -585,7 +585,6 @@ class ChKbAjaxController extends DevblocksControllerExtension {
 		}
 		
 		$view->doBulkUpdate($filter, $do, $ids);
-		
 		$view->render();
 		return;
 	}
@@ -634,7 +633,7 @@ class DAO_KbCategory extends Cerb_ORMHelper {
 		self::clearCache();
 	}
 	
-	static function getTreeMap() {
+	static function getTreeMap($prune_empty=false) {
 		$db = DevblocksPlatform::getDatabaseService();
 		
 		$categories = self::getWhere();
@@ -666,9 +665,16 @@ class DAO_KbCategory extends Cerb_ORMHelper {
 			}
 		}
 		
-		// [TODO] Filter out empty categories on public
-		
 		mysqli_free_result($rs);
+		
+		// Filter out empty categories on public
+		if($prune_empty) {
+			foreach($tree as $parent_id => $nodes) {
+				$tree[$parent_id] = array_filter($nodes, function($count) {
+					return !empty($count);
+				});
+			}
+		}
 		
 		return $tree;
 	}
@@ -727,6 +733,25 @@ class DAO_KbCategory extends Cerb_ORMHelper {
 			$levels[$pid] = $level;
 			self::_recurseTree($levels,$map,$pid,$level);
 		}
+	}
+	
+	static public function getAncestors($root_id, $categories=null) {
+		if(empty($categories))
+			$categories = DAO_KbCategory::getAll();
+		
+		$breadcrumb = array();
+		
+		$pid = $root_id;
+		while(0 != $pid) {
+			$breadcrumb[] = $pid;
+			if(isset($categories[$pid])) {
+				$pid = $categories[$pid]->parent_id;
+			} else {
+				$pid = 0;
+			}
+		}
+			
+		return array_reverse($breadcrumb);
 	}
 	
 	static public function getDescendents($root_id) {
@@ -824,10 +849,6 @@ class DAO_KbCategory extends Cerb_ORMHelper {
 	public static function getSearchQueryComponents($columns, $params, $sortBy=null, $sortAsc=null) {
 		$fields = SearchFields_KbCategory::getFields();
 		
-		// Sanitize
-		if('*'==substr($sortBy,0,1) || !isset($fields[$sortBy]) || !in_array($sortBy,$columns))
-			$sortBy=null;
-
 		list($tables,$wheres) = parent::_parseSearchParams($params, $columns, $fields, $sortBy);
 		
 		$select_sql = sprintf("SELECT ".
@@ -857,7 +878,7 @@ class DAO_KbCategory extends Cerb_ORMHelper {
 		$where_sql = "".
 			(!empty($wheres) ? sprintf("WHERE %s ",implode(' AND ',$wheres)) : "WHERE 1 ");
 			
-		$sort_sql = (!empty($sortBy) ? sprintf("ORDER BY %s %s ",$sortBy,($sortAsc || is_null($sortAsc))?"ASC":"DESC") : " ");
+		$sort_sql = self::_buildSortClause($sortBy, $sortAsc, $fields);
 		
 		$result = array(
 			'primary_table' => 'kbc',
@@ -936,9 +957,9 @@ class SearchFields_KbCategory implements IDevblocksSearchFields {
 		$translate = DevblocksPlatform::getTranslationService();
 		
 		$columns = array(
-			self::ID => new DevblocksSearchField(self::ID, 'kbc', 'id', $translate->_('kb_category.id')),
-			self::PARENT_ID => new DevblocksSearchField(self::PARENT_ID, 'kbc', 'parent_id', $translate->_('kb_category.parent_id')),
-			self::NAME => new DevblocksSearchField(self::NAME, 'kbc', 'name', $translate->_('kb_category.name')),
+			self::ID => new DevblocksSearchField(self::ID, 'kbc', 'id', $translate->_('kb_category.id'), null, true),
+			self::PARENT_ID => new DevblocksSearchField(self::PARENT_ID, 'kbc', 'parent_id', $translate->_('kb_category.parent_id'), null, true),
+			self::NAME => new DevblocksSearchField(self::NAME, 'kbc', 'name', $translate->_('kb_category.name'), null, true),
 
 		);
 		
@@ -975,6 +996,7 @@ class Context_KbCategory extends Extension_DevblocksContext {
 			'id' => $category->id,
 			'name' => $category->name,
 			'permalink' => $url_writer->writeNoProxy(sprintf("c=profiles&type=kb_category&id=%d-%s", $category->id, DevblocksPlatform::strToPermalink($category->name), true)),
+			'updated' => 0, // [TODO]
 		);
 	}
 	
