@@ -856,46 +856,92 @@ class ChInternalController extends DevblocksControllerExtension {
 	function chooserOpenAvatarAction() {
 		@$context = DevblocksPlatform::importGPC($_REQUEST['context'],'string','');
 		@$context_id = DevblocksPlatform::importGPC($_REQUEST['context_id'],'integer',0);
+		@$defaults_string = DevblocksPlatform::importGPC($_REQUEST['defaults'],'string','');
 		
 		$tpl = DevblocksPlatform::getTemplateService();
 		
 		$tpl->assign('context', $context);
 		$tpl->assign('context_id', $context_id);
-		
+
 		if(false != ($avatar = DAO_ContextAvatar::getByContext($context, $context_id))) {
 			$contents = 'data:' . $avatar->content_type . ';base64,' . base64_encode(Storage_ContextAvatar::get($avatar));
 			$tpl->assign('imagedata', $contents);
 		}
-		
+
 		$suggested_photos = array();
+		
+		// Suggest more extended content
+		
+		$defaults = array();
+		
+		$tokens = explode(' ', trim($defaults_string));
+		foreach($tokens as $token) {
+			@list($k,$v) = explode(':', $token);
+			$defaults[trim($k)] = trim($v);
+		}
+		
+		// Per context suggestions
 		
 		switch($context) {
 			case CerberusContexts::CONTEXT_ADDRESS:
 				if(false != ($addy = DAO_Address::get($context_id))) {
 					$suggested_photos[] = array(
-						'url' => 'https://gravatar.com/avatar/' . md5($addy->email) . '?s=100',
-						'title' => 'Gravatar',
+						'url' => 'https://gravatar.com/avatar/' . md5($addy->email) . '?s=100&d=404',
+						'title' => 'Gravatar: ' . $addy->email,
 					);
 				}
 				break;
 				
 			case CerberusContexts::CONTEXT_CONTACT:
-				if(false != ($contact = DAO_Contact::get($context_id))) {
-					if(false != ($email = $contact->getEmailAsString())) {
+				// Suggest from the address we're adding to the new contact
+				if(empty($context_id) && isset($defaults['email'])) {
+					$context_id = intval($defaults['email']);
+				}
+				
+				// Suggest from all of the contact's alternate email addys
+				if($context_id && false != ($contact = DAO_Contact::get($context_id))) {
+					$addys = $contact->getEmails();
+					
+					if(is_array($addys))
+					foreach($addys as $addy) {
 						$suggested_photos[] = array(
-							'url' => 'https://gravatar.com/avatar/' . md5($email) . '?s=100',
-							'title' => 'Gravatar',
+							'url' => 'https://gravatar.com/avatar/' . md5($addy->email) . '?s=100&d=404',
+							'title' => 'Gravatar: ' . $addy->email,
+						);
+					}
+				}
+				break;
+				
+			case CerberusContexts::CONTEXT_ORG:
+				if(false != ($org = DAO_ContactOrg::get($context_id))) {
+					// Suggest from all of the org's top email addys w/o contacts
+					$addys = $org->getEmailsWithoutContacts(10);
+					
+					if(is_array($addys))
+					foreach($addys as $addy) {
+						$suggested_photos[] = array(
+							'url' => 'https://gravatar.com/avatar/' . md5($addy->email) . '?s=100&d=404',
+							'title' => 'Gravatar: ' . $addy->email,
 						);
 					}
 				}
 				break;
 				
 			case CerberusContexts::CONTEXT_WORKER:
-				if(false != ($worker = DAO_Worker::get($context_id))) {
+				// Suggest from the address we're adding to the new worker
+				if(empty($context_id)) {
+					if(isset($defaults['email']) && false != ($addy = DAO_Address::get($defaults['email']))) {
+						$suggested_photos[] = array(
+							'url' => 'https://gravatar.com/avatar/' . md5($addy->email) . '?s=100&d=404',
+							'title' => 'Gravatar: ' . $addy->email,
+						);
+					}
+					
+				} else if($context_id && false != ($worker = DAO_Worker::get($context_id))) {
 					if(false != ($email = $worker->getEmailString())) {
 						$suggested_photos[] = array(
-							'url' => 'https://gravatar.com/avatar/' . md5($email) . '?s=100',
-							'title' => 'Gravatar',
+							'url' => 'https://gravatar.com/avatar/' . md5($email) . '?s=100&d=404',
+							'title' => 'Gravatar: ' . $email,
 						);
 					}
 				}

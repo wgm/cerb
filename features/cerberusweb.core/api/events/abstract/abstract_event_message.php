@@ -294,6 +294,11 @@ abstract class AbstractEvent_Message extends Extension_DevblocksEvent {
 		
 		$conditions = $this->_importLabelsTypesAsConditions($labels, $types);
 		
+		// Allow overrides
+		$conditions['ticket_spam_score']['type'] = null;
+		$conditions['ticket_spam_training']['type'] = null;
+		$conditions['ticket_status']['type'] = null;
+		
 		return $conditions;
 	}
 	
@@ -826,7 +831,7 @@ abstract class AbstractEvent_Message extends Extension_DevblocksEvent {
 				);
 				break;
 				
-			case 'removerecipients':
+			case 'remove_recipients':
 				return DevblocksEventHelper::simulateActionRemoveRecipients($params, $dict, 'ticket_id');
 				break;
 				
