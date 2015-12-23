@@ -169,6 +169,7 @@ $.fn.cerbDateInputHelper = function(options) {
 		
 		$this.datepicker({
 			showOn: 'button',
+			buttonText: '<span class="glyphicons glyphicons-calendar"></span>',
 			dateFormat: 'D, d M yy',
 			defaultDate: 'D, d M yy',
 			onSelect: function(dateText, inst) {
@@ -454,7 +455,7 @@ var cAjaxCalls = function() {
 		if(null == options) options = { };
 
 		if(null == options.minLength)
-			options.minLength = 2;
+			options.minLength = 1;
 		
 		if(null == options.autoFocus)
 			options.autoFocus = true;
@@ -499,7 +500,27 @@ var cAjaxCalls = function() {
 			}
 			
 		} else {
-			options.source = url;
+			options.source = function (request, response) {
+				var ajax_options = {
+					url: url,
+					dataType: "json",
+					data: request,
+					success: function(data) {
+						response(data);
+					}
+				};
+				
+				$.ajax(ajax_options);
+			}
+			options.select = function(event, ui) {
+				$(this).val(ui.item.label);
+				return false;
+			}
+			
+			options.focus = function(event, ui) {
+				// Don't replace the textbox value
+				return false;
+			};
 		}
 		
 		var $sel = $(sel);
@@ -885,7 +906,10 @@ var ajax = new cAjaxCalls();
 			
 			$trigger.click(function() {
 				var query = $trigger.attr('data-query');
-				var chooser_url = 'c=internal&a=chooserOpen&context=' + encodeURIComponent(context) + '&single=1';
+				var chooser_url = 'c=internal&a=chooserOpen&context=' + encodeURIComponent(context);
+				
+				if($trigger.attr('data-single'))
+					chooser_url += '&single=1';
 				
 				if(typeof query == 'string' && query.length > 0) {
 					chooser_url += '&q=' + encodeURIComponent(query);

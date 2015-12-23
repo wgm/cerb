@@ -593,6 +593,197 @@ class DevblocksEventHelper {
 		}
 	}
 	
+	static function renderActionCreateRecordSetCustomFields($context, &$tpl) {
+		$custom_fields = DAO_CustomField::getByContext($context, false);
+		$tpl->assign('custom_fields', $custom_fields);
+
+		if(false != ($params = $tpl->getVariable('params'))) {
+			$params = $params->value;
+
+			$custom_field_values = DevblocksEventHelper::getCustomFieldValuesFromParams($params);
+			$tpl->assign('custom_field_values', $custom_field_values);
+			
+			$custom_fieldsets_linked = DevblocksEventHelper::getCustomFieldsetsFromParams($params);
+			$tpl->assign('custom_fieldsets_linked', $custom_fieldsets_linked);
+		}
+	}
+	
+	static function simulateActionCreateRecordSetCustomFields($params, $dict) {
+		$tpl_builder = DevblocksPlatform::getTemplateBuilder();
+		
+		$workers = DAO_Worker::getAll();
+		$custom_fields = DAO_CustomField::getAll();
+		$custom_field_values = DevblocksEventHelper::getCustomFieldValuesFromParams($params);
+		
+		$out = '';
+		
+		if(is_array($custom_field_values))
+		foreach($custom_field_values as $cf_id => $val) {
+			if(!isset($custom_fields[$cf_id]))
+				continue;
+			
+			if(is_null($val))
+				continue;
+			
+			if(is_array($val))
+				$val = implode('; ', $val);
+			
+			switch($custom_fields[$cf_id]->type) {
+				case Model_CustomField::TYPE_WORKER:
+					if(!empty($val) && !is_numeric($val)) {
+						if(isset($dict->$val)) {
+							$val = $dict->$val;
+							
+							// If it's an array, pick a random key
+							if(is_array($val)) {
+								$key = array_rand($val, 1);
+								
+								if(is_numeric($key)) {
+									$val = $key;
+									
+								} else {
+									$val = array_shift($val);
+									
+									if($val instanceof DevblocksDictionaryDelegate) {
+										@$val = intval($val->id);
+									}
+								}
+							}
+							
+						}
+					}
+					
+					if(isset($workers[$val])) {
+						$set_worker = $workers[$val];
+						$val = $set_worker->getName();
+					}
+					break;
+					
+				default:
+					$val = $tpl_builder->build($val, $dict);
+					break;
+			}
+			
+			$out .= $custom_fields[$cf_id]->name . ': ' . $val . "\n";
+		}
+		
+		return $out;
+	}
+	
+	static function runActionCreateRecordSetCustomFields($context, $context_id, $params, &$dict) {
+		$tpl_builder = DevblocksPlatform::getTemplateBuilder();
+		
+		if(empty($context) || empty($context_id))
+			return false;
+		
+		$workers = DAO_Worker::getAll();
+		$custom_fields = DAO_CustomField::getAll();
+		$custom_field_values = DevblocksEventHelper::getCustomFieldValuesFromParams($params);
+		
+		$vals = array();
+		
+		if(is_array($custom_field_values))
+		foreach($custom_field_values as $cf_id => $val) {
+			switch($custom_fields[$cf_id]->type) {
+				case Model_CustomField::TYPE_WORKER:
+					if(!empty($val) && !is_numeric($val)) {
+						if(isset($dict->$val)) {
+							$val = $dict->$val;
+						}
+					}
+					break;
+						
+				default:
+					if(is_string($val))
+						$val = $tpl_builder->build($val, $dict);
+					break;
+			}
+		
+			$vals[$cf_id] = $val;
+		}
+		
+		if(!empty($vals))
+			DAO_CustomFieldValue::formatAndSetFieldValues($context, $context_id, $vals);
+	}
+	
+	static function simulateActionCreateRecordSetLinks($params, $dict) {
+		@$link_to = DevblocksPlatform::importVar($params['link_to'],'array',array());
+		$out = '';
+		
+		if(!empty($link_to)) {
+			$trigger = $dict->_trigger;
+			$event = $trigger->getEvent();
+			
+			$on_result = DevblocksEventHelper::onContexts($link_to, $event->getValuesContexts($trigger), $dict);
+			@$on_objects = $on_result['objects'];
+			
+			if(is_array($on_objects)) {
+				$out .= ">>> Linking new record to:\n";
+				
+				foreach($on_objects as $on_object) {
+					$on_object_context = Extension_DevblocksContext::get($on_object->_context);
+					$out .= ' * (' . $on_object_context->manifest->name . ') ' . $on_object->_label . "\n";
+				}
+			}
+			
+			$out .= "\n";
+		}
+		
+		return $out;
+	}
+	
+	static function runActionCreateRecordSetLinks($context, $context_id, $params, &$dict) {
+		@$link_to = DevblocksPlatform::importVar($params['link_to'],'array',array());
+		
+		if(!empty($link_to)) {
+			$trigger = $dict->_trigger;
+			$event = $trigger->getEvent();
+			
+			$on_result = DevblocksEventHelper::onContexts($link_to, $event->getValuesContexts($trigger), $dict);
+			@$on_objects = $on_result['objects'];
+			
+			if(is_array($on_objects)) {
+				foreach($on_objects as $on_object) {
+					DAO_ContextLink::setLink($context, $context_id, $on_object->_context, $on_object->id);
+				}
+			}
+		}
+		
+		return true;
+	}
+	
+	static function simulateActionCreateRecordSetVariable($params, $dict) {
+		@$trigger = $dict->_trigger;
+		@$object_var = $params['object_var'];
+		$out = '';
+		
+		if($object_var && $trigger && isset($trigger->variables[$object_var])) {
+			$out .= sprintf(">>> Adding new object to variable: {{%s}}\n",
+				$object_var
+			);
+		}
+		
+		return $out;
+	}
+	
+	static function runActionCreateRecordSetVariable($context, $context_id, $params, &$dict) {
+		@$trigger = $dict->_trigger;
+		@$object_var = $params['object_var'];
+		
+		if($object_var && $trigger && isset($trigger->variables[$object_var])) {
+			CerberusContexts::getContext($context, $context_id, $labels, $values, null, true, true);
+			
+			if(!isset($dict->$object_var))
+				$dict->$object_var = array();
+			
+			$ptr =& $dict->$object_var;
+			
+			$ptr[$context_id] = new DevblocksDictionaryDelegate($values);
+		}
+	}
+	
+	// Dates
+	
 	static function runActionSetDate($token, $params, DevblocksDictionaryDelegate $dict) {
 		@$mode = $params['mode'];
 				
@@ -2000,20 +2191,11 @@ class DevblocksEventHelper {
 		$tpl->assign('calendars', $calendars);
 
 		// [TODO] Including calendar variables
+
+		// Custom fields
+		DevblocksEventHelper::renderActionCreateRecordSetCustomFields(CerberusContexts::CONTEXT_CALENDAR_EVENT, $tpl);
 		
-		$custom_fields = DAO_CustomField::getByContext(CerberusContexts::CONTEXT_CALENDAR_EVENT, false);
-		$tpl->assign('custom_fields', $custom_fields);
-		
-		if(false != ($params = $tpl->getVariable('params'))) {
-			$params = $params->value;
-		
-			$custom_field_values = DevblocksEventHelper::getCustomFieldValuesFromParams($params);
-			$tpl->assign('custom_field_values', $custom_field_values);
-				
-			$custom_fieldsets_linked = DevblocksEventHelper::getCustomFieldsetsFromParams($params);
-			$tpl->assign('custom_fieldsets_linked', $custom_fieldsets_linked);
-		}
-		
+		// Template
 		$tpl->display('devblocks:cerberusweb.core::internal/decisions/actions/_create_calendar_event.tpl');
 	}
 	
@@ -2083,42 +2265,9 @@ class DevblocksEventHelper {
 			$params['until'],
 			(!empty($params['is_available']) ? 'Available' : 'Busy')
 		);
-
-		$workers = DAO_Worker::getAll();
-		$custom_fields = DAO_CustomField::getAll();
-		$custom_field_values = DevblocksEventHelper::getCustomFieldValuesFromParams($params);
 		
-		foreach($custom_field_values as $cf_id => $val) {
-			if(!isset($custom_fields[$cf_id]))
-				continue;
-			
-			if(is_null($val))
-				continue;
-			
-			if(is_array($val))
-				$val = implode('; ', $val);
-			
-			switch($custom_fields[$cf_id]->type) {
-				case Model_CustomField::TYPE_WORKER:
-					if(!empty($val) && !is_numeric($val)) {
-						if(isset($dict->$val)) {
-							$val = $dict->$val;
-						}
-					}
-			
-					if(isset($workers[$val])) {
-						$set_worker = $workers[$val];
-						$val = $set_worker->getName();
-					}
-					break;
-						
-				default:
-					$val = $tpl_builder->build($val, $dict);
-					break;
-			}
-				
-			$out .= $custom_fields[$cf_id]->name . ': ' . $val . "\n";
-		}
+		// Custom fields
+		$out .= DevblocksEventHelper::simulateActionCreateRecordSetCustomFields($params, $dict);
 		
 		$out .= "\n";
 
@@ -2158,6 +2307,15 @@ class DevblocksEventHelper {
 				}
 				$out .= "\n";
 			}
+		}
+		
+		// Set object variable
+		$out .= DevblocksEventHelper::simulateActionCreateRecordSetVariable($params, $dict);
+		
+		// Run in simulator
+		@$run_in_simulator = !empty($params['run_in_simulator']);
+		if($run_in_simulator) {
+			self::runActionCreateCalendarEvent($params, $dict);
 		}
 		
 		return $out;
@@ -2226,34 +2384,14 @@ class DevblocksEventHelper {
 				DAO_CalendarEvent::DATE_START => $when,
 				DAO_CalendarEvent::DATE_END => $until,
 				DAO_CalendarEvent::CALENDAR_ID => $calendar_id,
-				DAO_CalendarEvent::IS_AVAILABLE => !empty($is_available),
+				DAO_CalendarEvent::IS_AVAILABLE => !empty($is_available) ? 1 : 0,
 			);
-			$calendar_event_id = DAO_CalendarEvent::create($fields);
-				
+			
+			if(false == ($calendar_event_id = DAO_CalendarEvent::create($fields)))
+				return false;
+			
 			// Custom fields
-			$workers = DAO_Worker::getAll();
-			$custom_fields = DAO_CustomField::getAll();
-			$custom_field_values = DevblocksEventHelper::getCustomFieldValuesFromParams($params);
-				
-			if(is_array($custom_field_values))
-				foreach($custom_field_values as $cf_id => $val) {
-					switch($custom_fields[$cf_id]->type) {
-						case Model_CustomField::TYPE_WORKER:
-							if(!empty($val) && !is_numeric($val)) {
-								if(isset($dict->$val)) {
-									$val = $dict->$val;
-								}
-							}
-							break;
-								
-						default:
-							if(is_string($val))
-								$val = $tpl_builder->build($val, $dict);
-								break;
-					}
-						
-					DAO_CustomFieldValue::formatAndSetFieldValues(CerberusContexts::CONTEXT_CALENDAR_EVENT, $calendar_event_id, array($cf_id => $val));
-				}
+			DevblocksEventHelper::runActionCreateRecordSetCustomFields(CerberusContexts::CONTEXT_CALENDAR_EVENT, $calendar_event_id, $params, $dict);
 				
 			// Watchers
 			if(is_array($watcher_worker_ids) && !empty($watcher_worker_ids)) {
@@ -2272,6 +2410,9 @@ class DevblocksEventHelper {
 				);
 				DAO_Comment::create($fields, $notify_worker_ids);
 			}
+			
+			// Set object variable
+			DevblocksEventHelper::runActionCreateRecordSetVariable(CerberusContexts::CONTEXT_CALENDAR_EVENT, $calendar_event_id, $params, $dict);
 		}
 			
 		return true;
@@ -3272,23 +3413,15 @@ class DevblocksEventHelper {
 		$tpl = DevblocksPlatform::getTemplateService();
 		$tpl->assign('workers', DAO_Worker::getAll());
 		
+		// Context placeholders
 		$event = $trigger->getEvent();
 		$values_to_contexts = $event->getValuesContexts($trigger);
 		$tpl->assign('values_to_contexts', $values_to_contexts);
 		
-		$custom_fields = DAO_CustomField::getByContext(CerberusContexts::CONTEXT_TASK, false);
-		$tpl->assign('custom_fields', $custom_fields);
-
-		if(false != ($params = $tpl->getVariable('params'))) {
-			$params = $params->value;
-
-			$custom_field_values = DevblocksEventHelper::getCustomFieldValuesFromParams($params);
-			$tpl->assign('custom_field_values', $custom_field_values);
-			
-			$custom_fieldsets_linked = DevblocksEventHelper::getCustomFieldsetsFromParams($params);
-			$tpl->assign('custom_fieldsets_linked', $custom_fieldsets_linked);
-		}
+		// Custom fields
+		DevblocksEventHelper::renderActionCreateRecordSetCustomFields(CerberusContexts::CONTEXT_TASK, $tpl);
 		
+		// Template
 		$tpl->display('devblocks:cerberusweb.core::internal/decisions/actions/_create_task.tpl');
 	}
 	
@@ -3321,82 +3454,10 @@ class DevblocksEventHelper {
 			$params['due_date']
 		);
 
-		$workers = DAO_Worker::getAll();
-		$custom_fields = DAO_CustomField::getAll();
-		$custom_field_values = DevblocksEventHelper::getCustomFieldValuesFromParams($params);
-		
-		foreach($custom_field_values as $cf_id => $val) {
-			if(!isset($custom_fields[$cf_id]))
-				continue;
-			
-			if(is_null($val))
-				continue;
-			
-			if(is_array($val))
-				$val = implode('; ', $val);
-			
-			switch($custom_fields[$cf_id]->type) {
-				case Model_CustomField::TYPE_WORKER:
-					if(!empty($val) && !is_numeric($val)) {
-						if(isset($dict->$val)) {
-							$val = $dict->$val;
-							
-							// If it's an array, pick a random key
-							if(is_array($val)) {
-								$key = array_rand($val, 1);
-								
-								if(is_numeric($key)) {
-									$val = $key;
-									
-								} else {
-									$val = array_shift($val);
-									
-									if($val instanceof DevblocksDictionaryDelegate) {
-										@$val = intval($val->id);
-									}
-								}
-							}
-							
-						}
-					}
-					
-					if(isset($workers[$val])) {
-						$set_worker = $workers[$val];
-						$val = $set_worker->getName();
-					}
-					break;
-					
-				default:
-					$val = $tpl_builder->build($val, $dict);
-					break;
-			}
-			
-			$out .= $custom_fields[$cf_id]->name . ': ' . $val . "\n";
-		}
+		// Custom fields
+		$out .= DevblocksEventHelper::simulateActionCreateRecordSetCustomFields($params, $dict);
 		
 		$out .= "\n";
-		
-		// On
-
-		$trigger = $dict->_trigger;
-		$event = $trigger->getEvent();
-		
-		@$on = DevblocksPlatform::importVar($params['on'],'string',$default_on);
-		
-		if(!empty($on)) {
-			$on_result = DevblocksEventHelper::onContexts($on, $event->getValuesContexts($trigger), $dict);
-			@$on_objects = $on_result['objects'];
-			
-			if(is_array($on_objects)) {
-				$out .= ">>> On:\n";
-				
-				foreach($on_objects as $on_object) {
-					$on_object_context = Extension_DevblocksContext::get($on_object->_context);
-					$out .= ' * (' . $on_object_context->manifest->name . ') ' . $on_object->_label . "\n";
-				}
-				$out .= "\n";
-			}
-		}
 		
 		// Watchers
 		if(is_array($watcher_worker_ids) && !empty($watcher_worker_ids)) {
@@ -3427,14 +3488,16 @@ class DevblocksEventHelper {
 			}
 		}
 		
-		// Connection
-		if(!empty($context) && !empty($context_id)) {
-			if(null != ($ctx = Extension_DevblocksContext::get($context, true))) {
-				$meta = $ctx->getMeta($context_id);
-				$out .= ">>> Linking new task to:\n";
-				$out .= ' * (' . $ctx->manifest->name . ') ' . $meta['name'] . "\n";
-				$out .= "\n";
-			}
+		// Links
+		$out .= DevblocksEventHelper::simulateActionCreateRecordSetLinks($params, $dict);
+		
+		// Set object variable
+		$out .= DevblocksEventHelper::simulateActionCreateRecordSetVariable($params, $dict);
+		
+		// Run in simulator
+		@$run_in_simulator = !empty($params['run_in_simulator']);
+		if($run_in_simulator) {
+			$this->run($token, $trigger, $params, $dict);
 		}
 
 		return $out;
@@ -3459,74 +3522,41 @@ class DevblocksEventHelper {
 		
 		$comment = $tpl_builder->build($params['comment'], $dict);
 
-		// On
-
-		$trigger = $dict->_trigger;
-		$event = $trigger->getEvent();
+		$fields = array(
+			DAO_Task::TITLE => $title,
+			DAO_Task::UPDATED_DATE => time(),
+			DAO_Task::DUE_DATE => $due_date,
+		);
 		
-		@$on = DevblocksPlatform::importVar($params['on'],'string',$default_on);
+		if(false == ($task_id = DAO_Task::create($fields)))
+			return false;
 		
-		if(!empty($on)) {
-			$on_result = DevblocksEventHelper::onContexts($on, $event->getValuesContexts($trigger), $dict);
-			@$on_objects = $on_result['objects'];
-			
-			if(is_array($on_objects)) {
-				foreach($on_objects as $on_object) {
-					$fields = array(
-						DAO_Task::TITLE => $title,
-						DAO_Task::UPDATED_DATE => time(),
-						DAO_Task::DUE_DATE => $due_date,
-					);
-					$task_id = DAO_Task::create($fields);
-					
-					// Custom fields
-					$workers = DAO_Worker::getAll();
-					$custom_fields = DAO_CustomField::getAll();
-					$custom_field_values = DevblocksEventHelper::getCustomFieldValuesFromParams($params);
-					
-					if(is_array($custom_field_values))
-					foreach($custom_field_values as $cf_id => $val) {
-						switch($custom_fields[$cf_id]->type) {
-							case Model_CustomField::TYPE_WORKER:
-								if(!empty($val) && !is_numeric($val)) {
-									if(isset($dict->$val)) {
-										$val = $dict->$val;
-									}
-								}
-								break;
-									
-							default:
-								if(is_string($val))
-									$val = $tpl_builder->build($val, $dict);
-								break;
-						}
-					
-						DAO_CustomFieldValue::formatAndSetFieldValues(CerberusContexts::CONTEXT_TASK, $task_id, array($cf_id => $val));
-					}
-					
-					// Watchers
-					if(is_array($watcher_worker_ids) && !empty($watcher_worker_ids)) {
-						CerberusContexts::addWatchers(CerberusContexts::CONTEXT_TASK, $task_id, $watcher_worker_ids);
-					}
-					
-					// Comment content
-					if(!empty($comment)) {
-						$fields = array(
-							DAO_Comment::OWNER_CONTEXT => CerberusContexts::CONTEXT_VIRTUAL_ATTENDANT,
-							DAO_Comment::OWNER_CONTEXT_ID => $trigger->virtual_attendant_id,
-							DAO_Comment::COMMENT => $comment,
-							DAO_Comment::CONTEXT => CerberusContexts::CONTEXT_TASK,
-							DAO_Comment::CONTEXT_ID => $task_id,
-							DAO_Comment::CREATED => time(),
-						);
-						DAO_Comment::create($fields, $notify_worker_ids);
-					}
-					
-					// Connection
-					DAO_ContextLink::setLink(CerberusContexts::CONTEXT_TASK, $task_id, $on_object->_context, $on_object->id);
-				}
-			}
+		// Custom fields
+		DevblocksEventHelper::runActionCreateRecordSetCustomFields(CerberusContexts::CONTEXT_TASK, $task_id, $params, $dict);
+		
+		// Watchers
+		if(is_array($watcher_worker_ids) && !empty($watcher_worker_ids)) {
+			CerberusContexts::addWatchers(CerberusContexts::CONTEXT_TASK, $task_id, $watcher_worker_ids);
 		}
+		
+		// Comment content
+		if(!empty($comment)) {
+			$fields = array(
+				DAO_Comment::OWNER_CONTEXT => CerberusContexts::CONTEXT_VIRTUAL_ATTENDANT,
+				DAO_Comment::OWNER_CONTEXT_ID => $trigger->virtual_attendant_id,
+				DAO_Comment::COMMENT => $comment,
+				DAO_Comment::CONTEXT => CerberusContexts::CONTEXT_TASK,
+				DAO_Comment::CONTEXT_ID => $task_id,
+				DAO_Comment::CREATED => time(),
+			);
+			DAO_Comment::create($fields, $notify_worker_ids);
+		}
+		
+		// Connection
+		DevblocksEventHelper::runActionCreateRecordSetLinks(CerberusContexts::CONTEXT_TASK, $task_id, $params, $dict);
+		
+		// Set object variable
+		DevblocksEventHelper::runActionCreateRecordSetVariable(CerberusContexts::CONTEXT_TASK, $task_id, $params, $dict);
 
 		return $task_id;
 	}
@@ -3543,20 +3573,11 @@ class DevblocksEventHelper {
 		$event = $trigger->getEvent();
 		$values_to_contexts = $event->getValuesContexts($trigger);
 		$tpl->assign('values_to_contexts', $values_to_contexts);
-		
-		$custom_fields = DAO_CustomField::getByContext(CerberusContexts::CONTEXT_TICKET, false);
-		$tpl->assign('custom_fields', $custom_fields);
 
-		if(false != ($params = $tpl->getVariable('params'))) {
-			$params = $params->value;
-			
-			$custom_field_values = DevblocksEventHelper::getCustomFieldValuesFromParams($params);
-			$tpl->assign('custom_field_values', $custom_field_values);
-			
-			$custom_fieldsets_linked = DevblocksEventHelper::getCustomFieldsetsFromParams($params);
-			$tpl->assign('custom_fieldsets_linked', $custom_fieldsets_linked);
-		}
+		// Custom fields
+		DevblocksEventHelper::renderActionCreateRecordSetCustomFields(CerberusContexts::CONTEXT_TICKET, $tpl);
 		
+		// Template
 		$tpl->display('devblocks:cerberusweb.core::internal/decisions/actions/_create_ticket.tpl');
 	}
 	
@@ -3608,41 +3629,7 @@ class DevblocksEventHelper {
 			$out .= sprintf("Reopen at: %s\n", $reopen_at);
 
 		// Custom fields
-		
-		$custom_fields = DAO_CustomField::getAll();
-		$custom_field_values = DevblocksEventHelper::getCustomFieldValuesFromParams($params);
-		
-		foreach($custom_field_values as $cf_id => $val) {
-			if(!isset($custom_fields[$cf_id]))
-				continue;
-			
-			if(is_null($val))
-				continue;
-			
-			if(is_array($val))
-				$val = implode('; ', $val);
-			
-			switch($custom_fields[$cf_id]->type) {
-				case Model_CustomField::TYPE_WORKER:
-					if(!empty($val) && !is_numeric($val)) {
-						if(isset($dict->$val)) {
-							$val = $dict->$val;
-						}
-					}
-			
-					if(isset($workers[$val])) {
-						$set_worker = $workers[$val];
-						$val = $set_worker->getName();
-					}
-					break;
-						
-				default:
-					$val = $tpl_builder->build($val, $dict);
-					break;
-			}
-				
-			$out .= $custom_fields[$cf_id]->name . ': ' . $val . "\n";
-		}
+		$out .= DevblocksEventHelper::simulateActionCreateRecordSetCustomFields($params, $dict);
 		
 		// Content
 		$out .= sprintf(
@@ -3665,25 +3652,15 @@ class DevblocksEventHelper {
 		}
 		
 		// Connection
-		@$link_to = DevblocksPlatform::importVar($params['link_to'],'array',array());
+		$out .= DevblocksEventHelper::simulateActionCreateRecordSetLinks($params, $dict);
 		
-		if(!empty($link_to)) {
-			$trigger = $dict->_trigger;
-			$event = $trigger->getEvent();
-			
-			$on_result = DevblocksEventHelper::onContexts($link_to, $event->getValuesContexts($trigger), $dict);
-			@$on_objects = $on_result['objects'];
-			
-			if(is_array($on_objects)) {
-				$out .= ">>> Linking new ticket to:\n";
-				
-				foreach($on_objects as $on_object) {
-					$on_object_context = Extension_DevblocksContext::get($on_object->_context);
-					$out .= ' * (' . $on_object_context->manifest->name . ') ' . $on_object->_label . "\n";
-				}
-			}
-			
-			$out .= "\n";
+		// Set object variable
+		$out .= DevblocksEventHelper::simulateActionCreateRecordSetVariable($params, $dict);
+		
+		// Run in simulator
+		@$run_in_simulator = !empty($params['run_in_simulator']);
+		if($run_in_simulator) {
+			$this->run($token, $trigger, $params, $dict);
 		}
 		
 		return $out;
@@ -3762,48 +3739,15 @@ class DevblocksEventHelper {
 		}
 
 		// Custom fields
-		
-		$custom_fields = DAO_CustomField::getAll();
-		$custom_field_values = DevblocksEventHelper::getCustomFieldValuesFromParams($params);
-		
-		if(is_array($custom_field_values))
-		foreach($custom_field_values as $cf_id => $val) {
-			switch($custom_fields[$cf_id]->type) {
-				case Model_CustomField::TYPE_WORKER:
-					if(!empty($val) && !is_numeric($val)) {
-						if(isset($dict->$val)) {
-							$val = $dict->$val;
-						}
-					}
-					break;
-						
-				default:
-					if(is_string($val))
-						$val = $tpl_builder->build($val, $dict);
-						break;
-			}
-			
-			DAO_CustomFieldValue::formatAndSetFieldValues(CerberusContexts::CONTEXT_TICKET, $ticket_id, array($cf_id => $val));
-		}
+		DevblocksEventHelper::runActionCreateRecordSetCustomFields(CerberusContexts::CONTEXT_TICKET, $ticket_id, $params, $dict);
 		
 		// Connection
+		DevblocksEventHelper::runActionCreateRecordSetLinks(CerberusContexts::CONTEXT_TICKET, $ticket_id, $params, $dict);
+
+		// Set object variable
+		DevblocksEventHelper::runActionCreateRecordSetVariable(CerberusContexts::CONTEXT_TICKET, $ticket_id, $params, $dict);
 		
-		@$link_to = DevblocksPlatform::importVar($params['link_to'],'array',array());
-		
-		if(!empty($link_to)) {
-			$trigger = $dict->_trigger;
-			$event = $trigger->getEvent();
-			
-			$on_result = DevblocksEventHelper::onContexts($link_to, $event->getValuesContexts($trigger), $dict);
-			@$on_objects = $on_result['objects'];
-			
-			if(is_array($on_objects)) {
-				foreach($on_objects as $on_object) {
-					DAO_ContextLink::setLink(CerberusContexts::CONTEXT_TICKET, $ticket_id, $on_object->_context, $on_object->id);
-				}
-			}
-		}
-		
+		// Create the ticket
 		CerberusMail::sendTicketMessage($properties);
 		
 		return $ticket_id;

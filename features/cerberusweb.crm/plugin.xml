@@ -4,7 +4,7 @@
 	<name>Opportunity Tracking</name>
 	<description>Create opportunities (sales leads) linked to e-mail addresses. Opportunity records can be created from the Activity menu or while reading tickets.</description>
 	<author>Webgroup Media, LLC.</author>
-	<version>7.1.0</version>
+	<version>7.1.1</version>
 	<link>http://wiki.cerbweb.com/Features:Opportunity_Tracking</link>
 	<image>plugin.png</image>
 	
@@ -161,6 +161,25 @@
 						<data key="cerberusweb.contexts.group" />
 						<data key="cerberusweb.contexts.role" />
 						<data key="cerberusweb.contexts.worker" />
+					</value>
+				</param>
+			</params>
+		</extension>
+		
+		<!-- VA Actions -->
+		
+		<extension point="devblocks.event.action">
+			<id>va.action.create_opportunity</id>
+			<name>Create Opportunity</name>
+			<class>
+				<file>api/App.php</file>
+				<name>VaAction_CreateOpportunity</name>
+			</class>
+			<params>
+				<param key="label" value="Create opportunity" />
+				<param key="events">
+					<value>
+						<data key="*" />
 					</value>
 				</param>
 			</params>

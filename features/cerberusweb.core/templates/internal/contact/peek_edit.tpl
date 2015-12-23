@@ -159,7 +159,7 @@
 </fieldset>
 {/if}
 
-{include file="devblocks:cerberusweb.core::internal/custom_fieldsets/peek_custom_fieldsets.tpl" context='cerberusweb.contexts.contact' context_id=$model->id}
+{include file="devblocks:cerberusweb.core::internal/custom_fieldsets/peek_custom_fieldsets.tpl" context=CerberusContexts::CONTEXT_CONTACT context_id=$model->id}
 
 {if !empty($model->id)}
 <fieldset style="display:none;" class="delete">
@@ -193,7 +193,7 @@ $(function() {
 	var $avatar_image = $avatar_chooser.closest('td').find('img.cerb-avatar');
 	
 	$popup.one('popup_open', function(event,ui) {
-		$popup.dialog('option','title',"Edit: Contact");
+		$popup.dialog('option','title',"{'common.edit'|devblocks_translate|capitalize|escape:'javascript' nofilter}: {'common.contact'|devblocks_translate|capitalize|escape:'javascript' nofilter}");
 		$popup.find('input:text:first').focus();
 		
 		// Buttons
