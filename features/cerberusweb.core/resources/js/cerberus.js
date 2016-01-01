@@ -1087,7 +1087,7 @@ var ajax = new cAjaxCalls();
 					focus:function(event, ui) {
 						return false;
 					},
-					autoFocus:true,
+					autoFocus:false,
 					select:function(event, ui) {
 						var $this = $(this);
 						
@@ -1113,7 +1113,7 @@ var ajax = new cAjaxCalls();
 					var $li = $("<li/>").append($div);
 					
 					if(item.icon) {
-						var $img = $('<img class="cerb-avatar" style="height:28px;width:28px;border-radius:28px;float:left;padding-right:5px;">').attr('src',item.icon).prependTo($div);
+						var $img = $('<img class="cerb-avatar" style="height:28px;width:28px;border-radius:28px;float:left;margin-right:5px;">').attr('src',item.icon).prependTo($div);
 						$li.css('min-height','32px');
 					}
 					

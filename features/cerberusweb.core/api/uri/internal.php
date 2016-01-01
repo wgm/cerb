@@ -862,6 +862,7 @@ class ChInternalController extends DevblocksControllerExtension {
 		@$context_id = DevblocksPlatform::importGPC($_REQUEST['context_id'],'integer',0);
 		@$defaults_string = DevblocksPlatform::importGPC($_REQUEST['defaults'],'string','');
 		
+		$url_writer = DevblocksPlatform::getUrlService();
 		$tpl = DevblocksPlatform::getTemplateService();
 		
 		$tpl->assign('context', $context);
@@ -887,15 +888,6 @@ class ChInternalController extends DevblocksControllerExtension {
 		// Per context suggestions
 		
 		switch($context) {
-			case CerberusContexts::CONTEXT_ADDRESS:
-				if(false != ($addy = DAO_Address::get($context_id))) {
-					$suggested_photos[] = array(
-						'url' => 'https://gravatar.com/avatar/' . md5($addy->email) . '?s=100&d=404',
-						'title' => 'Gravatar: ' . $addy->email,
-					);
-				}
-				break;
-				
 			case CerberusContexts::CONTEXT_CONTACT:
 				// Suggest from the address we're adding to the new contact
 				if(empty($context_id) && isset($defaults['email'])) {
@@ -914,6 +906,33 @@ class ChInternalController extends DevblocksControllerExtension {
 						);
 					}
 				}
+				
+				$suggested_photos[] = array(
+					'url' => $url_writer->write('c=resource&p=cerberusweb.core&f=images/avatars/person1.png', true),
+					'title' => 'Silhouette: Male #1',
+				);
+				$suggested_photos[] = array(
+					'url' => $url_writer->write('c=resource&p=cerberusweb.core&f=images/avatars/person3.png', true),
+					'title' => 'Silhouette: Male #2',
+				);
+				$suggested_photos[] = array(
+					'url' => $url_writer->write('c=resource&p=cerberusweb.core&f=images/avatars/person4.png', true),
+					'title' => 'Silhouette: Male #3',
+				);
+				
+				$suggested_photos[] = array(
+					'url' => $url_writer->write('c=resource&p=cerberusweb.core&f=images/avatars/person2.png', true),
+					'title' => 'Silhouette: Female #1',
+				);
+				$suggested_photos[] = array(
+					'url' => $url_writer->write('c=resource&p=cerberusweb.core&f=images/avatars/person5.png', true),
+					'title' => 'Silhouette: Female #2',
+				);
+				$suggested_photos[] = array(
+					'url' => $url_writer->write('c=resource&p=cerberusweb.core&f=images/avatars/person6.png', true),
+					'title' => 'Silhouette: Female #3',
+				);
+				
 				break;
 				
 			case CerberusContexts::CONTEXT_ORG:
@@ -929,6 +948,19 @@ class ChInternalController extends DevblocksControllerExtension {
 						);
 					}
 				}
+				
+				$suggested_photos[] = array(
+					'url' => $url_writer->write('c=resource&p=cerberusweb.core&f=images/avatars/building1.png', true),
+					'title' => 'Building #1',
+				);
+				$suggested_photos[] = array(
+					'url' => $url_writer->write('c=resource&p=cerberusweb.core&f=images/avatars/building2.png', true),
+					'title' => 'Building #2',
+				);
+				$suggested_photos[] = array(
+					'url' => $url_writer->write('c=resource&p=cerberusweb.core&f=images/avatars/building3.png', true),
+					'title' => 'Building #3',
+				);
 				break;
 				
 			case CerberusContexts::CONTEXT_WORKER:
@@ -949,6 +981,33 @@ class ChInternalController extends DevblocksControllerExtension {
 						);
 					}
 				}
+				
+				$suggested_photos[] = array(
+					'url' => $url_writer->write('c=resource&p=cerberusweb.core&f=images/avatars/person1.png', true),
+					'title' => 'Silhouette: Male #1',
+				);
+				$suggested_photos[] = array(
+					'url' => $url_writer->write('c=resource&p=cerberusweb.core&f=images/avatars/person3.png', true),
+					'title' => 'Silhouette: Male #2',
+				);
+				$suggested_photos[] = array(
+					'url' => $url_writer->write('c=resource&p=cerberusweb.core&f=images/avatars/person4.png', true),
+					'title' => 'Silhouette: Male #3',
+				);
+
+				$suggested_photos[] = array(
+					'url' => $url_writer->write('c=resource&p=cerberusweb.core&f=images/avatars/person2.png', true),
+					'title' => 'Silhouette: Female #1',
+				);
+				$suggested_photos[] = array(
+					'url' => $url_writer->write('c=resource&p=cerberusweb.core&f=images/avatars/person5.png', true),
+					'title' => 'Silhouette: Female #2',
+				);
+				$suggested_photos[] = array(
+					'url' => $url_writer->write('c=resource&p=cerberusweb.core&f=images/avatars/person6.png', true),
+					'title' => 'Silhouette: Female #3',
+				);
+				
 				break;
 		}
 		
