@@ -1307,6 +1307,114 @@ class DAO_Ticket extends Cerb_ORMHelper {
 		$db->ExecuteMaster($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
 	}
 	
+	static function addParticipantIds($ticket_id, $address_ids) {
+		$db = DevblocksPlatform::getDatabaseService();
+		$logger = DevblocksPlatform::getConsoleLog();
+		
+		$replyto_addresses = DAO_AddressOutgoing::getAll();
+		$exclude_list = DevblocksPlatform::getPluginSetting('cerberusweb.core', CerberusSettings::PARSER_AUTO_REQ_EXCLUDE, CerberusSettingsDefaults::PARSER_AUTO_REQ_EXCLUDE);
+		$addresses = DAO_Address::getIds($address_ids);
+		
+		if(false == ($ticket = DAO_Ticket::get($ticket_id)))
+			return false;
+
+		// Filter out any excluded requesters
+		if(!empty($exclude_list)) {
+			@$excludes = DevblocksPlatform::parseCrlfString($exclude_list);
+			
+			$addresses = array_filter($addresses, function($address) use ($excludes) {
+				if(is_array($excludes) && !empty($excludes))
+				foreach($excludes as $excl_pattern) {
+					if(@preg_match(DevblocksPlatform::parseStringAsRegExp($excl_pattern), $address->email)) {
+						return false;
+					}
+				}
+			});
+		}
+		
+		// Don't add a requester if the sender is a helpdesk address
+		$requesters_add = array_diff(array_keys($addresses), array_keys($replyto_addresses));
+
+		$values = array();
+		
+		if(is_array($requesters_add))
+		foreach($requesters_add as $requester_id) {
+			$values[] = sprintf("(%d, %d)", $requester_id, $ticket_id);
+			
+			/*
+			 * Log activity (ticket.participant.added)
+			 */
+			$entry = array(
+				//{{actor}} added {{participant}} to ticket {{target}}
+				'message' => 'activities.ticket.participant.added',
+				'variables' => array(
+					'participant' => sprintf("%s", $addresses[$requester_id]->email),
+					'target' => sprintf("[%s] %s", $ticket->mask, $ticket->subject),
+					),
+				'urls' => array(
+					'participant' => sprintf("ctx://%s:%d", CerberusContexts::CONTEXT_ADDRESS, $requester_id),
+					'target' => sprintf("ctx://%s:%s", CerberusContexts::CONTEXT_TICKET, $ticket->mask),
+					)
+			);
+			CerberusContexts::logActivity('ticket.participant.added', CerberusContexts::CONTEXT_TICKET, $ticket->id, $entry);
+		}
+		
+		if(!empty($values)) {
+			$db->ExecuteMaster(sprintf("REPLACE INTO requester (address_id, ticket_id) ".
+				"VALUES %s",
+				implode(',', $values)
+			));
+		}
+			
+		return true;
+	}
+	
+	static function removeParticipantIds($ticket_id, $address_ids) {
+		$db = DevblocksPlatform::getDatabaseService();
+		
+		if(empty($ticket_id) || !is_array($address_ids))
+			return false;
+		
+		if(false == ($ticket = DAO_Ticket::get($ticket_id)))
+			return false;
+		
+		$address_ids = DevblocksPlatform::sanitizeArray($address_ids, 'int');
+		
+		// Keep only the participants we're removing
+		$participants = $ticket->getRequesters();
+		$participants = array_intersect_key($participants, array_flip($address_ids));
+		
+		if(empty($participants))
+			return false;
+
+		$sql = sprintf("DELETE FROM requester WHERE ticket_id = %d AND address_id IN (%s)",
+			$ticket_id,
+			implode(',', array_keys($participants))
+		);
+		$db->ExecuteMaster($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
+		
+		foreach($participants as $participant) {
+			/*
+			 * Log activity (ticket.participant.added)
+			 */
+			$entry = array(
+				//{{actor}} removed {{participant}} from ticket {{target}}
+				'message' => 'activities.ticket.participant.removed',
+				'variables' => array(
+					'participant' => sprintf("%s", $participant->email),
+					'target' => sprintf("[%s] %s", $ticket->mask, $ticket->subject),
+					),
+				'urls' => array(
+					'participant' => sprintf("ctx://%s:%d", CerberusContexts::CONTEXT_ADDRESS, $participant->id),
+					'target' => sprintf("ctx://%s:%s", CerberusContexts::CONTEXT_TICKET, $ticket->mask),
+					)
+			);
+			CerberusContexts::logActivity('ticket.participant.removed', CerberusContexts::CONTEXT_TICKET, $ticket->id, $entry);
+		}
+		
+		return true;
+	}
+	
 	static function analyze($params, $limit=15, $mode="senders", $mode_param=null) { // or "subjects"
 		$db = DevblocksPlatform::getDatabaseService();
 		
@@ -1917,7 +2025,7 @@ class DAO_Ticket extends Cerb_ORMHelper {
 						") "
 					);
 				}
-				break;				
+				break;
 			
 			case SearchFields_Ticket::VIRTUAL_HAS_FIELDSET:
 				self::_searchComponentsVirtualHasFieldset($param, $from_context, $from_index, $args['join_sql'], $args['where_sql']);
@@ -4476,79 +4584,83 @@ class View_Ticket extends C4_AbstractView implements IAbstractView_Subtotals, IA
 				}
 				
 				if(isset($do['broadcast'])) {
-					$broadcast_params = $do['broadcast'];
-					
-					if(
-						!isset($broadcast_params['worker_id']) || empty($broadcast_params['worker_id'])
-						|| !isset($broadcast_params['message']) || empty($broadcast_params['message'])
-						)
-						break;
+					try {
+						$broadcast_params = $do['broadcast'];
 						
-					list($tickets, $null) = DAO_Ticket::search(
-						array(),
-						array(
-							SearchFields_Ticket::TICKET_ID => new DevblocksSearchCriteria(SearchFields_Ticket::TICKET_ID,DevblocksSearchCriteria::OPER_IN,$batch_ids),
-						),
-						-1,
-						0,
-						null,
-						true,
-						false
-					);
-					$is_queued = (isset($broadcast_params['is_queued']) && $broadcast_params['is_queued']) ? true : false;
-					
-					if(is_array($tickets))
-					foreach($tickets as $ticket_id => $row) {
-						CerberusContexts::getContext(CerberusContexts::CONTEXT_TICKET, $ticket_id, $tpl_labels, $tpl_tokens);
+						if(
+							!isset($broadcast_params['worker_id']) || empty($broadcast_params['worker_id'])
+							|| !isset($broadcast_params['message']) || empty($broadcast_params['message'])
+							)
+							throw new Exception("Missing parameters for broadcast.");
+							
+						list($tickets, $null) = DAO_Ticket::search(
+							array(),
+							array(
+								SearchFields_Ticket::TICKET_ID => new DevblocksSearchCriteria(SearchFields_Ticket::TICKET_ID,DevblocksSearchCriteria::OPER_IN,$batch_ids),
+							),
+							-1,
+							0,
+							null,
+							true,
+							false
+						);
+						$is_queued = (isset($broadcast_params['is_queued']) && $broadcast_params['is_queued']) ? true : false;
 						
-						// Add the signature to the token_values
-						// [TODO] This shouldn't be redundant with ::doBulkUpdateBroadcastTestAction()
-						if(in_array('signature', $tpl_builder->tokenize($broadcast_params['message']))) {
-							if(isset($tpl_tokens['group_id']) && null != ($sig_group = DAO_Group::get($tpl_tokens['group_id']))) {
-								 $sig_template = $sig_group->getReplySignature(@intval($tpl_tokens['bucket_id']));
-
-								 if(isset($worker_values)) {
-									 if(false !== ($out = $tpl_builder->build($sig_template, $worker_values))) {
-									 	$tpl_tokens['signature'] = $out;
+						if(is_array($tickets))
+						foreach($tickets as $ticket_id => $row) {
+							CerberusContexts::getContext(CerberusContexts::CONTEXT_TICKET, $ticket_id, $tpl_labels, $tpl_tokens);
+							
+							// Add the signature to the token_values
+							// [TODO] This shouldn't be redundant with ::doBulkUpdateBroadcastTestAction()
+							if(in_array('signature', $tpl_builder->tokenize($broadcast_params['message']))) {
+								if(isset($tpl_tokens['group_id']) && null != ($sig_group = DAO_Group::get($tpl_tokens['group_id']))) {
+									 $sig_template = $sig_group->getReplySignature(@intval($tpl_tokens['bucket_id']));
+	
+									 if(isset($worker_values)) {
+										 if(false !== ($out = $tpl_builder->build($sig_template, $worker_values))) {
+										 	$tpl_tokens['signature'] = $out;
+										 }
 									 }
-								 }
+								}
 							}
+							
+							$tpl_dict = new DevblocksDictionaryDelegate($tpl_tokens);
+							$body = $tpl_builder->build($broadcast_params['message'], $tpl_dict);
+	
+							$params_json = array(
+								'in_reply_message_id' => $row[SearchFields_Ticket::TICKET_FIRST_MESSAGE_ID],
+								'is_broadcast' => 1,
+							);
+							
+							if(isset($broadcast_params['format']))
+								$params_json['format'] = $broadcast_params['format'];
+							
+							if(isset($broadcast_params['html_template_id']))
+								$params_json['html_template_id'] = intval($broadcast_params['html_template_id']);
+							
+							$fields = array(
+								DAO_MailQueue::TYPE => Model_MailQueue::TYPE_TICKET_REPLY,
+								DAO_MailQueue::TICKET_ID => $ticket_id,
+								DAO_MailQueue::WORKER_ID => $broadcast_params['worker_id'],
+								DAO_MailQueue::UPDATED => time(),
+								DAO_MailQueue::HINT_TO => $row[SearchFields_Ticket::TICKET_FIRST_WROTE],
+								DAO_MailQueue::SUBJECT => $row[SearchFields_Ticket::TICKET_SUBJECT],
+								DAO_MailQueue::BODY => $body,
+							);
+							
+							if($is_queued)
+								$fields[DAO_MailQueue::IS_QUEUED] = 1;
+	
+							if(isset($broadcast_params['file_ids']))
+								$params_json['file_ids'] = $broadcast_params['file_ids'];
+							
+							if(!empty($params_json))
+								$fields[DAO_MailQueue::PARAMS_JSON] = json_encode($params_json);
+							
+							$draft_id = DAO_MailQueue::create($fields);
 						}
+					} catch (Exception $e) {
 						
-						$tpl_dict = new DevblocksDictionaryDelegate($tpl_tokens);
-						$body = $tpl_builder->build($broadcast_params['message'], $tpl_dict);
-
-						$params_json = array(
-							'in_reply_message_id' => $row[SearchFields_Ticket::TICKET_FIRST_MESSAGE_ID],
-							'is_broadcast' => 1,
-						);
-						
-						if(isset($broadcast_params['format']))
-							$params_json['format'] = $broadcast_params['format'];
-						
-						if(isset($broadcast_params['html_template_id']))
-							$params_json['html_template_id'] = intval($broadcast_params['html_template_id']);
-						
-						$fields = array(
-							DAO_MailQueue::TYPE => Model_MailQueue::TYPE_TICKET_REPLY,
-							DAO_MailQueue::TICKET_ID => $ticket_id,
-							DAO_MailQueue::WORKER_ID => $broadcast_params['worker_id'],
-							DAO_MailQueue::UPDATED => time(),
-							DAO_MailQueue::HINT_TO => $row[SearchFields_Ticket::TICKET_FIRST_WROTE],
-							DAO_MailQueue::SUBJECT => $row[SearchFields_Ticket::TICKET_SUBJECT],
-							DAO_MailQueue::BODY => $body,
-						);
-						
-						if($is_queued)
-							$fields[DAO_MailQueue::IS_QUEUED] = 1;
-
-						if(isset($broadcast_params['file_ids']))
-							$params_json['file_ids'] = $broadcast_params['file_ids'];
-						
-						if(!empty($params_json))
-							$fields[DAO_MailQueue::PARAMS_JSON] = json_encode($params_json);
-						
-						$draft_id = DAO_MailQueue::create($fields);
 					}
 				}
 				
@@ -5224,7 +5336,7 @@ class Context_Ticket extends Extension_DevblocksContext implements IDevblocksCon
 		$active_worker = CerberusApplication::getActiveWorker();
 		
 		if(!$active_worker->hasPriv('core.mail.send'))
-			break;
+			return;
 		
 		$tpl = DevblocksPlatform::getTemplateService();
 		
