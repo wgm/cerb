@@ -68,15 +68,13 @@ class DevblocksPlatform extends DevblocksEngine {
 		$fp = DevblocksPlatform::getTempFile();
 		$fp_filename = DevblocksPlatform::getTempFileInfo($fp);
 		
-		$ch = curl_init($url);
+		$ch = DevblocksPlatform::curlInit($url);
 		curl_setopt_array($ch, array(
 			CURLOPT_CUSTOMREQUEST => 'GET',
-			CURLOPT_RETURNTRANSFER => true,
-			CURLOPT_FOLLOWLOCATION => true,
 			CURLOPT_SSL_VERIFYPEER => false,
 			//CURLOPT_FILE => $fp,
 		));
-		$data = curl_exec($ch);
+		$data = DevblocksPlatform::curlExec($ch);
 		
 		if(curl_errno($ch)) {
 			//curl_error($ch);
@@ -237,6 +235,42 @@ class DevblocksPlatform extends DevblocksEngine {
 	 */
 	static function floatClamp($n, $min, $max) {
 		return min(max((float)$n, $min), $max);
+	}
+	
+	static function curlInit($url=null) {
+		$ch = curl_init($url);
+		curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 30);
+		curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+		
+		return $ch;
+	}
+	
+	static function curlExec($ch, $follow=false, $return=true) {
+		// Proxy
+		if(defined('DEVBLOCKS_HTTP_PROXY') && DEVBLOCKS_HTTP_PROXY) {
+			curl_setopt($ch, CURLOPT_PROXY, DEVBLOCKS_HTTP_PROXY);
+		}
+		
+		// Return transfer
+		curl_setopt($ch, CURLOPT_RETURNTRANSFER, $return);
+		
+		// Follow redirects
+		if($follow) {
+			curl_setopt($ch, CURLOPT_REDIR_PROTOCOLS, CURLPROTO_HTTP | CURLPROTO_HTTPS);
+			$out = curl_exec($ch);
+			$status = curl_getinfo($ch);
+			
+			// It's a 3xx redirect
+			// [TODO] Catch redirect loops
+			if(isset($status['redirect_url']) && $status['redirect_url'] && floor($status['http_code']/100) == 3) {
+				curl_setopt($ch, CURLOPT_URL, $status['redirect_url']);
+				return self::curlExec($ch, $follow, $return);
+			}
+			
+			return $out;
+		}
+		
+		return curl_exec($ch);
 	}
 	
 	/**
@@ -473,8 +507,8 @@ class DevblocksPlatform extends DevblocksEngine {
 	 * @test DevblocksPlatformTest
 	 */
 	static function strUnidecode($string, $from_encoding = 'utf-8') {
-		if(empty($string))
-			return $string;
+		if(0 == strlen($string))
+			return '';
 		
 		$len = strlen($string);
 		$out = '';
@@ -769,13 +803,18 @@ class DevblocksPlatform extends DevblocksEngine {
 		$lists = $xpath->query('//ol');
 		
 		foreach($lists as $list) { /* @var $list DOMElement */
-			$items = $xpath->query('./li/text()', $list);
+			$items = $xpath->query('./li', $list);
 			
 			$counter = 1;
-			foreach($items as $item) { /* @var $item DOMText */
-				$txt = $dom->createTextNode('');
-				$txt->nodeValue = $counter++ . '. ' . $item->nodeValue;
-				$item->parentNode->replaceChild($txt, $item);
+			foreach($items as $item) { /* @var $item DOMElement */
+				if(false == (@$inner_html = $dom->saveXML($item)))
+					continue;
+				
+				$value = DevblocksPlatform::stripHTML($inner_html);
+				
+				$txt = $dom->createTextNode($counter++ . '. ' . str_replace("\n", "{{BR}}", $value));
+				$item->parentNode->insertBefore($txt, $item);
+				$item->parentNode->removeChild($item);
 			}
 		}
 
@@ -784,14 +823,20 @@ class DevblocksPlatform extends DevblocksEngine {
 		$lists = $xpath->query('//ul');
 		
 		foreach($lists as $list) { /* @var $list DOMElement */
-			$items = $xpath->query('./li/text()', $list);
+			$items = $xpath->query('./li', $list);
 			
-			foreach($items as $idx => $item) { /* @var $item DOMText */
-				$txt = $dom->createTextNode('- ' . $item->nodeValue);
-				$item->parentNode->replaceChild($txt, $item);
+			foreach($items as $item) { /* @var $item DOMElement */
+				if(false == (@$inner_html = $dom->saveXML($item)))
+					continue;
+				
+				$value = DevblocksPlatform::stripHTML($inner_html);
+				
+				$txt = $dom->createTextNode('- ' . str_replace("\n", "{{BR}}", $value));
+				$item->parentNode->insertBefore($txt, $item);
+				$item->parentNode->removeChild($item);
 			}
 		}
-		
+			
 		$html = $dom->saveXML();
 		
 		// Make sure it's not blank before trusting it.
@@ -833,6 +878,7 @@ class DevblocksPlatform extends DevblocksEngine {
 		// Turn block tags into a linefeed
 		$str = str_ireplace(
 			array(
+				'{{BR}}',
 				'<BR>',
 				'<P>',
 				'</P>',
@@ -993,30 +1039,20 @@ class DevblocksPlatform extends DevblocksEngine {
 		}
 		
 		if(extension_loaded("curl")) {
-			$ch = curl_init();
+			$ch = DevblocksPlatform::curlInit();
 			curl_setopt($ch, CURLOPT_URL, $url);
 			curl_setopt($ch, CURLOPT_HEADER, false);
-			curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 			curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
 			
 			$user_agent = 'Cerb ' . APP_VERSION . ' (Build ' . APP_BUILD . ')';
 			curl_setopt($ch, CURLOPT_USERAGENT, $user_agent);
 			
-			$is_safemode = !(ini_get('open_basedir') == '' && ini_get('safe_mode' == 'Off'));
-	
-			// We can't use option this w/ safemode enabled
-			if(!$is_safemode)
-				curl_setopt($ch, CURLOPT_FOLLOWLOCATION, 1);
-			
-			$data = curl_exec($ch);
+			$data = DevblocksPlatform::curlExec($ch, true);
 			curl_close($ch);
-			
-		} elseif(ini_get('allow_url_fopen')) {
-			@$data = file_get_contents($url);
 			
 		} else {
 			$logger = DevblocksPlatform::getConsoleLog();
-			$logger->error("[Platform] 'curl' extension is not enabled and 'allow_url_fopen' is Off. Can not load a URL.");
+			$logger->error("[Platform] 'curl' extension is not enabled. Can not load a URL.");
 			return;
 		}
 		
@@ -1132,7 +1168,7 @@ class DevblocksPlatform extends DevblocksEngine {
 	}
 	
 	static function strEscapeHtml($string) {
-		if(empty($string))
+		if(0 == strlen($string))
 			return '';
 		
 		return htmlentities($string, ENT_QUOTES, LANG_CHARSET_CODE);
@@ -1163,7 +1199,7 @@ class DevblocksPlatform extends DevblocksEngine {
 	 * @test DevblocksPlatformTest
 	 */
 	static function strToPermalink($string, $spaces_as='-') {
-		if(empty($string))
+		if(0 == strlen($string))
 			return '';
 		
 		// Unidecode
@@ -1257,6 +1293,16 @@ class DevblocksPlatform extends DevblocksEngine {
 		
 		return implode(', ', $output);
 	}
+	
+	static function strTimeToSecs($string) {
+		if(empty($string))
+			return 0;
+		
+		$now = time();
+		$then = strtotime("+".$string, $now);
+		
+		return $then-$now;
+	}	
 	
 	/**
 	 * 
@@ -1371,7 +1417,7 @@ class DevblocksPlatform extends DevblocksEngine {
 	 * @test DevblocksPlatformTest
 	 */
 	static function parseCsvString($string, $keep_blanks=false, $typecast=null) {
-		if(empty($string))
+		if(0 == strlen($string))
 			return array();
 		
 		if(!$keep_blanks)
@@ -1570,8 +1616,15 @@ class DevblocksPlatform extends DevblocksEngine {
 			$cache->remove(_DevblocksClassLoadManager::CACHE_CLASS_MAP);
 			
 			// Flush template cache
-			$tpl = DevblocksPlatform::getTemplateService();
-			$tpl->clearCompiledTemplate();
+			if(!APP_SMARTY_COMPILE_PATH_MULTI_TENANT) {
+				$tpl = DevblocksPlatform::getTemplateService();
+				$tpl->clearCompiledTemplate();
+			}
+			
+			if(!APP_SMARTY_SANDBOX_COMPILE_PATH_MULTI_TENANT) {
+				$tpl = DevblocksPlatform::getTemplateSandboxService();
+				$tpl->clearCompiledTemplate();
+			}
 			
 			// Clear all locale caches
 			$langs = DAO_Translation::getDefinedLangCodes();
@@ -1662,7 +1715,7 @@ class DevblocksPlatform extends DevblocksEngine {
 			
 			$tables = $db->metaTables();
 			
-			if(!$nocache)
+			if(!$nocache && is_array($tables) && !empty($tables))
 				$cache->save($tables, self::CACHE_TABLES);
 		}
 		
@@ -1675,12 +1728,14 @@ class DevblocksPlatform extends DevblocksEngine {
 	 * @return boolean
 	 */
 	static function versionConsistencyCheck() {
-		$cache = DevblocksPlatform::getCacheService(); /* @var _DevblocksCacheManager $cache */
+		if(!file_exists(APP_STORAGE_PATH . '/version.php'))
+			return false;
+			
+		require_once(APP_STORAGE_PATH . '/version.php');
 		
-		if(false !== ($build_version = @file_get_contents(APP_STORAGE_PATH . '/_version'))
-			&& $build_version == APP_BUILD)
-				return true;
-
+		if(defined('APP_BUILD_CACHED') && APP_BUILD_CACHED == APP_BUILD)
+			return true;
+		
 		// If build changed, clear cache regardless of patch status
 		$cache = DevblocksPlatform::getCacheService(); /* @var $cache _DevblocksCacheManager */
 		$cache->clean();
@@ -1793,7 +1848,9 @@ class DevblocksPlatform extends DevblocksEngine {
 					$prefix,
 					($with_disabled ? '' : 'AND p.enabled = 1')
 				);
-			$results = $db->GetArrayMaster($sql);
+			
+			if(false == ($results = $db->GetArrayMaster($sql)))
+				return false;
 				
 			foreach($results as $row) {
 				$extension = new DevblocksExtensionManifest();
@@ -1880,7 +1937,9 @@ class DevblocksPlatform extends DevblocksEngine {
 			$events = array_merge($events,$plugin->event_points);
 		}
 		
-		$cache->save($events, self::CACHE_EVENT_POINTS);
+		if(!empty($events))
+			$cache->save($events, self::CACHE_EVENT_POINTS);
+		
 		return $events;
 	}
 	
@@ -1908,7 +1967,9 @@ class DevblocksPlatform extends DevblocksEngine {
 			$prefix,
 			$prefix
 		);
-		$results = $db->GetArrayMaster($sql);
+		
+		if(false == ($results = $db->GetArrayMaster($sql)))
+			return false;
 		
 		foreach($results as $row) {
 			$priv = new DevblocksAclPrivilege();
@@ -1948,7 +2009,9 @@ class DevblocksPlatform extends DevblocksEngine {
 			}
 		}
 		
-		$cache->save($events, self::CACHE_EVENTS);
+		if(is_array($events) && !empty($events))
+			$cache->save($events, self::CACHE_EVENTS);
+		
 		return $events;
 	}
 	
@@ -2021,7 +2084,9 @@ class DevblocksPlatform extends DevblocksEngine {
 		
 		self::_sortPluginsByDependency($plugins);
 		
-		$cache->save($plugins, self::CACHE_PLUGINS);
+		if(is_array($plugins) && !empty($plugins))
+			$cache->save($plugins, self::CACHE_PLUGINS);
+		
 		return $plugins;
 	}
 	
@@ -2230,11 +2295,19 @@ class DevblocksPlatform extends DevblocksEngine {
 		return _DevblocksRegistryManager::getInstance();
 	}
 	
-	/**
-	 * @return DevblocksProxy
-	 */
-	static function getProxyService() {
-		return DevblocksProxy::getProxy();
+	static function setRegistryKey($key, $value, $as=DevblocksRegistryEntry::TYPE_STRING, $persist=false) {
+		$registry = self::getRegistryService();
+		$registry->set($key, $value, $as);
+		$registry->persist($key, $persist);
+	}
+	
+	static function getRegistryKey($key, $as=DevblocksRegistryEntry::TYPE_STRING, $default=null) {
+		$registry = self::getRegistryService();
+		
+		if(null == ($value = $registry->get($key, $as, $default)))
+			return null;
+		
+		return $value;
 	}
 	
 	/**
@@ -2402,6 +2475,13 @@ class DevblocksPlatform extends DevblocksEngine {
 	static function getTemplateService() {
 		return _DevblocksTemplateManager::getInstance();
 	}
+	
+	/**
+	 * @return Smarty
+	 */
+	static function getTemplateSandboxService() {
+		return _DevblocksTemplateManager::getInstanceSandbox();
+	}
 
 	/**
 	 *
@@ -2443,7 +2523,45 @@ class DevblocksPlatform extends DevblocksEngine {
 	static function getDateService($datestamp=null) {
 		return _DevblocksDateManager::getInstance();
 	}
+	
+	private static function _discoverTimezone() {
+		$timezone = null;
+		
+		// Try worker session
+		if(empty($timezone) && isset($_SESSION['timezone']))
+			$timezone = $_SESSION['timezone'];
+		
+		// Try app default
+		if(empty($timezone))
+			$timezone = DevblocksPlatform::getPluginSetting('cerberusweb.core', CerberusSettings::TIMEZONE, null);
+		
+		// Try system timezone
+		if(empty($timezone))
+			@$timezone = date_default_timezone_get();
+		
+		// Otherwise, use UTC
+		if(empty($timezone))
+			$timezone = 'UTC';
+		
+		return $timezone;
+	}
 
+	static function getTimezone() {
+		if(!empty(self::$timezone))
+			return self::$timezone;
+		
+		return @date_default_timezone_get();
+	}
+	
+	static function setTimezone($timezone=null) {
+		if(empty($timezone))
+			$timezone = self::_discoverTimezone();
+		
+		self::$timezone = $timezone;
+		@date_default_timezone_set(self::$timezone);
+		return self::$timezone;
+	}
+	
 	/**
 	 * 
 	 * @param string $locale
@@ -2492,7 +2610,7 @@ class DevblocksPlatform extends DevblocksEngine {
 		if(isset($languages[$locale])) {
 			return $languages[$locale];
 		}
-						
+
 		$cache = self::getCacheService();
 		
 		if(null === ($map = $cache->load(self::CACHE_TAG_TRANSLATIONS.'_'.$locale))) { /* @var $cache _DevblocksCacheManager */
@@ -2532,7 +2650,8 @@ class DevblocksPlatform extends DevblocksEngine {
 			unset($map_loc);
 			
 			// Cache with tag (tag allows easy clean for multiple langs at once)
-			$cache->save($map,self::CACHE_TAG_TRANSLATIONS.'_'.$locale);
+			if(is_array($map) && !empty($map))
+				$cache->save($map,self::CACHE_TAG_TRANSLATIONS.'_'.$locale);
 		}
 		
 		$translate = _DevblocksTranslationManager::getInstance();
@@ -2666,22 +2785,62 @@ class DevblocksPlatform extends DevblocksEngine {
 		return self::$handlerSession;
 	}
 	
-	static function redirect(DevblocksHttpIO $httpIO) {
+	static function redirect(DevblocksHttpIO $httpIO, $wait_secs=0) {
 		$url_service = self::getUrlService();
 		session_write_close();
 		$url = $url_service->writeDevblocksHttpIO($httpIO, true);
 		header('Location: '.$url);
+		
+		if($wait_secs)
+			sleep($wait_secs);
+			
 		exit;
 	}
 	
-	static function redirectURL($url) {
+	static function redirectURL($url, $wait_secs=0) {
 		if(empty($url)) {
 			$url_service = self::getUrlService();
 			$url = $url_service->writeNoProxy('', true);
 		}
 		session_write_close();
 		header('Location: '.$url);
+		
+		if($wait_secs)
+			sleep($wait_secs);
+		
 		exit;
+	}
+	
+	static function dieWithHttpError($message, $status_code=500) {
+		
+		if(php_sapi_name() != 'cli')
+		switch($status_code) {
+			case 403:
+				header('Status: 403 Forbidden');
+				break;
+				
+			case 404:
+				header('Status: 404 Not Found');
+				break;
+				
+			case 500:
+				header('Status: 500 Internal Server Error');
+				break;
+				
+			case 501:
+				header('Status: 501 Not Implemented');
+				break;
+				
+			case 503:
+				header('Status: 503 Service Unavailable');
+				break;
+				
+			default:
+				header('Status: ' . intval($status_code));
+				break;
+		}
+		
+		die($message);
 	}
 	
 	static function markContextChanged($context, $context_ids) {

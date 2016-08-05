@@ -2,17 +2,17 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
 | The latest version of this license can be found here:
-| http://cerberusweb.com/license
+| http://cerb.io/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://www.cerbweb.com	    http://www.webgroupmedia.com/
+|	http://cerb.io	    http://webgroup.media
 ***********************************************************************/
 
 class ChInternalController extends DevblocksControllerExtension {
@@ -32,13 +32,14 @@ class ChInternalController extends DevblocksControllerExtension {
 
 		switch($action) {
 			case NULL:
-				// [TODO] Index/page render
 				break;
 
 			default:
 				// Default action, call arg as a method suffixed with Action
-				if(method_exists($this,$action)) {
-					call_user_func(array(&$this, $action));
+				if(method_exists($this, $action)) {
+					try {
+						call_user_func(array(&$this, $action));
+					} catch (Exception $e) { }
 				}
 				break;
 		}
@@ -82,7 +83,7 @@ class ChInternalController extends DevblocksControllerExtension {
 			/*
 			 * Log activity (worker.impersonated)
 			 */
-			$ip_address = isset($_SERVER['REMOTE_ADDR']) ? $_SERVER['REMOTE_ADDR'] : 'an unknown IP';
+			$ip_address = DevblocksPlatform::getClientIp() ?: 'an unknown IP';
 			
 			$entry = array(
 				//{{actor}} impersonated {{target}} from {{ip}}
@@ -206,6 +207,21 @@ class ChInternalController extends DevblocksControllerExtension {
 		$context_ext->renderPeekPopup($context_id, $view_id, $edit);
 	}
 
+	/*
+	 * Permalinks
+	 */
+	
+	function showPermalinkPopupAction() {
+		@$url = DevblocksPlatform::importGPC($_REQUEST['url'],'string','');
+		
+		if(empty($url))
+			return;
+		
+		$tpl = DevblocksPlatform::getTemplateService();
+		$tpl->assign('url', $url);
+		$tpl->display('devblocks:cerberusweb.core::internal/peek/popup_peek_permalink.tpl');
+	}
+	
 	/*
 	 * Import
 	 */
@@ -1059,25 +1075,31 @@ class ChInternalController extends DevblocksControllerExtension {
 		if(false == ($context_ext = Extension_DevblocksContext::get(CerberusContexts::CONTEXT_NOTIFICATION)))
 			return;
 		
-		if(false == ($view = $context_ext->getSearchView('my_notifications')) || !($view instanceof IAbstractView_QuickSearch))
-			return;
-		
 		$translate = DevblocksPlatform::getTranslationService();
+		$view_id = 'my_notifications';
 		
-		$view->name = vsprintf($translate->_('home.my_notifications.view.title'), $active_worker->getName());
+		$defaults = C4_AbstractViewModel::loadFromClass('View_Notification');
+		$defaults->id = $view_id;
+		$defaults->name = vsprintf($translate->_('home.my_notifications.view.title'), $active_worker->getName());
+		$defaults->view_columns = array(
+			SearchFields_Notification::CREATED_DATE,
+			SearchFields_Notification::IS_READ,
+		);
+		$defaults->renderSubtotals = SearchFields_Notification::ACTIVITY_POINT;
+		$defaults->renderSortBy = SearchFields_Notification::CREATED_DATE;
+		$defaults->renderSortAsc = false;
+		$defaults->renderLimit = 10;
+		$defaults->is_ephemeral = false;
+		$defaults->paramsEditable = array(
+			new DevblocksSearchCriteria(SearchFields_Notification::IS_READ, DevblocksSearchCriteria::OPER_EQ, 0),
+		);
+		
+		if(false == ($view = C4_AbstractViewLoader::getView($defaults->id, $defaults)))
+			return;
 		
 		$view->addParamsRequired(array(
 			SearchFields_Notification::WORKER_ID => new DevblocksSearchCriteria(SearchFields_Notification::WORKER_ID, DevblocksSearchCriteria::OPER_EQ, $active_worker->id),
 		), true);
-		
-		$view->addParams(array(
-			SearchFields_Notification::IS_READ => new DevblocksSearchCriteria(SearchFields_Notification::IS_READ, DevblocksSearchCriteria::OPER_EQ, 0),
-		), true);
-		
-		$view->renderSubtotals = SearchFields_Notification::ACTIVITY_POINT;
-		$view->renderSortBy = SearchFields_Notification::CREATED_DATE;
-		$view->renderSortAsc = false;
-		$view->renderLimit = 10;
 		
 		$tpl = DevblocksPlatform::getTemplateService();
 		$tpl->assign('popup_title', mb_convert_case($translate->_('common.notifications'), MB_CASE_TITLE));
@@ -1249,11 +1271,13 @@ class ChInternalController extends DevblocksControllerExtension {
 		if(empty($snippet_id) || null == ($snippet = DAO_Snippet::get($snippet_id))) {
 			@$owner_context = DevblocksPlatform::importGPC($_REQUEST['owner_context'],'string','');
 			@$owner_context_id = DevblocksPlatform::importGPC($_REQUEST['owner_context_id'],'integer',0);
-		
+			@$text = DevblocksPlatform::importGPC($_REQUEST['text'], 'string', '');
+			
 			$snippet = new Model_Snippet();
 			$snippet->id = 0;
 			$snippet->owner_context = !empty($owner_context) ? $owner_context : '';
 			$snippet->owner_context_id = $owner_context_id;
+			$snippet->content = $text;
 		}
 		
 		$tpl->assign('snippet', $snippet);
@@ -1315,14 +1339,16 @@ class ChInternalController extends DevblocksControllerExtension {
 		$tpl = DevblocksPlatform::getTemplateService();
 		$tpl->assign('context', $context);
 		
-		if(!empty($context)) {
-			$token_labels = array();
-			$token_values = array();
-			
-			CerberusContexts::getContext($context, null, $token_labels, $token_values);
-			
-			$tpl->assign('token_labels', $token_labels);
-		}
+		if(false == ($context_ext = Extension_DevblocksContext::get($context)))
+			return;
+		
+		$labels = array();
+		$null = array();
+		
+		CerberusContexts::getContext($context, null, $labels, $null, '', true, false);
+		
+		$placeholders = Extension_DevblocksContext::getPlaceholderTree($labels);
+		$tpl->assign('placeholders', $placeholders);
 		
 		$tpl->display('devblocks:cerberusweb.core::internal/snippets/peek_toolbar.tpl');
 	}
@@ -1672,7 +1698,7 @@ class ChInternalController extends DevblocksControllerExtension {
 		$tpl->display('devblocks:cerberusweb.core::internal/snippets/bulk.tpl');
 	}
 	
-	function doSnippetBulkUpdateAction() {
+	function startSnippetBulkUpdateJsonAction() {
 		// Filter: whole list or check
 		@$filter = DevblocksPlatform::importGPC($_REQUEST['filter'],'string','');
 		$ids = array();
@@ -1701,17 +1727,31 @@ class ChInternalController extends DevblocksControllerExtension {
 				@$ids_str = DevblocksPlatform::importGPC($_REQUEST['ids'],'string');
 				$ids = DevblocksPlatform::parseCsvString($ids_str);
 				break;
+				
 			case 'sample':
 				@$sample_size = min(DevblocksPlatform::importGPC($_REQUEST['filter_sample_size'],'integer',0),9999);
 				$filter = 'checks';
 				$ids = $view->getDataSample($sample_size);
 				break;
+				
 			default:
 				break;
 		}
 		
-		$view->doBulkUpdate($filter, $do, $ids);
-		$view->render();
+		// If we have specific IDs, add a filter for those too
+		if(!empty($ids)) {
+			$view->addParam(new DevblocksSearchCriteria(SearchFields_Snippet::ID, 'in', $ids));
+		}
+		
+		// Create batches
+		$batch_key = DAO_ContextBulkUpdate::createFromView($view, $do);
+		
+		header('Content-Type: application/json; charset=utf-8');
+		
+		echo json_encode(array(
+			'cursor' => $batch_key,
+		));
+		
 		return;
 	}
 	
@@ -1758,10 +1798,11 @@ class ChInternalController extends DevblocksControllerExtension {
 			// Do we already have this filter to re-edit?
 			$params = $view->getEditableParams();
 			
-			if(isset($params[$field])) {
-				$tpl->assign('param', $params[$field]);
+			if(false != ($results = $view->findParam($field, $params, false))) {
+				$param = array_shift($results);
+				$tpl->assign('param', $param);
 			}
-			
+
 			// Render from the View_* implementation.
 			$view->renderCriteria($field);
 		}
@@ -1792,9 +1833,10 @@ class ChInternalController extends DevblocksControllerExtension {
 		@$id = DevblocksPlatform::importGPC($_REQUEST['id']);
 		@$is_custom = DevblocksPlatform::importGPC($_REQUEST['is_custom'],'integer',0);
 
-		@$field = DevblocksPlatform::importGPC($_REQUEST['field']);
-		@$oper = DevblocksPlatform::importGPC($_REQUEST['oper']);
+		@$field = DevblocksPlatform::importGPC($_REQUEST['field'], 'string', null);
+		@$oper = DevblocksPlatform::importGPC($_REQUEST['oper'], 'string', null);
 		@$value = DevblocksPlatform::importGPC($_REQUEST['value']);
+		@$replace = DevblocksPlatform::importGPC($_REQUEST['replace'], 'integer', 0);
 		@$field_deletes = DevblocksPlatform::importGPC($_REQUEST['field_deletes'],'array',array());
 
 		if(null == ($view = C4_AbstractViewLoader::getView($id)))
@@ -1814,6 +1856,11 @@ class ChInternalController extends DevblocksControllerExtension {
 			foreach($field_deletes as $field_delete) {
 				$view->doRemoveCriteria($field_delete);
 			}
+		}
+
+		// Remove the same param at the top level
+		if($replace) {
+			$view->removeParamByField($field);
 		}
 		
 		// Add
@@ -2066,6 +2113,186 @@ class ChInternalController extends DevblocksControllerExtension {
 		$view->render();
 	}
 
+	function viewBulkUpdateWithCursorAction() {
+		@$cursor = DevblocksPlatform::importGPC($_REQUEST['cursor'], 'string', '');
+		@$view_id = DevblocksPlatform::importGPC($_REQUEST['view_id'], 'string', '');
+		
+		$tpl = DevblocksPlatform::getTemplateService();
+		
+		if(empty($cursor))
+			return;
+		
+		$tpl->assign('cursor', $cursor);
+		$tpl->assign('view_id', $view_id);
+		
+		$total = DAO_ContextBulkUpdate::getTotalByCursor($cursor);
+		$tpl->assign('total', $total);
+		
+		$tpl->display('devblocks:cerberusweb.core::internal/views/view_bulk_progress.tpl');
+	}
+	
+	function viewBulkUpdateNextCursorJsonAction() {
+		@$cursor = DevblocksPlatform::importGPC($_REQUEST['cursor'], 'string', '');
+		
+		header('Content-Type: application/json; charset=utf-8');
+		
+		if(empty($cursor))
+			return;
+		
+		$update = DAO_ContextBulkUpdate::getNextByCursor($cursor);
+		
+		// We have another job
+		if($update) {
+			if(false == ($context_ext = Extension_DevblocksContext::get($update->context)))
+				return false;
+			
+			$dao_class = $context_ext->getDaoClass();
+			$dao_class::bulkUpdate($update);
+			
+			echo json_encode(array(
+				'completed' => false,
+				'count' => $update->num_records,
+			));
+			
+		// We're done
+		} else {
+			echo json_encode(array(
+				'completed' => true,
+			));
+		}
+	}
+	
+	function viewBroadcastTestAction() {
+		@$view_id = DevblocksPlatform::importGPC($_REQUEST['view_id'],'string');
+		
+		$active_worker = CerberusApplication::getActiveWorker();
+		$tpl_builder = DevblocksPlatform::getTemplateBuilder();
+		
+		if(false == ($view = C4_AbstractViewLoader::getView($view_id)))
+			return;
+		
+		$view->setAutoPersist(false);
+		
+		$view_class = get_class($view);
+		
+		if(false == ($context_ext = Extension_DevblocksContext::getByViewClass($view_class, true)))
+			return;
+		
+		$dao_class = $context_ext->getDaoClass();
+		$search_class = $context_ext->getSearchClass();
+		
+		$pkey = $search_class::getPrimaryKey();
+
+		$tpl = DevblocksPlatform::getTemplateService();
+		
+		@$broadcast_subject = DevblocksPlatform::importGPC($_REQUEST['broadcast_subject'],'string',null);
+		@$broadcast_message = DevblocksPlatform::importGPC($_REQUEST['broadcast_message'],'string',null);
+		@$broadcast_format = DevblocksPlatform::importGPC($_REQUEST['broadcast_format'],'string',null);
+		@$broadcast_html_template_id = DevblocksPlatform::importGPC($_REQUEST['broadcast_html_template_id'],'integer',0);
+		@$broadcast_group_id = DevblocksPlatform::importGPC($_REQUEST['broadcast_group_id'],'integer',0);
+		
+		@$filter = DevblocksPlatform::importGPC($_REQUEST['filter'],'string','');
+		@$ids = DevblocksPlatform::importGPC($_REQUEST['ids'],'string','');
+		
+		// Filter to checked
+		if('checks' == $filter && !empty($ids)) {
+			$view->addParam(new DevblocksSearchCriteria($pkey,'in',explode(',', $ids)));
+		}
+		
+		$results = $view->getDataSample(1);
+		
+		if(empty($results)) {
+			$success = false;
+			$output = "There aren't any rows in this view!";
+			
+		} else {
+			@$model = $dao_class::get(current($results));
+			
+			// Try to build the template
+			CerberusContexts::getContext($context_ext->id, $model, $token_labels, $token_values);
+			$dict = DevblocksDictionaryDelegate::instance($token_values);
+			
+			// [TODO] Hack!!!
+			switch($context_ext->id) {
+				case CerberusContexts::CONTEXT_DOMAIN:
+					// Load the contacts from a CSV placeholder
+					$contacts = CerberusMail::parseRfcAddresses($dict->contacts_list);
+					
+					if(empty($contacts))
+						break;
+					
+					shuffle($contacts);
+					
+					// Randomize the address
+					$contact = DAO_Address::lookupAddress($contacts[0]['email'], true);
+					
+					$dict->contact__context = CerberusContexts::CONTEXT_ADDRESS;
+					$dict->contact_id = $contact->id;
+					break;
+			}
+
+			if(!empty($broadcast_subject)) {
+				$template = "Subject: $broadcast_subject\n\n$broadcast_message";
+			} else {
+				$template = "$broadcast_message";
+			}
+			
+			if(false === ($out = $tpl_builder->build($template, $dict))) {
+				// If we failed, show the compile errors
+				$errors = $tpl_builder->getErrors();
+				$success= false;
+				$output = @array_shift($errors);
+				
+			} else {
+				// If successful, return the parsed template
+				$success = true;
+				$output = $out;
+				
+				switch($broadcast_format) {
+					case 'parsedown':
+						// Markdown
+						$output = DevblocksPlatform::parseMarkdown($output);
+						
+						// HTML Template
+						
+						$html_template = null;
+						
+						if($broadcast_html_template_id)
+							$html_template = DAO_MailHtmlTemplate::get($broadcast_html_template_id);
+						
+						if(!$html_template && false != ($group = DAO_Group::get($broadcast_group_id)))
+							$html_template = $group->getReplyHtmlTemplate(0);
+						
+						if(!$html_template && false != ($replyto = DAO_AddressOutgoing::getDefault()))
+							$html_template = $replyto->getReplyHtmlTemplate();
+						
+						if($html_template)
+							$output = $tpl_builder->build($html_template->content, array('message_body' => $output));
+						
+						// HTML Purify
+						$output = DevblocksPlatform::purifyHTML($output, true);
+						break;
+						
+					default:
+						$output = nl2br(DevblocksPlatform::strEscapeHtml($output));
+						break;
+				}
+			}
+			
+			if($success) {
+				header("Content-Type: text/html; charset=" . LANG_CHARSET_CODE);
+				echo sprintf('<html><head><meta http-equiv="content-type" content="text/html; charset=%s"></head><body>',
+					LANG_CHARSET_CODE
+				);
+				echo $output;
+				echo '</body></html>';
+				
+			} else {
+				echo $output;
+			}
+		}
+	}
+	
 	function viewShowExportAction() {
 		@$view_id = DevblocksPlatform::importGPC($_REQUEST['id']);
 
@@ -2074,15 +2301,19 @@ class ChInternalController extends DevblocksControllerExtension {
 
 		if(null == ($view = C4_AbstractViewLoader::getView($view_id)))
 			return;
+		
 		$tpl->assign('view', $view);
 
-		$context_mft = Extension_DevblocksContext::getByViewClass(get_class($view));
+		$context_ext = Extension_DevblocksContext::getByViewClass(get_class($view), true);
+		$tpl->assign('tokens', $context_ext->getDefaultProperties());
 		
 		$labels = array();
 		$values = array();
-		CerberusContexts::getContext($context_mft->id, null, $labels, $values, null, true);
+		CerberusContexts::getContext($context_ext->id, null, $labels, $null, '', true, false);
+		$tpl->assign('labels', $labels);
 		
-		$tpl->assign('context_labels', $labels);
+		$placeholders = Extension_DevblocksContext::getPlaceholderTree($labels);
+		$tpl->assign('placeholders', $placeholders);
 		
 		$tpl->display('devblocks:cerberusweb.core::internal/views/view_export.tpl');
 	}
@@ -3295,6 +3526,9 @@ class ChInternalController extends DevblocksControllerExtension {
 				$labels = $evt->getLabels($trigger);
 				$tpl->assign('labels', $labels);
 					
+				$placeholders = Extension_DevblocksContext::getPlaceholderTree($labels);
+				$tpl->assign('placeholders', $placeholders);
+				
 				$values = $evt->getValues();
 				$tpl->assign('values', $values);
 				
@@ -3311,6 +3545,9 @@ class ChInternalController extends DevblocksControllerExtension {
 				// Action labels
 				$labels = $evt->getLabels($trigger);
 				$tpl->assign('labels', $labels);
+				
+				$placeholders = Extension_DevblocksContext::getPlaceholderTree($labels);
+				$tpl->assign('placeholders', $placeholders);
 				
 				$values = $evt->getValues();
 				$tpl->assign('values', $values);

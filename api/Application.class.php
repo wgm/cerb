@@ -7,24 +7,24 @@
 |
 | This source code is released under the Devblocks Public License.
 | The latest version of this license can be found here:
-| http://cerbweb.com/license
+| http://cerb.io/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://www.cerbweb.com	    http://www.webgroupmedia.com/
+|	http://cerb.io	    http://webgroup.media
 ***********************************************************************/
 /*
- * IMPORTANT LICENSING NOTE from your friends on the Cerb Development Team
+ * IMPORTANT LICENSING NOTE from your friends at Cerb
  *
- * Sure, it would be so easy to just cheat and edit this file to use the
- * software without paying for it.  But we trust you anyway.  In fact, we're
- * writing this software for you!
+ * Sure, it would be really easy to just cheat and edit this file to use
+ * Cerb without paying for a license.  We trust you anyway.
  *
- * Quality software backed by a dedicated team takes money to develop.  We
- * don't want to be out of the office bagging groceries when you call up
- * needing a helping hand.  We'd rather spend our free time coding your
- * feature requests than mowing the neighbors' lawns for rent money.
+ * It takes a significant amount of time and money to develop, maintain,
+ * and support high-quality enterprise software with a dedicated team.
+ * For Cerb's entire history we've avoided taking money from outside
+ * investors, and instead we've relied on actual sales from satisfied
+ * customers to keep the project running.
  *
  * We've never believed in hiding our source code out of paranoia over not
  * getting paid.  We want you to have the full source code and be able to
@@ -32,26 +32,18 @@
  * having less of everything than you might need (time, people, money,
  * energy).  We shouldn't be your bottleneck.
  *
- * We've been building our expertise with this project since January 2002.  We
- * promise spending a couple bucks [Euro, Yuan, Rupees, Galactic Credits] to
- * let us take over your shared e-mail headache is a worthwhile investment.
- * It will give you a sense of control over your inbox that you probably
- * haven't had since spammers found you in a game of 'E-mail Battleship'.
- * Miss. Miss. You sunk my inbox!
+ * As a legitimate license owner, your feedback will help steer the project.
+ * We'll also prioritize your issues, and work closely with you to make sure
+ * your teams' needs are being met.
  *
- * A legitimate license entitles you to support from the developers,
- * and the warm fuzzy feeling of feeding a couple of obsessed developers
- * who want to help you get more done.
- *
- \* - Jeff Standen, Darren Sugita, Dan Hildebrandt
- *	 Webgroup Media LLC - Developers of Cerb
+ * - Jeff Standen and Dan Hildebrandt
+ *	 Founders at Webgroup Media LLC; Developers of Cerb
  */
-define("APP_BUILD", 2016060701);
-define("APP_VERSION", '7.1.6');
+define("APP_BUILD", 2016080501);
+define("APP_VERSION", '7.2.0');
 
 define("APP_MAIL_PATH", APP_STORAGE_PATH . '/mail/');
 
-require_once(APP_PATH . "/api/Model.class.php");
 require_once(APP_PATH . "/api/Extension.class.php");
 
 // App Scope ClassLoading
@@ -188,7 +180,7 @@ class CerberusApplication extends DevblocksApplication {
 
 			$list[] = array(
 				'id' => $file_bundle->id,
-				'name' => $file_bundle->name,
+				'name' => DevblocksPlatform::strEscapeHtml($file_bundle->name),
 				'tag' => $file_bundle->tag,
 			);
 		}
@@ -204,11 +196,11 @@ class CerberusApplication extends DevblocksApplication {
 		foreach($workers as $worker) {
 			$list[] = array(
 				'id' => $worker->id,
-				'name' => $worker->getName(),
-				'email' => $worker->getEmailString(),
-				'title' => $worker->title,
-				'at_mention' => $worker->at_mention_name,
-				'_index' => $worker->getName() . ' ' . $worker->at_mention_name,
+				'name' => DevblocksPlatform::strEscapeHtml($worker->getName()),
+				'email' => DevblocksPlatform::strEscapeHtml($worker->getEmailString()),
+				'title' => DevblocksPlatform::strEscapeHtml($worker->title),
+				'at_mention' => DevblocksPlatform::strEscapeHtml($worker->at_mention_name),
+				'_index' => DevblocksPlatform::strEscapeHtml($worker->getName() . ' ' . $worker->at_mention_name),
 			);
 		}
 
@@ -255,12 +247,12 @@ class CerberusApplication extends DevblocksApplication {
 			$errors[] = APP_TEMP_PATH ." is not writeable by the webserver.  Please adjust permissions and reload this page.";
 		}
 
-		if(!file_exists(APP_TEMP_PATH . "/templates_c")) {
-			@mkdir(APP_TEMP_PATH . "/templates_c");
+		if(!file_exists(APP_SMARTY_COMPILE_PATH)) {
+			@mkdir(APP_SMARTY_COMPILE_PATH);
 		}
 
-		if(!is_writeable(APP_TEMP_PATH . "/templates_c/")) {
-			$errors[] = APP_TEMP_PATH . "/templates_c/" . " is not writeable by the webserver.  Please adjust permissions and reload this page.";
+		if(!is_writeable(APP_SMARTY_COMPILE_PATH)) {
+			$errors[] = APP_SMARTY_COMPILE_PATH . " is not writeable by the webserver.  Please adjust permissions and reload this page.";
 		}
 
 		if(!file_exists(APP_TEMP_PATH . "/cache")) {
@@ -420,7 +412,7 @@ class CerberusApplication extends DevblocksApplication {
 
 		// Download updated plugins from repository
 		// [TODO] This causes problems on an intranet
-		if(class_exists('DAO_PluginLibrary'))
+		if(CERB_FEATURES_PLUGIN_LIBRARY && class_exists('DAO_PluginLibrary'))
 			DAO_PluginLibrary::downloadUpdatedPluginsFromRepository();
 
 		// Registry
@@ -631,7 +623,11 @@ class CerberusApplication extends DevblocksApplication {
 	static function generateMessageId() {
 		$host = @$_SERVER['HTTP_HOST'];
 		$server_name = @$_SERVER['SERVER_NAME'] ?: 'localhost';
-		$message_id = sprintf('<%s.%s@%s>', base_convert(time(), 10, 36), base_convert(mt_rand(), 10, 36), $host ?: $server_name);
+
+		$id_left = md5(getmypid().'.'.time().'.'.uniqid(mt_rand(), true));
+		$id_right = $host ?: $server_name;
+		
+		$message_id = sprintf('<%s@%s>', $id_left, $id_right);
 		return $message_id;
 	}
 
@@ -1014,19 +1010,7 @@ class CerberusContexts {
 		}
 
 		if(!$nested) {
-			// Globals
-			CerberusContexts::merge(
-				'global_',
-				'(Global) ',
-				array(
-					'timestamp' => 'Current Date+Time',
-				),
-				array(
-					'timestamp' => time(),
-				),
-				$labels,
-				$values
-			);
+			$values['timestamp'] = time();
 
 			// Current worker (Don't add to worker context)
 			if($context != CerberusContexts::CONTEXT_WORKER) {
@@ -2059,7 +2043,6 @@ class Context_Application extends Extension_DevblocksContext {
 		);
 	}
 
-	// [TODO] Interface
 	function getDefaultProperties() {
 		return array(
 			'name',
@@ -2214,8 +2197,8 @@ class CerberusLicense {
 	}
 
 	public static function getReleases() {
-		/*																																																																																																																														*/return array('5.0.0'=>1271894400,'5.1.0'=>1281830400,'5.2.0'=>1288569600,'5.3.0'=>1295049600,'5.4.0'=>1303862400,'5.5.0'=>1312416000,'5.6.0'=>1317686400,'5.7.0'=>1326067200,'6.0.0'=>1338163200,'6.1.0'=>1346025600,'6.2.0'=>1353888000,'6.3.0'=>1364169600,'6.4.0'=>1370217600,'6.5.0'=>1379289600,'6.6.0'=>1391126400,'6.7.0'=>1398124800,'6.8.0'=>1410739200,'6.9.0'=>1422230400,'7.0.0'=>1432598400,'7.1.0'=>1448928000);/*
-		 * Major versions by release date in GMT
+		/*																																																																																																																														*/return array('5.0.0'=>1271894400,'5.1.0'=>1281830400,'5.2.0'=>1288569600,'5.3.0'=>1295049600,'5.4.0'=>1303862400,'5.5.0'=>1312416000,'5.6.0'=>1317686400,'5.7.0'=>1326067200,'6.0.0'=>1338163200,'6.1.0'=>1346025600,'6.2.0'=>1353888000,'6.3.0'=>1364169600,'6.4.0'=>1370217600,'6.5.0'=>1379289600,'6.6.0'=>1391126400,'6.7.0'=>1398124800,'6.8.0'=>1410739200,'6.9.0'=>1422230400,'7.0.0'=>1432598400,'7.1.0'=>1448928000,'7.2.0'=>1462060800);/*
+		 * Major versions by release date (in GMT)
 		 */
 		return array(
 			'5.0.0' => gmmktime(0,0,0,4,22,2010),
@@ -2238,6 +2221,7 @@ class CerberusLicense {
 			'6.9.0' => gmmktime(0,0,0,1,26,2015),
 			'7.0.0' => gmmktime(0,0,0,5,26,2015),
 			'7.1.0' => gmmktime(0,0,0,12,1,2015),
+			'7.2.0' => gmmktime(0,0,0,5,1,2016),
 		);
 	}
 
@@ -2268,6 +2252,7 @@ class CerberusSettings {
 	const RELAY_DISABLE_AUTH = 'relay_disable_auth';
 	const RELAY_SPOOF_FROM = 'relay_spoof_from';
 	const SESSION_LIFESPAN = 'session_lifespan';
+	const TIMEZONE = 'timezone';
 	const TIME_FORMAT = 'time_format';
 	const AVATAR_DEFAULT_STYLE_CONTACT = 'avatar_default_style_contact';
 	const AVATAR_DEFAULT_STYLE_WORKER = 'avatar_default_style_worker';
@@ -2275,7 +2260,7 @@ class CerberusSettings {
 };
 
 class CerberusSettingsDefaults {
-	const HELPDESK_TITLE = 'Cerb - a fast and flexible web-based platform for enterprise collaboration, productivity, and automation.';
+	const HELPDESK_TITLE = 'Cerb - a fast, flexible toolkit for web-based collaboration and workflow automation';
 	const ATTACHMENTS_ENABLED = 1;
 	const ATTACHMENTS_MAX_SIZE = 10;
 	const PARSER_AUTO_REQ = 0;
@@ -2287,6 +2272,7 @@ class CerberusSettingsDefaults {
 	const RELAY_SPOOF_FROM = 0;
 	const SESSION_LIFESPAN = 0;
 	const TIME_FORMAT = 'D, d M Y h:i a';
+	const TIMEZONE = '';
 	const AVATAR_DEFAULT_STYLE_CONTACT = 'monograms';
 	const AVATAR_DEFAULT_STYLE_WORKER = 'monograms';
 	const HTML_NO_STRIP_MICROSOFT = 0;
@@ -2330,15 +2316,19 @@ class Cerb_DevblocksSessionHandler implements IDevblocksHandler_Session {
 			$is_ajax = (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && $_SERVER['HTTP_X_REQUESTED_WITH'] == 'XMLHttpRequest');
 
 			// Refresh the session cookie (move expiration forward) after 5 minutes have elapsed
-			if(isset($session['refreshed_at']) && $maxlifetime && !$is_ajax && (time() - $session['refreshed_at'] >= 300)) {
-				$url_writer = DevblocksPlatform::getUrlService();
+			if(isset($session['refreshed_at']) && !$is_ajax && (time() - $session['refreshed_at'] >= 300)) {
 
-				setcookie('Devblocks', $id, time()+$maxlifetime, '/', NULL, $url_writer->isSSL(), true);
+				// If the cookie is going to expire at a future date, extend it
+				if($maxlifetime) {
+					$url_writer = DevblocksPlatform::getUrlService();
+					setcookie('Devblocks', $id, time()+$maxlifetime, '/', NULL, $url_writer->isSSL(), true);
+				}
 
-				$db->ExecuteMaster(sprintf("UPDATE devblocks_session SET refreshed_at=%d WHERE session_key = %s",
+				$db->ExecuteMaster(sprintf("UPDATE devblocks_session SET updated=%d, refreshed_at=%d WHERE session_key = %s",
+					time(),
 					time(),
 					$db->qstr($id)
-				));
+				), _DevblocksDatabaseManager::OPT_NO_READ_AFTER_WRITE);
 			}
 
 			self::$_data = $session['session_data'];
@@ -2355,7 +2345,8 @@ class Cerb_DevblocksSessionHandler implements IDevblocksHandler_Session {
 		}
 
 		$active_worker = CerberusApplication::getActiveWorker();
-		$user_ip = $_SERVER['REMOTE_ADDR'];
+		$user_id = !is_null($active_worker) ? $active_worker->id : 0;
+		$user_ip = DevblocksPlatform::getClientIp();
 		$user_agent = (isset($_SERVER['HTTP_USER_AGENT'])) ? $_SERVER['HTTP_USER_AGENT'] : '';
 
 		$db = DevblocksPlatform::getDatabaseService();
@@ -2364,15 +2355,16 @@ class Cerb_DevblocksSessionHandler implements IDevblocksHandler_Session {
 			return false;
 
 		// Update
-		$sql = sprintf("UPDATE devblocks_session SET updated=%d, session_data=%s, user_id=%d, user_ip=%s, user_agent=%s WHERE session_key=%s",
+		$sql = sprintf("UPDATE devblocks_session SET updated=%d, refreshed_at=%d, session_data=%s, user_id=%d, user_ip=%s, user_agent=%s WHERE session_key=%s",
+			time(),
 			time(),
 			$db->qstr($session_data),
-			!is_null($active_worker) ? $active_worker->id : 0,
+			$user_id,
 			$db->qstr($user_ip),
 			$db->qstr($user_agent),
 			$db->qstr($id)
 		);
-		$result = $db->ExecuteMaster($sql);
+		$result = $db->ExecuteMaster($sql, _DevblocksDatabaseManager::OPT_NO_READ_AFTER_WRITE);
 
 		if(0==$db->Affected_Rows()) {
 			// Insert
@@ -2382,12 +2374,12 @@ class Cerb_DevblocksSessionHandler implements IDevblocksHandler_Session {
 				time(),
 				time(),
 				time(),
-				!is_null($active_worker) ? $active_worker->id : 0,
+				$user_id,
 				$db->qstr($user_ip),
 				$db->qstr($user_agent),
 				$db->qstr($session_data)
 			);
-			$db->ExecuteMaster($sql);
+			$db->ExecuteMaster($sql, _DevblocksDatabaseManager::OPT_NO_READ_AFTER_WRITE);
 		}
 
 		return true;
@@ -2425,7 +2417,7 @@ class Cerb_DevblocksSessionHandler implements IDevblocksHandler_Session {
 		if(!self::isReady())
 			return false;
 
-		return $db->GetArraySlave("SELECT session_key, created, updated, user_id, user_ip, user_agent, session_data FROM devblocks_session");
+		return $db->GetArrayMaster("SELECT session_key, created, updated, user_id, user_ip, user_agent, refreshed_at, session_data FROM devblocks_session");
 	}
 
 	static function destroyAll() {
@@ -2525,7 +2517,7 @@ class CerberusVisit extends DevblocksVisit {
 			// Timezone
 			if($worker->timezone) {
 				$_SESSION['timezone'] = $worker->timezone;
-				@date_default_timezone_set($worker->timezone);
+				DevblocksPlatform::setTimezone($worker->timezone);
 			}
 
 			// Time format
@@ -2602,7 +2594,7 @@ class Cerb_ORMHelper extends DevblocksORMHelper {
 	/**
 	 * 
 	 * @param array $ids
-	 * @return Model_Address[]
+	 * @return Model[]
 	 */
 	static function getIds($ids) {
 		if(!is_array($ids))
@@ -2652,102 +2644,6 @@ class Cerb_ORMHelper extends DevblocksORMHelper {
 		$db = DevblocksPlatform::getDatabaseService();
 		$offset = $db->GetOneSlave(sprintf("SELECT ROUND(RAND()*(SELECT COUNT(*)-1 FROM %s))", $table));
 		return $db->GetOneSlave(sprintf("SELECT %s FROM %s LIMIT %d,1", $pkey, $table, $offset));
-	}
-
-	static protected function _appendSelectJoinSqlForCustomFieldTables($tables, $params, $key, $select_sql, $join_sql) {
-		$custom_fields = DAO_CustomField::getAll();
-		$field_ids = array();
-
-		$return_multiple_values = false; // can our CF return more than one hit? (GROUP BY)
-
-		if(is_array($tables))
-		foreach($tables as $tbl_name => $null) {
-			// Filter and sanitize
-			if(substr($tbl_name,0,3) != "cf_" // not a custom field
-				|| 0 == ($field_id = intval(substr($tbl_name,3)))) // not a field_id
-				continue;
-
-			// Make sure the field exists for this context
-			if(!isset($custom_fields[$field_id]))
-				continue;
-
-			$field_table = sprintf("cf_%d", $field_id);
-			$value_table = '';
-			$field_key = $key;
-
-			if(is_array($key)) {
-				if(isset($key[$custom_fields[$field_id]->context]))
-					$field_key = $key[$custom_fields[$field_id]->context];
-				else
-					continue;
-			}
-
-			// Join value by field data type
-			switch($custom_fields[$field_id]->type) {
-				case Model_CustomField::TYPE_MULTI_LINE:
-					$value_table = 'custom_field_clobvalue';
-					break;
-				case Model_CustomField::TYPE_CHECKBOX:
-				case Model_CustomField::TYPE_DATE:
-				case Model_CustomField::TYPE_FILE:
-				case Model_CustomField::TYPE_FILES:
-				case Model_CustomField::TYPE_LINK:
-				case Model_CustomField::TYPE_NUMBER:
-				case Model_CustomField::TYPE_WORKER:
-					$value_table = 'custom_field_numbervalue';
-					break;
-				case Model_CustomField::TYPE_DROPDOWN:
-				case Model_CustomField::TYPE_MULTI_CHECKBOX:
-				case Model_CustomField::TYPE_SINGLE_LINE:
-				case Model_CustomField::TYPE_URL:
-					$value_table = 'custom_field_stringvalue';
-					break;
-				default:
-					$value_table = null;
-					break;
-			}
-
-			$has_multiple_values = false;
-			switch($custom_fields[$field_id]->type) {
-				case Model_CustomField::TYPE_MULTI_CHECKBOX:
-				case Model_CustomField::TYPE_FILES:
-					$has_multiple_values = true;
-					break;
-			}
-
-			// If we have multiple values but we don't need to WHERE the JOIN, be efficient and don't GROUP BY
-			if(!Cerb_ORMHelper::paramExistsInSet('cf_'.$field_id, $params)) {
-				$select_sql .= sprintf(",(SELECT %s FROM %s WHERE %s=context_id AND field_id=%d ORDER BY field_value%s) AS %s ",
-					($has_multiple_values ? 'GROUP_CONCAT(field_value SEPARATOR "\n")' : 'field_value'),
-					$value_table,
-					$field_key,
-					$field_id,
-					($has_multiple_values ? '' : ' LIMIT 1'),
-					$field_table
-				);
-
-			} else {
-				$select_sql .= sprintf(", %s.field_value as %s ",
-					$field_table,
-					$field_table
-				);
-
-				$join_sql .= sprintf("LEFT JOIN %s %s ON (%s=%s.context_id AND %s.field_id=%d) ",
-					$value_table,
-					$field_table,
-					$field_key,
-					$field_table,
-					$field_table,
-					$field_id
-				);
-
-				// If we do need to WHERE this JOIN, make sure we GROUP BY
-				if($has_multiple_values)
-					$return_multiple_values = true;
-			}
-		}
-
-		return array($select_sql, $join_sql, $return_multiple_values);
 	}
 
 	static function _searchComponentsVirtualOwner(&$param, &$join_sql, &$where_sql) {
@@ -2805,190 +2701,6 @@ class Cerb_ORMHelper extends DevblocksORMHelper {
 					break;
 			}
 		}
-	}
-
-	static function _searchComponentsVirtualWatchers(&$param, $from_context, $from_index, &$join_sql, &$where_sql, &$tables) {
-		if(!is_array($param->value))
-			$param->value = array($param->value);
-
-		$table_alias = 'context_watcher'; // . uniq_id();
-
-		$param->value = DevblocksPlatform::sanitizeArray($param->value, 'integer', array('nonzero','unique'));
-
-		// Join and return anything
-		if(DevblocksSearchCriteria::OPER_TRUE == $param->operator) {
-			if(!isset($tables[$table_alias])) {
-				$join_sql .= sprintf("LEFT JOIN context_link AS %s ON (%s.from_context = '%s' AND %s.from_context_id = %s AND %s.to_context = 'cerberusweb.contexts.worker') ",
-					$table_alias,
-					$table_alias,
-					$from_context,
-					$table_alias,
-					$from_index,
-					$table_alias
-				);
-
-			} else {
-				$where_sql .= sprintf("(%s.from_context = '%s' AND %s.from_context_id = %s AND %s.to_context = 'cerberusweb.contexts.worker') ",
-					$table_alias,
-					$from_context,
-					$table_alias,
-					$from_index,
-					$table_alias
-				);
-			}
-
-		} else {
-			if(empty($param->value)) {
-				switch($param->operator) {
-					case DevblocksSearchCriteria::OPER_IN:
-						$param->operator = DevblocksSearchCriteria::OPER_IS_NULL;
-						break;
-					case DevblocksSearchCriteria::OPER_NIN:
-						$param->operator = DevblocksSearchCriteria::OPER_IS_NOT_NULL;
-						break;
-				}
-			}
-
-			switch($param->operator) {
-				case DevblocksSearchCriteria::OPER_IN:
-					if(!isset($tables[$table_alias])) {
-						$join_sql .= sprintf("INNER JOIN context_link AS %s ON (%s.from_context = '%s' AND %s.from_context_id = %s AND %s.to_context = 'cerberusweb.contexts.worker' AND %s.to_context_id IN (%s)) ",
-							$table_alias,
-							$table_alias,
-							$from_context,
-							$table_alias,
-							$from_index,
-							$table_alias,
-							$table_alias,
-							implode(',', $param->value)
-						);
-
-					} else {
-						$where_sql .= sprintf("AND (%s.from_context = '%s' AND %s.from_context_id = %s AND %s.to_context = 'cerberusweb.contexts.worker' AND %s.to_context_id IN (%s)) ",
-							$table_alias,
-							$from_context,
-							$table_alias,
-							$from_index,
-							$table_alias,
-							$table_alias,
-							implode(',', $param->value)
-						);
-
-					}
-					break;
-				case DevblocksSearchCriteria::OPER_IN_OR_NULL:
-				case DevblocksSearchCriteria::OPER_IS_NULL:
-					if(!isset($tables[$table_alias])) {
-						$join_sql .= sprintf("LEFT JOIN context_link AS %s ON (%s.from_context = '%s' AND %s.from_context_id = %s AND %s.to_context = 'cerberusweb.contexts.worker') ",
-							$table_alias,
-							$table_alias,
-							$from_context,
-							$table_alias,
-							$from_index,
-							$table_alias
-						);
-						$where_sql .= sprintf("AND (%s.to_context_id IS NULL %s) ",
-							$table_alias,
-							(!empty($param->value) ? sprintf("OR %s.to_context_id IN (%s) ", $table_alias, implode(',',$param->value)) : '')
-						);
-
-					} else {
-						$where_sql .= sprintf("AND (%s.from_context = '%s' AND %s.from_context_id = %s AND %s.to_context = 'cerberusweb.contexts.worker' AND (%s.to_context_id IS NULL %s)) ",
-							$table_alias,
-							$table_alias,
-							$from_context,
-							$table_alias,
-							$from_index,
-							$table_alias,
-							$table_alias,
-							(!empty($param->value) ? sprintf("OR %s.to_context_id IN (%s) ", $table_alias, implode(',',$param->value)) : '')
-						);
-
-					}
-					break;
-				case DevblocksSearchCriteria::OPER_NIN:
-					if(!isset($tables[$table_alias])) {
-						$join_sql .= sprintf("INNER JOIN context_link AS %s ON (%s.from_context = '%s' AND %s.from_context_id = %s AND %s.to_context = 'cerberusweb.contexts.worker' AND %s.to_context_id NOT IN (%s)) ",
-							$table_alias,
-							$table_alias,
-							$from_context,
-							$table_alias,
-							$from_index,
-							$table_alias,
-							$table_alias,
-							implode(',', $param->value)
-						);
-
-					} else {
-						$where_sql .= sprintf("AND (%s.from_context = '%s' AND %s.from_context_id = %s AND %s.to_context = 'cerberusweb.contexts.worker' AND %s.to_context_id NOT IN (%s)) ",
-							$table_alias,
-							$from_context,
-							$table_alias,
-							$from_index,
-							$table_alias,
-							$table_alias,
-							implode(',', $param->value)
-						);
-
-					}
-					break;
-				case DevblocksSearchCriteria::OPER_IS_NOT_NULL:
-					if(!isset($tables[$table_alias])) {
-						$join_sql .= sprintf("LEFT JOIN context_link AS %s ON (%s.from_context = '%s' AND %s.from_context_id = %s AND %s.to_context = 'cerberusweb.contexts.worker') ",
-							$table_alias,
-							$table_alias,
-							$from_context,
-							$table_alias,
-							$from_index,
-							$table_alias
-						);
-						$where_sql .= sprintf("AND (%s.to_context_id IS NOT NULL) ", $table_alias);
-
-					} else {
-						$where_sql .= sprintf("AND (%s.from_context = '%s' AND %s.from_context_id = %s AND %s.to_context = 'cerberusweb.contexts.worker' AND %s.to_context_id IS NOT NULL) ",
-							$table_alias,
-							$from_context,
-							$table_alias,
-							$from_index,
-							$table_alias,
-							$table_alias
-						);
-
-					}
-					break;
-				case DevblocksSearchCriteria::OPER_NIN_OR_NULL:
-					if(!isset($tables[$table_alias])) {
-						$join_sql .= sprintf("LEFT JOIN context_link AS %s ON (%s.from_context = '%s' AND %s.from_context_id = %s AND %s.to_context = 'cerberusweb.contexts.worker') ",
-							$table_alias,
-							$table_alias,
-							$from_context,
-							$table_alias,
-							$from_index,
-							$table_alias
-						);
-						$where_sql .= sprintf("AND (%s.to_context_id IS NULL %s) ",
-							$table_alias,
-							(!empty($param->value) ? sprintf("OR %s.to_context_id NOT IN (%s)", $table_alias, implode(',',$param->value)) : '')
-						);
-
-					} else {
-						$where_sql .= sprintf("AND (%s.from_context = '%s' AND %s.from_context_id = %s AND %s.to_context = 'cerberusweb.contexts.worker' AND (%s.to_context_id IS NULL %s)) ",
-							$table_alias,
-							$from_context,
-							$table_alias,
-							$from_index,
-							$table_alias,
-							$table_alias,
-							(!empty($param->value) ? sprintf("OR %s.to_context_id NOT IN (%s)", $table_alias, implode(',',$param->value)) : '')
-						);
-
-					}
-					break;
-			}
-		}
-
-		// Mark the table as used
-		$tables[$table_alias] = $table_alias;
 	}
 
 	static function _searchComponentsVirtualHasFieldset(&$param, $to_context, $to_index, &$join_sql, &$where_sql) {

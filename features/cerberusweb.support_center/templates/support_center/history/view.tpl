@@ -1,7 +1,7 @@
 {$view_fields = $view->getColumnsAvailable()}
-{assign var=results value=$view->getData()}
-{assign var=total value=$results[1]}
-{assign var=data value=$results[0]}
+{$results = $view->getData()}
+{$total = $results[1]}
+{$data = $results[0]}
 <table cellpadding="0" cellspacing="0" border="0" width="100%" class="worklist">
 	<tr>
 		<td nowrap="nowrap"><h2>{$view->name}</h2></td>
@@ -42,14 +42,13 @@
 	{foreach from=$data item=result key=idx name=results}
 
 	{capture name=subject_block}
-		{if $result.t_is_closed == 0}{* Active *}
-			{if $result.t_is_waiting == 0}{* Open *}
-				<span class="glyphicons glyphicons-clock"></span>
-			{else}{* Waiting *}
-				<span class="glyphicons glyphicons-asterisk" style="color:rgb(200,0,0);"></span>
-			{/if}
-		{else}{* Closed *}
-			<span class="glyphicons glyphicons-circle-ok" style="color:rgb(120,120,120);"></span>
+		{if $result.t_status_id == Model_Ticket::STATUS_WAITING}
+		<span class="glyphicons glyphicons-asterisk" style="color:rgb(200,0,0);"></span>
+		{elseif $result.t_status_id == Model_Ticket::STATUS_CLOSED}
+		<span class="glyphicons glyphicons-circle-ok" style="color:rgb(120,120,120);"></span>
+		{elseif $result.t_status_id == Model_Ticket::STATUS_DELETED}
+		{else}
+		<span class="glyphicons glyphicons-clock"></span>
 		{/if}
 		
 		{if !empty($result.t_subject)}
@@ -61,7 +60,7 @@
 	<tbody style="cursor:pointer;">
 		{if !in_array('t_subject', $view->view_columns)}
 		<tr class="{$tableRowClass}">
-			<td colspan="{$view->view_columns|count}">
+			<td data-column="label" colspan="{$view->view_columns|count}">
 				{$smarty.capture.subject_block nofilter}
 			</td>
 		</tr>
@@ -73,57 +72,53 @@
 				{include file="devblocks:cerberusweb.support_center::support_center/internal/view/cell_renderer.tpl"}
 
 			{elseif $column=="t_subject"}
-				<td>{$smarty.capture.subject_block nofilter}</td>
+				<td data-column="{$column}">{$smarty.capture.subject_block nofilter}</td>
 			
 			{elseif $column=="t_updated_date" || $column=="t_created_date" || $column=="t_closed_at" || $column=="t_reopen_at"}
-				<td><abbr title="{$result.$column|devblocks_date}">{$result.$column|devblocks_prettytime}</abbr>&nbsp;</td>
+				<td data-column="{$column}"><abbr title="{$result.$column|devblocks_date}">{$result.$column|devblocks_prettytime}</abbr>&nbsp;</td>
 			
-			{elseif $column=="t_is_closed" || $column=="t_is_deleted" || $column=="t_is_waiting"}
-				<td>{if $result.$column}{'common.yes'|devblocks_translate}{else}{'common.no'|devblocks_translate}{/if}</td>
+			{elseif $column=="t_status_id"}
+				<td data-column="{$column}">
+					{if $result.$column == Model_Ticket::STATUS_WAITING}
+						{'status.waiting'|devblocks_translate|lower}
+					{elseif $result.$column == Model_Ticket::STATUS_CLOSED}
+						{'status.closed'|devblocks_translate|lower}
+					{elseif $result.$column == Model_Ticket::STATUS_DELETED}
+						{'status.deleted'|devblocks_translate|lower}
+					{else}
+						{'status.open'|devblocks_translate|lower}
+					{/if}
+				</td>
 			
 			{elseif $column=="t_mask"}
-				<td><a href="{devblocks_url}c=history&mask={$result.t_mask}{/devblocks_url}">{$result.$column}</a></td>
+				<td data-column="{$column}"><a href="{devblocks_url}c=history&mask={$result.t_mask}{/devblocks_url}">{$result.$column}</a></td>
 				
 			{elseif $column=="t_owner_id"}
-				{if empty($workers) && !empty($result.t_owner_id)}
-					{$workers = DAO_Worker::getAll()}
-				{/if}
-				<td>
+				<td data-column="{$column}">
 					{if isset($workers.{$result.t_owner_id})}
 						{$workers.{$result.t_owner_id}->getName()}
 					{/if}
 				</td>
 				
 			{elseif $column=="t_elapsed_response_first" || $column=="t_elapsed_resolution_first"}
-				<td>
+				<td data-column="{$column}">
 					{if !empty($result.$column)}{$result.$column|devblocks_prettysecs:2}{/if}
 				</td>
 				
-			{elseif $column=="t_last_action_code"}
-				<td>
-				{if $result.t_last_action_code=='O'}
-					<span title="{$result.t_first_wrote}">New from {$result.t_last_wrote|truncate:45:'...':true:true}</span>
-				{elseif $result.t_last_action_code=='R'}
-					<span title="{$result.t_last_wrote}">{'mail.received'|devblocks_translate} from {$result.t_last_wrote|truncate:45:'...':true:true}</span>
-				{elseif $result.t_last_action_code=='W'}
-					<span title="{$result.t_last_wrote}">{'mail.sent'|devblocks_translate} from {$result.t_last_wrote|truncate:45:'...':true:true}</span>
-				{/if}
-				</td>
-			
 			{elseif $column=="t_group_id"}
-				<td>
+				<td data-column="{$column}">
 				{if $groups.{$result.$column}}
 					{$groups.{$result.$column}->name}
 				{/if}
 				</td>
 				
 			{elseif $column=="t_bucket_id"}
-				<td>
+				<td data-column="{$column}">
 					{$buckets.{$result.$column}->name}
 				</td>
 				
 			{else}
-				<td>
+				<td data-column="{$column}">
 					{$result.$column}
 				</td>
 				

@@ -2,17 +2,17 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
 | The latest version of this license can be found here:
-| http://cerberusweb.com/license
+| http://cerb.io/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://www.cerbweb.com	    http://www.webgroupmedia.com/
+|	http://cerb.io	    http://webgroup.media
 ***********************************************************************/
 
 class ChSignInPage extends CerberusPageExtension {
@@ -112,7 +112,7 @@ class ChSignInPage extends CerberusPageExtension {
 
 			case 'authenticate':
 				// Always wait a little while
-				sleep(2);
+				sleep(1);
 				
 				if(empty($worker)) {
 					$query = array(
@@ -126,9 +126,12 @@ class ChSignInPage extends CerberusPageExtension {
 				if(null != ($ext = Extension_LoginAuthenticator::get($worker->auth_extension_id, true))) {
 					/* @var $ext Extension_LoginAuthenticator */
 					
-					if(false != ($worker = $ext->authenticate())) {
+					if(false != ($worker = $ext->authenticate()) && $worker instanceof Model_Worker) {
+						$this->_checkSeats($worker);
+						
 						$_SESSION['login_authenticated_worker'] = $worker;
-						DevblocksPlatform::redirect(new DevblocksHttpRequest(array('login','authenticated')));
+						
+						DevblocksPlatform::redirect(new DevblocksHttpRequest(array('login','authenticated')), 1);
 						
 					} else {
 						$query = array();
@@ -139,7 +142,7 @@ class ChSignInPage extends CerberusPageExtension {
 						$query['error'] = 'Authentication failed.';
 						
 						$devblocks_response = new DevblocksHttpResponse(array('login', $ext->manifest->params['uri']), $query);
-						DevblocksPlatform::redirect($devblocks_response);
+						DevblocksPlatform::redirect($devblocks_response, 1);
 					}
 					break;
 				}
@@ -150,7 +153,7 @@ class ChSignInPage extends CerberusPageExtension {
 				unset($_SESSION['login_authenticated_worker']);
 				
 				if(empty($worker))
-					DevblocksPlatform::redirect(new DevblocksHttpRequest(array('login')));
+					DevblocksPlatform::redirect(new DevblocksHttpRequest(array('login')), 1);
 					
 				$this->_processAuthenticated($worker);
 				break;
@@ -182,7 +185,7 @@ class ChSignInPage extends CerberusPageExtension {
 					);
 					
 					$devblocks_response = new DevblocksHttpResponse(array('login', $ext->params['uri']), $query);
-					DevblocksPlatform::redirect($devblocks_response);
+					DevblocksPlatform::redirect($devblocks_response, 1);
 				}
 				
 				$tpl = DevblocksPlatform::getTemplateService();
@@ -270,33 +273,31 @@ class ChSignInPage extends CerberusPageExtension {
 		$honesty = CerberusLicense::getInstance();
 		$session = DevblocksPlatform::getSessionService();
 		
-		$online_workers = DAO_Worker::getAllOnline(86400, 100);
+		$online_workers = DAO_Worker::getAllOnline(PHP_INT_MAX, 0);
 		$max = intval(max($honesty->w, 1));
 		
-		if(!isset($online_workers[$worker->id]) && $max <= count($online_workers) && 100 > $max) {
-			$online_workers = DAO_Worker::getAllOnline(600, 1);
-
-			if($max <= count($online_workers)) {
-				$most_idle_worker = end($online_workers);
+		if($max <= count($online_workers) && $max != 100) {
+			// Try to free up (n) seats (n = seats used - seat limit + 1)
+			$online_workers = DAO_Worker::getAllOnline(600, count($online_workers) - $max + 1);
+			
+			// If we failed to open up a seat
+			if($max <= count($online_workers) && !isset($online_workers[$worker->id])) {
 				$session->clear();
-				$time = 600 - max(0,time()-$most_idle_worker->last_activity_date);
 				
 				$query = array(
 					'email' => $worker->getEmailString(),
-					'error' => sprintf("The maximum number of simultaneous workers are currently signed on.  The next session expires in %s.", ltrim(_DevblocksTemplateManager::modifier_devblocks_prettytime($time,true),'+')),
+					'error' => sprintf("The maximum number of simultaneous workers are currently active. Please try again later, or ask an administrator to increase the seat count in your license."),
 				);
 				
 				if(null == ($ext = Extension_LoginAuthenticator::get($worker->auth_extension_id, false)))
 					return;
 				
-				DevblocksPlatform::redirect(new DevblocksHttpResponse(array('login',$ext->params['uri']), $query));
+				DevblocksPlatform::redirect(new DevblocksHttpResponse(array('login', $ext->params['uri']), $query), 1);
 			}
 		}
 	}
 	
 	private function _processAuthenticated($worker) { /* @var $worker Model_Worker */
-		$this->_checkSeats($worker);
-
 		$session = DevblocksPlatform::getSessionService();
 
 		$visit = new CerberusVisit();
@@ -336,7 +337,7 @@ class ChSignInPage extends CerberusPageExtension {
 		/*
 		 * Log activity (worker.logged_in)
 		 */
-		$ip_address = isset($_SERVER['REMOTE_ADDR']) ? $_SERVER['REMOTE_ADDR'] : 'an unknown IP';
+		$ip_address = DevblocksPlatform::getClientIp() ?: 'an unknown IP';
 		$user_agent = UserAgentParser::parse();
 		$user_agent_string = sprintf("%s%s%s",
 			$user_agent['browser'],
@@ -356,7 +357,7 @@ class ChSignInPage extends CerberusPageExtension {
 		);
 		CerberusContexts::logActivity('worker.logged_in', null, null, $entry);
 		
-		DevblocksPlatform::redirect($devblocks_response);
+		DevblocksPlatform::redirect($devblocks_response, 1);
 	}
 	
 	function signoutAction() {
@@ -369,7 +370,7 @@ class ChSignInPage extends CerberusPageExtension {
 		/*
 		 * Log activity (worker.logged_out)
 		 */
-		$ip_address = isset($_SERVER['REMOTE_ADDR']) ? $_SERVER['REMOTE_ADDR'] : 'an unknown IP';
+		$ip_address = DevblocksPlatform::getClientIp() ?: 'an unknown IP';
 		
 		$entry = array(
 			//{{actor}} logged out from {{ip}}
@@ -384,8 +385,6 @@ class ChSignInPage extends CerberusPageExtension {
 		
 		$session = DevblocksPlatform::getSessionService();
 		
-		DAO_Worker::logActivity(new Model_Activity(null));
-		
 		switch($option) {
 			case 'all':
 				if(null != ($active_worker = CerberusApplication::getActiveWorker()))
@@ -397,6 +396,6 @@ class ChSignInPage extends CerberusPageExtension {
 				break;
 		}
 		
-		DevblocksPlatform::redirect(new DevblocksHttpResponse(array('login')));
+		DevblocksPlatform::redirect(new DevblocksHttpResponse(array('login')), 1);
 	}
 };

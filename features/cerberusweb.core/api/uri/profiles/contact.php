@@ -7,12 +7,12 @@
 |
 | This source code is released under the Devblocks Public License.
 | The latest version of this license can be found here:
-| http://cerberusweb.com/license
+| http://cerb.io/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://www.cerbweb.com	    http://www.webgroupmedia.com/
+|	http://cerb.io	    http://webgroup.media
 ***********************************************************************/
 
 class PageSection_ProfilesContact extends Extension_PageSection {
@@ -63,11 +63,33 @@ class PageSection_ProfilesContact extends Extension_PageSection {
 			'params' => array('context' => CerberusContexts::CONTEXT_ORG),
 		);
 		
-		$properties['title'] = array(
-			'label' => mb_ucfirst($translate->_('common.title')),
-			'type' => Model_CustomField::TYPE_SINGLE_LINE,
-			'value' => $contact->title,
-		);
+		if(!empty($contact->title))
+			$properties['title'] = array(
+				'label' => mb_ucfirst($translate->_('common.title')),
+				'type' => Model_CustomField::TYPE_SINGLE_LINE,
+				'value' => $contact->title,
+			);
+		
+		if(!empty($contact->location))
+			$properties['location'] = array(
+				'label' => mb_ucfirst($translate->_('common.location')),
+				'type' => Model_CustomField::TYPE_SINGLE_LINE,
+				'value' => $contact->location,
+			);
+		
+		if(!empty($contact->language))
+			$properties['language'] = array(
+				'label' => mb_ucfirst($translate->_('common.language')),
+				'type' => Model_CustomField::TYPE_SINGLE_LINE,
+				'value' => $contact->language,
+			);
+		
+		if(!empty($contact->timezone))
+			$properties['timezone'] = array(
+				'label' => mb_ucfirst($translate->_('common.timezone')),
+				'type' => Model_CustomField::TYPE_SINGLE_LINE,
+				'value' => $contact->timezone,
+			);
 		
 		$properties['created'] = array(
 			'label' => mb_ucfirst($translate->_('common.created')),
@@ -81,11 +103,12 @@ class PageSection_ProfilesContact extends Extension_PageSection {
 			'value' => $contact->updated_at,
 		);
 		
-		$properties['last_login'] = array(
-			'label' => mb_ucfirst($translate->_('common.last_login')),
-			'type' => Model_CustomField::TYPE_DATE,
-			'value' => $contact->last_login_at,
-		);
+		if(!empty($contact->last_login_at))
+			$properties['last_login'] = array(
+				'label' => mb_ucfirst($translate->_('common.last_login')),
+				'type' => Model_CustomField::TYPE_DATE,
+				'value' => $contact->last_login_at,
+			);
 	
 		// Custom Fields
 
@@ -171,6 +194,8 @@ class PageSection_ProfilesContact extends Extension_PageSection {
 				@$gender = DevblocksPlatform::importGPC($_REQUEST['gender'], 'string', '');
 				@$dob = DevblocksPlatform::importGPC($_REQUEST['dob'], 'string', '');
 				@$location = DevblocksPlatform::importGPC($_REQUEST['location'], 'string', '');
+				@$language = DevblocksPlatform::importGPC($_REQUEST['language'], 'string', '');
+				@$timezone = DevblocksPlatform::importGPC($_REQUEST['timezone'], 'string', '');
 				@$phone = DevblocksPlatform::importGPC($_REQUEST['phone'], 'string', '');
 				@$mobile = DevblocksPlatform::importGPC($_REQUEST['mobile'], 'string', '');
 				@$password = DevblocksPlatform::importGPC($_REQUEST['password'], 'string', '');
@@ -206,6 +231,8 @@ class PageSection_ProfilesContact extends Extension_PageSection {
 						DAO_Contact::GENDER => $gender,
 						DAO_Contact::DOB => (null == $dob_ts) ? null : gmdate('Y-m-d', $dob_ts),
 						DAO_Contact::LOCATION => $location,
+						DAO_Contact::LANGUAGE => $language,
+						DAO_Contact::TIMEZONE => $timezone,
 						DAO_Contact::PHONE => $phone,
 						DAO_Contact::MOBILE => $mobile,
 						DAO_Contact::CREATED_AT => time(),
@@ -246,6 +273,8 @@ class PageSection_ProfilesContact extends Extension_PageSection {
 						DAO_Contact::GENDER => $gender,
 						DAO_Contact::DOB => (null == $dob_ts) ? null : gmdate('Y-m-d', $dob_ts),
 						DAO_Contact::LOCATION => $location,
+						DAO_Contact::LANGUAGE => $language,
+						DAO_Contact::TIMEZONE => $timezone,
 						DAO_Contact::PHONE => $phone,
 						DAO_Contact::MOBILE => $mobile,
 						DAO_Contact::UPDATED_AT => time(),
@@ -394,8 +423,31 @@ class PageSection_ProfilesContact extends Extension_PageSection {
 		}
 		
 		// Custom Fields
+		
 		$custom_fields = DAO_CustomField::getByContext(CerberusContexts::CONTEXT_CONTACT, false);
 		$tpl->assign('custom_fields', $custom_fields);
+		
+		// Languages
+		$translate = DevblocksPlatform::getTranslationService();
+		$locales = $translate->getLocaleStrings();
+		$tpl->assign('languages', $locales);
+		
+		// Timezones
+		$date = DevblocksPlatform::getDateService();
+		$tpl->assign('timezones', $date->getTimezones());
+		
+		// Broadcast
+		
+		CerberusContexts::getContext(CerberusContexts::CONTEXT_CONTACT, null, $token_labels, $token_values);
+		
+		$placeholders = Extension_DevblocksContext::getPlaceholderTree($token_labels);
+		$tpl->assign('placeholders', $placeholders);
+		
+		$groups = DAO_Group::getAll();
+		$tpl->assign('groups', $groups);
+		
+		$html_templates = DAO_MailHtmlTemplate::getAll();
+		$tpl->assign('html_templates', $html_templates);
 		
 		// Macros
 		
@@ -408,7 +460,9 @@ class PageSection_ProfilesContact extends Extension_PageSection {
 		$tpl->display('devblocks:cerberusweb.core::internal/contact/bulk.tpl');
 	}
 	
-	function saveBulkPanelAction() {
+	function startBulkUpdateJsonAction() {
+		$active_worker = CerberusApplication::getActiveWorker();
+		
 		// Filter: whole list or check
 		@$filter = DevblocksPlatform::importGPC($_REQUEST['filter'],'string','');
 		$ids = array();
@@ -422,6 +476,8 @@ class PageSection_ProfilesContact extends Extension_PageSection {
 		@$title = trim(DevblocksPlatform::importGPC($_POST['title'],'string',''));
 		@$org_id = DevblocksPlatform::importGPC($_POST['org_id'],'integer',0);
 		@$location = trim(DevblocksPlatform::importGPC($_POST['location'],'string',''));
+		@$language = trim(DevblocksPlatform::importGPC($_POST['language'],'string',''));
+		@$timezone = trim(DevblocksPlatform::importGPC($_POST['timezone'],'string',''));
 		@$gender = DevblocksPlatform::importGPC($_POST['gender'],'string','');
 
 		// Scheduled behavior
@@ -430,7 +486,6 @@ class PageSection_ProfilesContact extends Extension_PageSection {
 		@$behavior_params = DevblocksPlatform::importGPC($_POST['behavior_params'],'array',array());
 		
 		$do = array();
-		$active_worker = CerberusApplication::getActiveWorker();
 		
 		// Do: Title
 		if(0 != strlen($title))
@@ -439,6 +494,12 @@ class PageSection_ProfilesContact extends Extension_PageSection {
 		// Do: Location
 		if(0 != strlen($location))
 			$do['location'] = $location;
+		
+		if(0 != strlen($language))
+			$do['language'] = $language;
+		
+		if(0 != strlen($timezone))
+			$do['timezone'] = $timezone;
 		
 		// Do: Gender
 		if(0 != strlen($gender) && in_array($gender, array('M','F')))
@@ -457,8 +518,49 @@ class PageSection_ProfilesContact extends Extension_PageSection {
 			);
 		}
 		
+		// Watchers
+		$watcher_params = array();
+		
+		@$watcher_add_ids = DevblocksPlatform::importGPC($_REQUEST['do_watcher_add_ids'],'array',array());
+		if(!empty($watcher_add_ids))
+			$watcher_params['add'] = $watcher_add_ids;
+			
+		@$watcher_remove_ids = DevblocksPlatform::importGPC($_REQUEST['do_watcher_remove_ids'],'array',array());
+		if(!empty($watcher_remove_ids))
+			$watcher_params['remove'] = $watcher_remove_ids;
+		
+		if(!empty($watcher_params))
+			$do['watchers'] = $watcher_params;
+		
 		// Do: Custom fields
 		$do = DAO_CustomFieldValue::handleBulkPost($do);
+		
+		// Broadcast: Compose
+		if($active_worker->hasPriv('context.contact.worklist.broadcast')) {
+			@$do_broadcast = DevblocksPlatform::importGPC($_REQUEST['do_broadcast'],'string',null);
+			@$broadcast_group_id = DevblocksPlatform::importGPC($_REQUEST['broadcast_group_id'],'integer',0);
+			@$broadcast_subject = DevblocksPlatform::importGPC($_REQUEST['broadcast_subject'],'string',null);
+			@$broadcast_message = DevblocksPlatform::importGPC($_REQUEST['broadcast_message'],'string',null);
+			@$broadcast_format = DevblocksPlatform::importGPC($_REQUEST['broadcast_format'],'string',null);
+			@$broadcast_html_template_id = DevblocksPlatform::importGPC($_REQUEST['broadcast_html_template_id'],'integer',0);
+			@$broadcast_is_queued = DevblocksPlatform::importGPC($_REQUEST['broadcast_is_queued'],'integer',0);
+			@$broadcast_status_id = DevblocksPlatform::importGPC($_REQUEST['broadcast_status_id'],'integer',0);
+			@$broadcast_file_ids = DevblocksPlatform::sanitizeArray(DevblocksPlatform::importGPC($_REQUEST['broadcast_file_ids'],'array',array()), 'integer', array('nonzero','unique'));
+			
+			if(0 != strlen($do_broadcast) && !empty($broadcast_subject) && !empty($broadcast_message)) {
+				$do['broadcast'] = array(
+					'subject' => $broadcast_subject,
+					'message' => $broadcast_message,
+					'format' => $broadcast_format,
+					'html_template_id' => $broadcast_html_template_id,
+					'is_queued' => $broadcast_is_queued,
+					'status_id' => $broadcast_status_id,
+					'group_id' => $broadcast_group_id,
+					'worker_id' => $active_worker->id,
+					'file_ids' => $broadcast_file_ids,
+				);
+			}
+		}
 
 		switch($filter) {
 			// Checked rows
@@ -466,17 +568,31 @@ class PageSection_ProfilesContact extends Extension_PageSection {
 				@$ids_str = DevblocksPlatform::importGPC($_REQUEST['ids'],'string');
 				$ids = DevblocksPlatform::parseCsvString($ids_str);
 				break;
+				
 			case 'sample':
 				@$sample_size = min(DevblocksPlatform::importGPC($_REQUEST['filter_sample_size'],'integer',0),9999);
 				$filter = 'checks';
 				$ids = $view->getDataSample($sample_size);
 				break;
+				
 			default:
 				break;
 		}
 		
-		$view->doBulkUpdate($filter, $do, $ids);
-		$view->render();
+		// If we have specific IDs, add a filter for those too
+		if(!empty($ids)) {
+			$view->addParam(new DevblocksSearchCriteria(SearchFields_Contact::ID, 'in', $ids));
+		}
+		
+		// Create batches
+		$batch_key = DAO_ContextBulkUpdate::createFromView($view, $do);
+		
+		header('Content-Type: application/json; charset=utf-8');
+		
+		echo json_encode(array(
+			'cursor' => $batch_key,
+		));
+		
 		return;
 	}
 };

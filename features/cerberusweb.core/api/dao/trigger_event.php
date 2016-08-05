@@ -2,17 +2,17 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
 | The latest version of this license can be found here:
-| http://cerberusweb.com/license
+| http://cerb.io/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://www.cerbweb.com	    http://www.webgroupmedia.com/
+|	http://cerb.io	    http://webgroup.media
 ***********************************************************************/
 
 class DAO_TriggerEvent extends Cerb_ORMHelper {
@@ -65,6 +65,10 @@ class DAO_TriggerEvent extends Cerb_ORMHelper {
 				null,
 				Cerb_ORMHelper::OPT_GET_MASTER_ONLY
 			);
+			
+			if(!is_array($behaviors))
+				return false;
+			
 			$cache->save($behaviors, self::CACHE_ALL);
 		}
 		
@@ -223,7 +227,7 @@ class DAO_TriggerEvent extends Cerb_ORMHelper {
 		;
 
 		if($options & Cerb_ORMHelper::OPT_GET_MASTER_ONLY) {
-			$rs = $db->ExecuteMaster($sql);
+			$rs = $db->ExecuteMaster($sql, _DevblocksDatabaseManager::OPT_NO_READ_AFTER_WRITE);
 		} else {
 			$rs = $db->ExecuteSlave($sql);
 		}
@@ -320,7 +324,7 @@ class DAO_TriggerEvent extends Cerb_ORMHelper {
 	public static function getSearchQueryComponents($columns, $params, $sortBy=null, $sortAsc=null) {
 		$fields = SearchFields_TriggerEvent::getFields();
 		
-		list($tables,$wheres) = parent::_parseSearchParams($params, $columns, $fields, $sortBy);
+		list($tables,$wheres) = parent::_parseSearchParams($params, $columns, 'SearchFields_TriggerEvent', $sortBy);
 		
 		$select_sql = sprintf("SELECT ".
 			"trigger_event.id as %s, ".
@@ -339,20 +343,12 @@ class DAO_TriggerEvent extends Cerb_ORMHelper {
 			
 		$join_sql = "FROM trigger_event ";
 		
-		// Custom field joins
-		//list($select_sql, $join_sql, $has_multiple_values) = self::_appendSelectJoinSqlForCustomFieldTables(
-		//	$tables,
-		//	$params,
-		//	'trigger.id',
-		//	$select_sql,
-		//	$join_sql
-		//);
 		$has_multiple_values = false; // [TODO] Temporary when custom fields disabled
 				
 		$where_sql = "".
 			(!empty($wheres) ? sprintf("WHERE %s ",implode(' AND ',$wheres)) : "WHERE 1 ");
 			
-		$sort_sql = self::_buildSortClause($sortBy, $sortAsc, $fields);
+		$sort_sql = self::_buildSortClause($sortBy, $sortAsc, $fields, $select_sql, 'SearchFields_TriggerEvent');
 	
 		return array(
 			'primary_table' => 'trigger_event',
@@ -396,13 +392,18 @@ class DAO_TriggerEvent extends Cerb_ORMHelper {
 			$sort_sql;
 			
 		if($limit > 0) {
-			$rs = $db->SelectLimit($sql,$limit,$page*$limit) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs mysqli_result */
+			if(false == ($rs = $db->SelectLimit($sql,$limit,$page*$limit)))
+				return false;
 		} else {
-			$rs = $db->ExecuteSlave($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs mysqli_result */
+			if(false == ($rs = $db->ExecuteSlave($sql)))
+				return false;
 			$total = mysqli_num_rows($rs);
 		}
 		
 		$results = array();
+		
+		if(!($rs instanceof mysqli_result))
+			return false;
 		
 		while($row = mysqli_fetch_assoc($rs)) {
 			$object_id = intval($row[SearchFields_TriggerEvent::ID]);
@@ -468,7 +469,7 @@ class DAO_TriggerEvent extends Cerb_ORMHelper {
 	}
 };
 
-class SearchFields_TriggerEvent implements IDevblocksSearchFields {
+class SearchFields_TriggerEvent extends DevblocksSearchFields {
 	const ID = 't_id';
 	const TITLE = 't_title';
 	const IS_DISABLED = 't_is_disabled';
@@ -476,10 +477,41 @@ class SearchFields_TriggerEvent implements IDevblocksSearchFields {
 	const VIRTUAL_ATTENDANT_ID = 't_virtual_attendant_id';
 	const EVENT_POINT = 't_event_point';
 	
+	static private $_fields = null;
+	
+	static function getPrimaryKey() {
+		return 'trigger_event.id';
+	}
+	
+	static function getCustomFieldContextKeys() {
+		return array(
+			'' => new DevblocksSearchFieldContextKeys('trigger_event.id', self::ID),
+			CerberusContexts::CONTEXT_VIRTUAL_ATTENDANT => new DevblocksSearchFieldContextKeys('trigger_event.virtual_attendant_id', self::VIRTUAL_ATTENDANT_ID),
+		);
+	}
+	
+	static function getWhereSQL(DevblocksSearchCriteria $param) {
+		if('cf_' == substr($param->field, 0, 3)) {
+			return self::_getWhereSQLFromCustomFields($param);
+		} else {
+			return $param->getWhereSQL(self::getFields(), self::getPrimaryKey());
+		}
+	}
+	
 	/**
 	 * @return DevblocksSearchField[]
 	 */
 	static function getFields() {
+		if(is_null(self::$_fields))
+			self::$_fields = self::_getFields();
+		
+		return self::$_fields;
+	}
+	
+	/**
+	 * @return DevblocksSearchField[]
+	 */
+	static function _getFields() {
 		$translate = DevblocksPlatform::getTranslationService();
 		
 		$columns = array(
@@ -915,6 +947,9 @@ class View_TriggerEvent extends C4_AbstractView {
 			$this->renderSortAsc,
 			$this->renderTotal
 		);
+		
+		$this->_lazyLoadCustomFieldsIntoObjects($objects, 'SearchFields_TriggerEvent');
+		
 		return $objects;
 	}
 	
@@ -1023,70 +1058,6 @@ class View_TriggerEvent extends C4_AbstractView {
 			$this->addParam($criteria, $field);
 			$this->renderPage = 0;
 		}
-	}
-		
-	function doBulkUpdate($filter, $do, $ids=array()) {
-		@set_time_limit(600); // 10m
-		
-		$change_fields = array();
-		$custom_fields = array();
-
-		// Make sure we have actions
-		if(empty($do))
-			return;
-
-		// Make sure we have checked items if we want a checked list
-		if(0 == strcasecmp($filter,"checks") && empty($ids))
-			return;
-			
-		if(is_array($do))
-		foreach($do as $k => $v) {
-			switch($k) {
-				// [TODO] Implement actions
-				case 'example':
-					//$change_fields[DAO_TriggerEvent::EXAMPLE] = 'some value';
-					break;
-				/*
-				default:
-					// Custom fields
-					if(substr($k,0,3)=="cf_") {
-						$custom_fields[substr($k,3)] = $v;
-					}
-					break;
-				*/
-			}
-		}
-
-		$pg = 0;
-
-		if(empty($ids))
-		do {
-			list($objects,$null) = DAO_TriggerEvent::search(
-				array(),
-				$this->getParams(),
-				100,
-				$pg++,
-				SearchFields_TriggerEvent::ID,
-				true,
-				false
-			);
-			$ids = array_merge($ids, array_keys($objects));
-			 
-		} while(!empty($objects));
-
-		$batch_total = count($ids);
-		for($x=0;$x<=$batch_total;$x+=100) {
-			$batch_ids = array_slice($ids,$x,100);
-			
-			DAO_TriggerEvent::update($batch_ids, $change_fields);
-
-			// Custom Fields
-			//self::_doBulkSetCustomFields(ChCustomFieldSource_TriggerEvent::ID, $custom_fields, $batch_ids);
-			
-			unset($batch_ids);
-		}
-
-		unset($ids);
 	}
 };
 

@@ -66,7 +66,7 @@
 			<div>
 				<fieldset style="display:inline-block;margin-bottom:0;">
 					<legend>Actions</legend>
-					{assign var=headers value=$message->getHeaders()}
+					{$headers = $message->getHeaders()}
 					<button name="saveDraft" type="button"><span class="glyphicons glyphicons-circle-ok"></span> Save Draft</button>
 					
 					{* Virtual Attendants *}
@@ -133,7 +133,7 @@
 						Insert: 
 						<input type="text" size="25" class="context-snippet autocomplete" {if $pref_keyboard_shortcuts}placeholder="(Ctrl+Shift+I)"{/if}>
 						<button type="button" onclick="ajax.chooserSnippet('chooser{$message->id}',$('#reply_{$message->id}'), { '{CerberusContexts::CONTEXT_TICKET}':'{$ticket->id}', '{CerberusContexts::CONTEXT_WORKER}':'{$active_worker->id}' });"><span class="glyphicons glyphicons-search"></span></button>
-						<button type="button" onclick="genericAjaxPopup('peek','c=internal&a=showSnippetsPeek&id=0&owner_context={CerberusContexts::CONTEXT_WORKER}&owner_context_id={$active_worker->id}&context={CerberusContexts::CONTEXT_TICKET}&context_id={$ticket->id}',null,false,'550');"><span class="glyphicons glyphicons-circle-plus"></span></button>
+						<button type="button" onclick="var txt = encodeURIComponent($('#reply_{$message->id}').selection('get')); genericAjaxPopup('peek','c=internal&a=showSnippetsPeek&id=0&owner_context={CerberusContexts::CONTEXT_WORKER}&owner_context_id={$active_worker->id}&context={CerberusContexts::CONTEXT_TICKET}&context_id={$ticket->id}&text=' + txt,null,false,'50%');"><span class="glyphicons glyphicons-circle-plus"></span></button>
 					</div>
 				</fieldset>
 			</div>
@@ -261,12 +261,12 @@
 								</span>
 							</div>
 							
-							<label {if $pref_keyboard_shortcuts}title="(Ctrl+Shift+O)"{/if}><input type="radio" name="closed" value="0" class="status_open" onclick="toggleDiv('replyOpen{$message->id}','block');toggleDiv('replyClosed{$message->id}','none');" {if (empty($draft) && 'open'==$mail_status_reply) || $draft->params.closed==0}checked="checked"{/if}> {'status.open'|devblocks_translate|capitalize}</label>
-							<label {if $pref_keyboard_shortcuts}title="(Ctrl+Shift+W)"{/if}><input type="radio" name="closed" value="2" class="status_waiting" onclick="toggleDiv('replyOpen{$message->id}','block');toggleDiv('replyClosed{$message->id}','block');" {if (empty($draft) && 'waiting'==$mail_status_reply) || $draft->params.closed==2}checked="checked"{/if}> {'status.waiting'|devblocks_translate|capitalize}</label>
-							{if $active_worker->hasPriv('core.ticket.actions.close') || ($ticket->is_closed && !$ticket->is_deleted)}<label {if $pref_keyboard_shortcuts}title="(Ctrl+Shift+C)"{/if}><input type="radio" name="closed" value="1" class="status_closed" onclick="toggleDiv('replyOpen{$message->id}','none');toggleDiv('replyClosed{$message->id}','block');" {if (empty($draft) && 'closed'==$mail_status_reply) || $draft->params.closed==1}checked="checked"{/if}> {'status.closed'|devblocks_translate|capitalize}</label>{/if}
+							<label {if $pref_keyboard_shortcuts}title="(Ctrl+Shift+O)"{/if}><input type="radio" name="status_id" value="{Model_Ticket::STATUS_OPEN}" class="status_open" onclick="toggleDiv('replyOpen{$message->id}','block');toggleDiv('replyClosed{$message->id}','none');" {if (empty($draft) && 'open'==$mail_status_reply) || $draft->params.status_id==Model_Ticket::STATUS_OPEN}checked="checked"{/if}> {'status.open'|devblocks_translate|capitalize}</label>
+							<label {if $pref_keyboard_shortcuts}title="(Ctrl+Shift+W)"{/if}><input type="radio" name="status_id" value="{Model_Ticket::STATUS_WAITING}" class="status_waiting" onclick="toggleDiv('replyOpen{$message->id}','block');toggleDiv('replyClosed{$message->id}','block');" {if (empty($draft) && 'waiting'==$mail_status_reply) || $draft->params.status_id==Model_Ticket::STATUS_WAITING}checked="checked"{/if}> {'status.waiting'|devblocks_translate|capitalize}</label>
+							{if $active_worker->hasPriv('core.ticket.actions.close') || ($ticket->status_id == Model_Ticket::STATUS_CLOSED)}<label {if $pref_keyboard_shortcuts}title="(Ctrl+Shift+C)"{/if}><input type="radio" name="status_id" value="{Model_Ticket::STATUS_CLOSED}" class="status_closed" onclick="toggleDiv('replyOpen{$message->id}','none');toggleDiv('replyClosed{$message->id}','block');" {if (empty($draft) && 'closed'==$mail_status_reply) || $draft->params.status_id==Model_Ticket::STATUS_CLOSED}checked="checked"{/if}> {'status.closed'|devblocks_translate|capitalize}</label>{/if}
 							<br>
 							
-							<div id="replyClosed{$message->id}" style="display:{if (empty($draft) && 'open'==$mail_status_reply) || (!empty($draft) && $draft->params.closed==0)}none{else}block{/if};margin:10px 0px 0px 20px;">
+							<div id="replyClosed{$message->id}" style="display:{if (empty($draft) && 'open'==$mail_status_reply) || (!empty($draft) && $draft->params.status_id==Model_Ticket::STATUS_OPEN)}none{else}block{/if};margin:10px 0px 0px 20px;">
 							<b>{'display.reply.next.resume'|devblocks_translate}</b> {'display.reply.next.resume_eg'|devblocks_translate}<br> 
 							<input type="text" name="ticket_reopen" size="55" value="{if !empty($draft)}{$draft->params.ticket_reopen}{elseif !empty($ticket->reopen_at)}{$ticket->reopen_at|devblocks_date}{/if}"><br>
 							{'display.reply.next.resume_blank'|devblocks_translate}<br>
@@ -346,7 +346,7 @@
 				{if $active_worker->hasPriv('core.mail.save_without_sending')}<li><a href="javascript:;" class="save">{'display.ui.save_nosend'|devblocks_translate}</a></li>{/if}
 				<li><a href="javascript:;" class="draft">{'display.ui.continue_later'|devblocks_translate}</a></li>
 			</ul>
-			<button type="button" class="discard" onclick="window.onbeforeunload=null;if(confirm('Are you sure you want to discard this reply?')) { if(null != draftAutoSaveInterval) { clearTimeout(draftAutoSaveInterval); draftAutoSaveInterval = null; } $frm = $(this).closest('form'); genericAjaxGet('', 'c=mail&a=handleSectionAction&section=drafts&action=deleteDraft&draft_id='+escape($frm.find('input:hidden[name=draft_id]').val()), function(o) { $frm = $('#reply{$message->id}_part2'); $('#draft'+escape($frm.find('input:hidden[name=draft_id]').val())).remove(); $('#reply{$message->id}').html('');  } ); }"><span class="glyphicons glyphicons-circle-remove" style="color:rgb(200,0,0);"></span> {'display.ui.discard'|devblocks_translate|capitalize}</button>
+			<button type="button" class="discard" onclick="window.onbeforeunload=null;if(confirm('Are you sure you want to discard this reply?')) { if(null != draftAutoSaveInterval) { clearTimeout(draftAutoSaveInterval); draftAutoSaveInterval = null; } $frm = $(this).closest('form'); genericAjaxGet('', 'c=profiles&a=handleSectionAction&section=draft&action=deleteDraft&draft_id='+escape($frm.find('input:hidden[name=draft_id]').val()), function(o) { $frm = $('#reply{$message->id}_part2'); $('#draft'+escape($frm.find('input:hidden[name=draft_id]').val())).remove(); $('#reply{$message->id}').html('');  } ); }"><span class="glyphicons glyphicons-circle-remove" style="color:rgb(200,0,0);"></span> {'display.ui.discard'|devblocks_translate|capitalize}</button>
 		</td>
 	</tr>
 </table>
@@ -751,6 +751,7 @@
 		draftAutoSaveInterval = setInterval("$('#reply{$message->id}_part1 button[name=saveDraft]').click();", 30000); // and every 30 sec
 
 		$frm.find('input:text.context-snippet').autocomplete({
+			delay: 300,
 			source: DevblocksAppPath+'ajax.php?c=internal&a=autocomplete&context=cerberusweb.contexts.snippet&contexts[]=cerberusweb.contexts.ticket&contexts[]=cerberusweb.contexts.worker&_csrf_token=' + $('meta[name="_csrf_token"]').attr('content'),
 			minLength: 1,
 			focus:function(event, ui) {
@@ -852,7 +853,7 @@
 						event.preventDefault();
 						
 						var $reply_status = $('#replyStatus{$message->id}');
-						var $radio = $reply_status.find('input:radio[name=closed]');
+						var $radio = $reply_status.find('input:radio[name=status_id]');
 						
 						switch(event.which) {
 							case 67: // closed

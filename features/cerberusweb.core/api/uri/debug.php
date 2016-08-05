@@ -2,17 +2,17 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
 | The latest version of this license can be found here:
-| http://cerberusweb.com/license
+| http://cerb.io/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://www.cerbweb.com	    http://www.webgroupmedia.com/
+|	http://cerb.io	    http://webgroup.media
 ***********************************************************************/
 
 class ChDebugController extends DevblocksControllerExtension  {
@@ -35,7 +35,7 @@ class ChDebugController extends DevblocksControllerExtension  {
 		// Is this IP authorized?
 		$pass = false;
 		foreach ($authorized_ips as $ip) {
-			if(substr($ip,0,strlen($ip)) == substr($_SERVER['REMOTE_ADDR'],0,strlen($ip))) {
+			if(substr($ip,0,strlen($ip)) == substr(DevblocksPlatform::getClientIp(),0,strlen($ip))) {
 				$pass = true;
 				break;
 			}
@@ -43,7 +43,7 @@ class ChDebugController extends DevblocksControllerExtension  {
 		
 		if(!$pass) {
 			echo sprintf('Your IP address (%s) is not authorized to debug this helpdesk.  Your administrator needs to authorize your IP in Helpdesk Setup or in the framework.config.php file under AUTHORIZED_IPS_DEFAULTS.',
-				DevblocksPlatform::strEscapeHtml($_SERVER['REMOTE_ADDR'])
+				DevblocksPlatform::strEscapeHtml(DevblocksPlatform::getClientIp())
 			);
 			return;
 		}
@@ -91,6 +91,105 @@ class ChDebugController extends DevblocksControllerExtension  {
 				
 				break;
 				
+			case 'status':
+				@$db = DevblocksPlatform::getDatabaseService();
+
+				header('Content-Type: application/json; charset=' . LANG_CHARSET_CODE);
+
+				$tickets_by_status = array();
+				
+				foreach($db->GetArrayMaster('SELECT count(*) as hits, status_id from ticket group by status_id') as $row) {
+					switch($row['status_id']) {
+						case 0:
+							$tickets_by_status['open'] = intval($row['hits']);
+							break;
+						case 1:
+							$tickets_by_status['waiting'] = intval($row['hits']);
+							break;
+						case 2:
+							$tickets_by_status['closed'] = intval($row['hits']);
+							break;
+						case 3:
+							$tickets_by_status['deleted'] = intval($row['hits']);
+							break;
+					}
+				}
+				
+				$status = array(
+					'counts' => array(
+						'attachments' => intval($db->GetOneMaster('SELECT count(id) FROM attachment')),
+						'buckets' => intval($db->GetOneMaster('SELECT count(id) FROM bucket')),
+						'comments' => intval($db->GetOneMaster('SELECT count(id) FROM comment')),
+						'custom_fields' => intval($db->GetOneMaster('SELECT count(id) FROM custom_field')),
+						'custom_fieldsets' => intval($db->GetOneMaster('SELECT count(id) FROM custom_fieldset')),
+						'groups' => intval($db->GetOneMaster('SELECT count(id) FROM worker_group')),
+						'mailboxes' => intval($db->GetOneMaster('SELECT count(id) FROM mailbox WHERE enabled=1')),
+						'mail_transports' => intval($db->GetOneMaster('SELECT count(id) FROM mail_transport')),
+						'messages' => intval($db->GetOneMaster('SELECT count(id) FROM message')),
+						'messages_stats' => array(
+							'received' => intval($db->GetOneMaster('SELECT count(id) FROM message WHERE is_outgoing=0')),
+							'received_24h' => intval($db->GetOneMaster(sprintf('SELECT count(id) FROM message WHERE is_outgoing=0 AND created_date >= %d', time()-86400))),
+							'sent' => intval($db->GetOneMaster('SELECT count(id) FROM message WHERE is_outgoing=1')),
+							'sent_24h' => intval($db->GetOneMaster(sprintf('SELECT count(id) FROM message WHERE is_outgoing=1 AND created_date >= %d', time()-86400))),
+						),
+						'portals' => intval(@$db->GetOneMaster('SELECT count(id) FROM community_tool')),
+						'tickets' => intval($db->GetOneMaster('SELECT count(id) FROM ticket')),
+						'tickets_status' => $tickets_by_status,
+						'va' => intval($db->GetOneMaster('SELECT count(id) FROM virtual_attendant')),
+						'va_behaviors' => intval($db->GetOneMaster('SELECT count(id) FROM trigger_event')),
+						'webhooks' => intval($db->GetOneMaster('SELECT count(id) FROM webhook_listener')),
+						'workers' => intval($db->GetOneMaster('SELECT count(id) FROM worker')),
+						'workers_active_15m' => intval($db->GetOneMaster(sprintf('SELECT count(DISTINCT user_id) AS hits FROM devblocks_session WHERE user_id != 0 AND refreshed_at >= %d', time()-900))),
+						'workers_active_30m' => intval($db->GetOneMaster(sprintf('SELECT count(DISTINCT user_id) AS hits FROM devblocks_session WHERE user_id != 0 AND refreshed_at >= %d', time()-1800))),
+						'workers_active_1h' => intval($db->GetOneMaster(sprintf('SELECT count(DISTINCT user_id) AS hits FROM devblocks_session WHERE user_id != 0 AND refreshed_at >= %d', time()-3600))),
+						'workers_active_24h' => intval($db->GetOneMaster(sprintf('SELECT count(DISTINCT user_id) AS hits FROM devblocks_session WHERE user_id != 0 AND refreshed_at >= %d', time()-86400))),
+						'workers_active_1w' => intval($db->GetOneMaster(sprintf('SELECT count(DISTINCT user_id) AS hits FROM devblocks_session WHERE user_id != 0 AND refreshed_at >= %d', time()-604800))),
+					),
+					'storage_bytes' => array(
+						'attachment' => intval($db->GetOneMaster('SELECT sum(storage_size) FROM attachment')),
+						'context_avatar' => intval($db->GetOneMaster('SELECT sum(storage_size) FROM context_avatar')),
+						'message_content' => intval($db->GetOneMaster('SELECT sum(storage_size) FROM message')),
+					)
+				);
+				
+				// Storage
+				
+				$status['storage_bytes']['_total'] = array_sum($status['storage_bytes']);
+				
+				// Plugins
+				
+				$status['plugins'] = array();
+				$plugins = DevblocksPlatform::getPluginRegistry();
+				unset($plugins['cerberusweb.core']);
+				unset($plugins['devblocks.core']);
+				$status['counts']['plugins_enabled'] = count($plugins);
+				ksort($plugins);
+				
+				foreach($plugins as $plugin) {
+					if($plugin->enabled)
+						$status['plugins'][] = $plugin->id;
+				}
+				
+				// Tables
+				
+				$status['database'] = array(
+					'data_bytes' => 0,
+					'index_bytes' => 0,
+					'data_slack_bytes' => 0,
+				);
+				@$tables = $db->metaTablesDetailed();
+				
+				foreach($tables as $table => $info) {
+					$status['database']['data_bytes'] += $info['Data_length'];
+					$status['database']['index_bytes'] += $info['Index_length'];
+					$status['database']['data_slack_bytes'] += $info['Data_free'];
+				}
+				
+				// Output
+				
+				echo json_encode($status);
+				break;
+				
 			case 'report':
 				@$db = DevblocksPlatform::getDatabaseService();
 				@$settings = DevblocksPlatform::getPluginSettingsService();
@@ -106,9 +205,9 @@ class ChDebugController extends DevblocksControllerExtension  {
 					"[Privs] storage/attachments: %s\n".
 					"[Privs] storage/mail/new: %s\n".
 					"[Privs] storage/mail/fail: %s\n".
-					"[Privs] storage/tmp: %s\n".
-					"[Privs] storage/tmp/templates_c: %s\n".
-					"[Privs] storage/tmp/cache: %s\n".
+					"[Privs] tmp: %s\n".
+					"[Privs] tmp/templates_c: %s\n".
+					"[Privs] tmp/cache: %s\n".
 					"\n".
 					"[PHP] Version: %s\n".
 					"[PHP] OS: %s\n".
@@ -151,7 +250,7 @@ class ChDebugController extends DevblocksControllerExtension  {
 					substr(sprintf('%o', fileperms(APP_STORAGE_PATH.'/mail/new')), -4),
 					substr(sprintf('%o', fileperms(APP_STORAGE_PATH.'/mail/fail')), -4),
 					substr(sprintf('%o', fileperms(APP_TEMP_PATH)), -4),
-					substr(sprintf('%o', fileperms(APP_TEMP_PATH.'/templates_c')), -4),
+					substr(sprintf('%o', fileperms(APP_SMARTY_COMPILE_PATH)), -4),
 					substr(sprintf('%o', fileperms(APP_TEMP_PATH.'/cache')), -4),
 					PHP_VERSION,
 					PHP_OS . ' (' . php_uname() . ')',

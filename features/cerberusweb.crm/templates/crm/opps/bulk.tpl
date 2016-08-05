@@ -1,6 +1,8 @@
 <form action="{devblocks_url}{/devblocks_url}" method="POST" id="formBatchUpdate" name="formBatchUpdate" onsubmit="return false;">
-<input type="hidden" name="c" value="crm">
-<input type="hidden" name="a" value="doOppBulkUpdate">
+<input type="hidden" name="c" value="profiles">
+<input type="hidden" name="a" value="handleSectionAction">
+<input type="hidden" name="section" value="opportunity">
+<input type="hidden" name="action" value="startBulkUpdateJson">
 <input type="hidden" name="view_id" value="{$view_id}">
 <input type="hidden" name="opp_ids" value="{$opp_ids}">
 <input type="hidden" name="_csrf_token" value="{$session.csrf_token}">
@@ -38,21 +40,31 @@
 			{/if}
 			</td>
 		</tr>
-		{if $active_worker->hasPriv('core.watchers.assign') || $active_worker->hasPriv('core.watchers.unassign')}
+		
+		{if $active_worker->hasPriv('core.watchers.assign')}
 		<tr>
-			<td width="0%" nowrap="nowrap" align="right" valign="top">{'common.watchers'|devblocks_translate|capitalize}:</td>
+			<td width="0%" nowrap="nowrap" align="right" valign="top">Add watchers:</td>
 			<td width="100%">
-				{if $active_worker->hasPriv('core.watchers.assign')}
-				<button type="button" class="chooser-worker add"><span class="glyphicons glyphicons-search"></span></button>
-				<br>
-				{/if}
-				
-				{if $active_worker->hasPriv('core.watchers.unassign')}
-				<button type="button" class="chooser-worker remove"><span class="glyphicons glyphicons-search"></span></button>
-				{/if}
+				<div>
+					<button type="button" class="chooser-abstract" data-field-name="do_watcher_add_ids[]" data-context="{CerberusContexts::CONTEXT_WORKER}" data-query="isDisabled:n" data-autocomplete="true"><span class="glyphicons glyphicons-search"></span></button>
+					<ul class="bubbles chooser-container" style="display:block;"></ul>
+				</div>
 			</td>
 		</tr>
 		{/if}
+		
+		{if $active_worker->hasPriv('core.watchers.unassign')}
+		<tr>
+			<td width="0%" nowrap="nowrap" align="right" valign="top">Remove watchers:</td>
+			<td width="100%">
+				<div>
+					<button type="button" class="chooser-abstract" data-field-name="do_watcher_remove_ids[]" data-context="{CerberusContexts::CONTEXT_WORKER}" data-query="isDisabled:n" data-autocomplete="true"><span class="glyphicons glyphicons-search"></span></button>
+					<ul class="bubbles chooser-container" style="display:block;"></ul>
+				</div>
+			</td>
+		</tr>
+		{/if}
+
 		<tr>
 			<td width="0%" nowrap="nowrap" align="right">{'crm.opportunity.closed_date'|devblocks_translate|capitalize}:</td>
 			<td width="100%">
@@ -75,70 +87,7 @@
 {include file="devblocks:cerberusweb.core::internal/macros/behavior/bulk.tpl" macros=$macros}
 
 {if $active_worker->hasPriv('crm.opp.view.actions.broadcast')}
-<fieldset class="peek">
-	<legend>Send Broadcast</legend>
-	
-	<label><input type="checkbox" name="do_broadcast" id="chkMassReply" onclick="$('#bulkOppBroadcast').toggle();">{'common.enabled'|devblocks_translate|capitalize}</label>
-	<input type="hidden" name="broadcast_format" value="">
-	
-	<blockquote id="bulkOppBroadcast" style="display:none;margin:10px;">
-		<b>From:</b>
-		
-		<div style="margin:0px 0px 5px 10px;">
-			<select name="broadcast_group_id">
-				{foreach from=$groups item=group key=group_id}
-				{if $active_worker_memberships.$group_id}
-				<option value="{$group->id}">{$group->name}</option>
-				{/if}
-				{/foreach}
-			</select>
-		</div>
-		
-		<b>Subject:</b>
-		
-		<div style="margin:0px 0px 5px 10px;">
-			<input type="text" name="broadcast_subject" value="" style="width:100%;">
-		</div>
-		
-		<b>Compose:</b>
-		
-		<div style="margin:0px 0px 5px 10px;">
-			<textarea name="broadcast_message" style="width:100%;height:200px;"></textarea>
-			
-			<div>
-				<button type="button" onclick="ajax.chooserSnippet('snippets',$('#bulkOppBroadcast textarea[name=broadcast_message]'), { '{CerberusContexts::CONTEXT_OPPORTUNITY}':'', '{CerberusContexts::CONTEXT_WORKER}':'{$active_worker->id}' });">{'common.snippets'|devblocks_translate|capitalize}</button>
-				<select class="insert-placeholders">
-					<option value="">-- insert at cursor --</option>
-					{foreach from=$token_labels key=k item=v}
-					<option value="{literal}{{{/literal}{$k}{literal}}}{/literal}">{$v}</option>
-					{/foreach}
-				</select>
-			</div>
-		</div>
-		
-		<b>{'common.attachments'|devblocks_translate|capitalize}:</b>
-		
-		<div style="margin:0px 0px 5px 10px;">
-			<button type="button" class="chooser_file"><span class="glyphicons glyphicons-paperclip"></span></button>
-			<ul class="bubbles chooser-container">
-		</div>
-		
-		<b>{'common.status'|devblocks_translate|capitalize}:</b>
-		
-		<div style="margin:0px 0px 5px 10px;">
-			<label><input type="radio" name="broadcast_next_is_closed" value="0"> {'status.open'|devblocks_translate|capitalize}</label>
-			<label><input type="radio" name="broadcast_next_is_closed" value="2" checked="checked"> {'status.waiting'|devblocks_translate|capitalize}</label>
-			<label><input type="radio" name="broadcast_next_is_closed" value="1"> {'status.closed'|devblocks_translate|capitalize}</label>
-		</div>
-		
-		<b>{'common.options'|devblocks_translate|capitalize}:</b>
-		
-		<div style="margin:0px 0px 5px 10px;">
-			<label><input type="radio" name="broadcast_is_queued" value="0" checked="checked"> Save as drafts</label>
-			<label><input type="radio" name="broadcast_is_queued" value="1"> Send now</label>
-		</div>
-	</blockquote>
-</fieldset>
+{include file="devblocks:cerberusweb.core::internal/views/bulk_broadcast.tpl" context=CerberusContexts::CONTEXT_OPPORTUNITY}
 {/if}
 
 <button type="button" class="submit"><span class="glyphicons glyphicons-circle-ok" style="color:rgb(0,180,0);"></span> {'common.save_changes'|devblocks_translate|capitalize}</button>
@@ -149,141 +98,25 @@ $(function() {
 	var $popup = genericAjaxPopupFetch('peek');
 	
 	$popup.one('popup_open', function(event,ui) {
-		var $this = $(this);
-		
 		$popup.dialog('option','title',"{'common.bulk_update'|devblocks_translate|capitalize|escape:'javascript' nofilter}");
+		$popup.css('overflow', 'inherit');
 	
-		var $content = $this.find('textarea[name=broadcast_message]');
+		$popup.find('button.chooser-abstract').cerbChooserTrigger();
 		
 		$popup.find('button.submit').click(function() {
-			genericAjaxPost('formBatchUpdate', 'view{$view_id}', null, function() {
+			genericAjaxPost('formBatchUpdate', '', null, function(json) {
+				if(json.cursor) {
+					// Pull the cursor
+					var $tips = $('#{$view_id}_tips').html('');
+					var $spinner = $('<span class="cerb-ajax-spinner"/>').appendTo($tips);
+					genericAjaxGet($tips, 'c=internal&a=viewBulkUpdateWithCursor&view_id={$view_id}&cursor=' + json.cursor);
+				}
+				
 				genericAjaxPopupClose($popup);
 			});
 		});
 		
-		$this.find('select.insert-placeholders').change(function(e) {
-			var $select = $(this);
-			var $val = $select.val();
-			
-			if($val.length == 0)
-				return;
-			
-			$content.insertAtCursor($val).focus();
-			
-			$select.val('');
-		});
-		
-		$this.find('button.chooser_file').each(function() {
-			ajax.chooserFile(this,'broadcast_file_ids');
-		});
-		
-		$('#formBatchUpdate button.chooser-worker').each(function() {
-			$button = $(this);
-			context = 'cerberusweb.contexts.worker';
-			
-			if($button.hasClass('remove'))
-				ajax.chooser(this, context, 'do_watcher_remove_ids', { autocomplete: true, autocomplete_class:'input_remove' } );
-			else
-				ajax.chooser(this, context, 'do_watcher_add_ids', { autocomplete: true, autocomplete_class:'input_add'} );
-		});
-		
-		// Text editor
-		
-		var markitupPlaintextSettings = $.extend(true, { }, markitupPlaintextDefaults);
-		var markitupParsedownSettings = $.extend(true, { }, markitupParsedownDefaults);
-		
-		var markitupBroadcastFunctions = {
-			switchToMarkdown: function(markItUp) { 
-				$content.markItUpRemove().markItUp(markitupParsedownSettings);
-				$content.closest('form').find('input:hidden[name=broadcast_format]').val('parsedown');
-				
-				// Template chooser
-				
-				var $ul = $content.closest('.markItUpContainer').find('.markItUpHeader UL');
-				var $li = $('<li style="margin-left:10px;"></li>');
-				
-				var $select = $('<select name="broadcast_html_template_id"></select>');
-				$select.append($('<option value="0"/>').text(' - {'common.default'|devblocks_translate|lower|escape:'javascript'} -'));
-				
-				{foreach from=$html_templates item=html_template}
-				var $option = $('<option/>').attr('value','{$html_template->id}').text('{$html_template->name|escape:'javascript'}');
-				$select.append($option);
-				{/foreach}
-				
-				$li.append($select);
-				$ul.append($li);
-			},
-			
-			switchToPlaintext: function(markItUp) {
-				$content.markItUpRemove().markItUp(markitupPlaintextSettings);
-				$content.closest('form').find('input:hidden[name=broadcast_format]').val('');
-			}
-		};
-		
-		markitupPlaintextSettings.markupSet.unshift(
-			{ name:'Switch to Markdown', openWith: markitupBroadcastFunctions.switchToMarkdown, className:'parsedown' }
-		);
-		
-		markitupPlaintextSettings.markupSet.push(
-			{ separator:' ' },
-			{ name:'Preview', key: 'P', call:'preview', className:"preview" }
-		);
-		
-		var previewParser = function(content) {
-			genericAjaxPost(
-				'formBatchUpdate',
-				'',
-				'c=crm&a=doOppBulkUpdateBroadcastTest',
-				function(o) {
-					content = o;
-				},
-				{
-					async: false
-				}
-			);
-			
-			return content;
-		};
-		
-		markitupPlaintextSettings.previewParser = previewParser;
-		markitupPlaintextSettings.previewAutoRefresh = false;
-		
-		markitupParsedownSettings.previewParser = previewParser;
-		markitupParsedownSettings.previewAutoRefresh = false;
-		delete markitupParsedownSettings.previewInWindow;
-		
-		markitupParsedownSettings.markupSet.unshift(
-			{ name:'Switch to Plaintext', openWith: markitupBroadcastFunctions.switchToPlaintext, className:'plaintext' },
-			{ separator:' ' }
-		);
-		
-		markitupParsedownSettings.markupSet.splice(
-			6,
-			0,
-			{ name:'Upload an Image', openWith: 
-				function(markItUp) {
-					$chooser=genericAjaxPopup('chooser','c=internal&a=chooserOpenFile&single=1',null,true,'750');
-					
-					$chooser.one('chooser_save', function(event) {
-						if(!event.response || 0 == event.response)
-							return;
-						
-						$content.insertAtCursor("![inline-image](" + event.response[0].url + ")");
-					});
-				},
-				key: 'U',
-				className:'image-inline'
-			}
-		);
-		
-		try {
-			$content.markItUp(markitupPlaintextSettings);
-			
-		} catch(e) {
-			if(window.console)
-				console.log(e);
-		}
-		
+		{include file="devblocks:cerberusweb.core::internal/views/bulk_broadcast_jquery.tpl"}
 	});
 });
 </script>

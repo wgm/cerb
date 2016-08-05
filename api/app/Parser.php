@@ -2,29 +2,29 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
 | The latest version of this license can be found here:
-| http://cerberusweb.com/license
+| http://cerb.io/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://www.cerbweb.com	    http://www.webgroupmedia.com/
+|	http://cerb.io	    http://webgroup.media
 ***********************************************************************/
 /*
- * IMPORTANT LICENSING NOTE from your friends on the Cerb Development Team
+ * IMPORTANT LICENSING NOTE from your friends at Cerb
  *
- * Sure, it would be so easy to just cheat and edit this file to use the
- * software without paying for it.  But we trust you anyway.  In fact, we're
- * writing this software for you!
+ * Sure, it would be really easy to just cheat and edit this file to use
+ * Cerb without paying for a license.  We trust you anyway.
  *
- * Quality software backed by a dedicated team takes money to develop.  We
- * don't want to be out of the office bagging groceries when you call up
- * needing a helping hand.  We'd rather spend our free time coding your
- * feature requests than mowing the neighbors' lawns for rent money.
+ * It takes a significant amount of time and money to develop, maintain,
+ * and support high-quality enterprise software with a dedicated team.
+ * For Cerb's entire history we've avoided taking money from outside
+ * investors, and instead we've relied on actual sales from satisfied
+ * customers to keep the project running.
  *
  * We've never believed in hiding our source code out of paranoia over not
  * getting paid.  We want you to have the full source code and be able to
@@ -32,29 +32,60 @@
  * having less of everything than you might need (time, people, money,
  * energy).  We shouldn't be your bottleneck.
  *
- * We've been building our expertise with this project since January 2002.  We
- * promise spending a couple bucks [Euro, Yuan, Rupees, Galactic Credits] to
- * let us take over your shared e-mail headache is a worthwhile investment.
- * It will give you a sense of control over your inbox that you probably
- * haven't had since spammers found you in a game of 'E-mail Battleship'.
- * Miss. Miss. You sunk my inbox!
+ * As a legitimate license owner, your feedback will help steer the project.
+ * We'll also prioritize your issues, and work closely with you to make sure
+ * your teams' needs are being met.
  *
- * A legitimate license entitles you to support from the developers,
- * and the warm fuzzy feeling of feeding a couple of obsessed developers
- * who want to help you get more done.
- *
- \* - Jeff Standen, Darren Sugita, Dan Hildebrandt
- *	 Webgroup Media LLC - Developers of Cerb
+ * - Jeff Standen and Dan Hildebrandt
+ *	 Founders at Webgroup Media LLC; Developers of Cerb
  */
 
 class CerberusParserMessage {
 	public $encoding = '';
 	public $headers = array();
+	public $raw_headers = '';
 	public $body = '';
 	public $body_encoding = '';
 	public $htmlbody = '';
 	public $files = array();
 	public $custom_fields = array();
+	
+	function build() {
+		$this->_buildHeaders();
+		$this->_buildThreadBounces();
+	}
+	
+	private function _buildHeaders() {
+		if(empty($this->raw_headers) && !empty($this->headers))
+		foreach($this->headers as $k => $v) {
+			$this->raw_headers .= sprintf("%s: %s\r\n", $k, $v);
+		}
+	}
+	
+	// Thread a bounce to the message it references based on the message/rfc822 attachment
+	private function _buildThreadBounces() {
+		if(is_array($this->files))
+		foreach ($this->files as $filename => $file) { /* @var $file ParserFile */
+			switch($file->mime_type) {
+				case 'message/rfc822':
+					if(false == ($mime = new MimeMessage('file',  $file->tmpname)))
+						break;
+						
+					if(!isset($this->headers['from']) || !isset($mime->data['headers']) || !isset($mime->data['headers']['message-id']))
+						break;
+					
+					if(false == ($bounce_froms = imap_rfc822_parse_adrlist($this->headers['from'], '')) || empty($bounce_froms))
+						break;
+					
+					// Change the inbound In-Reply-To: header to that of the bounce
+					if(in_array(strtolower($bounce_froms[0]->mailbox), array('postmaster', 'mailer-daemon'))) {
+						$this->headers['in-reply-to'] = $mime->data['headers']['message-id'];
+					}
+					
+				break;
+			}
+		}
+	}
 };
 
 class CerberusParserModel {
@@ -503,7 +534,7 @@ class ParserFile {
 		}
 	}
 
-	public function setTempFile($tmpname,$mimetype='application/octet-stream') {
+	public function setTempFile($tmpname, $mimetype='application/octet-stream') {
 		$this->mime_type = $mimetype;
 
 		if(!empty($tmpname) && file_exists($tmpname)) {
@@ -522,28 +553,18 @@ class ParserFile {
 };
 
 class ParseFileBuffer extends ParserFile {
-	public $mime_filename = '';
 	public $section = null;
-	public $info = array();
-	private $fp = null;
+	public $info = null;
 
-	function __construct($section, $info, $mime_filename) {
-		$this->mime_filename = $mime_filename;
-		$this->section = $section;
-		$this->info = $info;
+	function __construct($section) {
+		$this->setTempFile(ParserFile::makeTempFilename(), @$section->data['content-type']);
+		$fp = fopen($this->getTempFile(),'wb');
 
-		$this->setTempFile(ParserFile::makeTempFilename(),@$info['content-type']);
-		$this->fp = fopen($this->getTempFile(),'wb');
-
-		if($this->fp && !empty($this->section) && !empty($this->mime_filename)) {
-			mailparse_msg_extract_part_file($this->section, $this->mime_filename, array($this, "writeCallback"));
+		if($fp && $section) {
+			$section->extract_body(MAILPARSE_EXTRACT_STREAM, $fp);
 		}
 
-		@fclose($this->fp);
-	}
-
-	function writeCallback($chunk) {
-		$this->file_size += fwrite($this->fp, $chunk);
+		@fclose($fp);
 	}
 };
 
@@ -555,27 +576,23 @@ class CerberusParser {
 			if(preg_match('/^file:\/\/(.*?)$/', $message_source, $matches)) {
 				$file = $matches[1];
 				
+				if(null == ($parser_msg = CerberusParser::parseMimeFile($file))) {
+					throw new Exception("The message mime could not be parsed (it's probably malformed).");
+				}
+				
 			} else {
 				$message_source .= PHP_EOL;
 				
-				if(null == ($file = CerberusParser::saveMimeToFile($message_source))) {
-					throw new Exception('The MIME file could not be saved.');
+				if(null == ($parser_msg = CerberusParser::parseMimeString($message_source))) {
+					throw new Exception("The message mime could not be parsed (it's probably malformed).");
 				}
-			}
-			
-			if(null == ($mime = mailparse_msg_parse_file($file))) {
-				throw new Exception("The message mime could not be decoded (it's probably malformed).");
-			}
-				
-			if(null == ($parser_msg = CerberusParser::parseMime($mime, $file))) {
-				throw new Exception("The message mime could not be parsed (it's probably malformed).");
 			}
 			
 			if(false === ($ticket_id = CerberusParser::parseMessage($parser_msg))) {
 				throw new Exception("The message was rejected by the parser.");
 			}
 			
-			if($delete_on_success)
+			if($file && $delete_on_success)
 				@unlink($file);
 			
 			if(is_numeric($ticket_id)) {
@@ -589,7 +606,7 @@ class CerberusParser {
 			}
 			
 		} catch (Exception $e) {
-			if($delete_on_failure)
+			if($file && $delete_on_failure)
 				@unlink($file);
 			throw $e;
 		}
@@ -597,167 +614,121 @@ class CerberusParser {
 		return false;
 	}
 	
-	/**
-	 * Enter description here...
-	 *
-	 * @param object $mime
-	 * @return CerberusParserMessage
-	 */
-	static public function parseMime($mime, $full_filename) {
-		$struct = mailparse_msg_get_structure($mime);
-		$msginfo = mailparse_msg_get_part_data($mime);
+	static public function parseMimeFile($full_filename) {
+		$mm = new MimeMessage("file", $full_filename);
+		return self::_parseMime($mm);
+	}
+	
+	static public function parseMimeString($string) {
+		$mm = new MimeMessage("var", rtrim($string, PHP_EOL) . PHP_EOL);
+		return self::_parseMime($mm);
+	}
+	
+	static private function _recurseMimeParts($part, &$results) {
+		if(!is_array($results))
+			$results = array();
 		
-		$message = new CerberusParserMessage();
-		@$message->encoding = $msginfo['charset'];
-		@$message->body_encoding = $message->encoding; // default
-
-		// Decode headers
-		@$message->headers = $msginfo['headers'];
-		
-		if(is_array($message->headers))
-		foreach($message->headers as $header_name => $header_val) {
-			if(is_array($header_val)) {
-				foreach($header_val as $idx => $val) {
-					$message->headers[$header_name][$idx] = self::fixQuotePrintableString($val, $message->body_encoding);
-				}
-			} else {
-				$message->headers[$header_name] = self::fixQuotePrintableString($header_val, $message->body_encoding);
-			}
+		// Normalize charsets
+		switch(strtolower($part->data['charset'])) {
+			case 'gb2312':
+				$part->data['charset'] = 'gbk';
+				break;
 		}
 		
-		$settings = DevblocksPlatform::getPluginSettingsService();
-		$is_attachments_enabled = $settings->get('cerberusweb.core',CerberusSettings::ATTACHMENTS_ENABLED,CerberusSettingsDefaults::ATTACHMENTS_ENABLED);
-		$attachments_max_size = $settings->get('cerberusweb.core',CerberusSettings::ATTACHMENTS_MAX_SIZE,CerberusSettingsDefaults::ATTACHMENTS_MAX_SIZE);
+		$do_ignore = false;
+		$do_recurse = true;
 		
-		$ignore_mime_prefixes = array();
+		switch(strtolower($part->data['content-type'])) {
+			case 'multipart/alternative':
+			case 'multipart/mixed':
+			case 'multipart/related':
+			case 'multipart/report':
+			case 'text/plain; (error)':
+				$do_ignore = true;
+				break;
+				
+			case 'message/rfc822':
+				$do_recurse = false;
+		}
 		
-		$message_counter_attached = 0;
-		$message_counter_delivery_status = 0;
+		if(!$do_ignore)
+			$results[spl_object_hash($part)] = $part;
 		
-		foreach($struct as $st) {
-			// Are we ignoring specific nested mime parts?
-			$skip = false;
-			foreach($ignore_mime_prefixes as $ignore) {
-				if(0 == strcmp(substr($st, 0, strlen($ignore)), $ignore)) {
-					$skip = true;
-				}
-			}
-			
-			if($skip)
+		if($do_recurse)
+		for($n = 0; $n < $part->get_child_count(); $n++)
+			self::_recurseMimeParts($part->get_child($n), $results);
+	}
+	
+	static private function _getMimePartFilename($part) {
+		$content_filename = isset($part->data['disposition-filename']) ? $part->data['disposition-filename'] : '';
+		
+		if(empty($content_filename))
+			$content_filename = isset($part->data['content-name']) ? $part->data['content-name'] : '';
+		
+		return CerberusParser::fixQuotePrintableString($content_filename, $part->data['charset']);
+	}
+	
+	/**
+	 * @param MimeMessage $mm
+	 * @return CerberusParserMessage
+	 */
+	static private function _parseMime($mm) {
+		$message = new CerberusParserMessage();
+		@$message->encoding = $mm->data['charset'];
+		@$message->body_encoding = $message->encoding; // default
+		
+		$message->raw_headers = $mm->extract_headers(MAILPARSE_EXTRACT_RETURN);
+		$message->headers = CerberusParser::fixQuotePrintableArray($mm->data['headers']);
+		
+		$mime_parts = array();
+		self::_recurseMimeParts($mm, $mime_parts);
+		
+		if(is_array($mime_parts))
+		foreach($mime_parts as $section_idx => $section) {
+			if(!isset($section->data)) {
+				unset($mime_parts[$section_idx]);
 				continue;
-			
-			$section = mailparse_msg_get_part($mime, $st);
-			$info = mailparse_msg_get_part_data($section);
-
-			// Overrides
-			switch(strtolower($info['charset'])) {
-				case 'gb2312':
-					$info['charset'] = 'gbk';
-					break;
 			}
-
-			// See if we have a content filename
 			
-			$content_filename = isset($info['disposition-filename']) ? $info['disposition-filename'] : '';
-			
-			if(empty($content_filename))
-				$content_filename = isset($info['content-name']) ? $info['content-name'] : '';
-			
-			$content_filename = self::fixQuotePrintableString($content_filename, $info['charset']);
-			
-			// Content type
-			
-			$content_type = isset($info['content-type']) ? $info['content-type'] : '';
-			
-			// handle parts that shouldn't have a content-name, don't handle twice
-			$handled = false;
+			$content_type = strtolower(isset($section->data['content-type']) ? $section->data['content-type'] : '');
+			$content_filename = self::_getMimePartFilename($section);
 			
 			if(empty($content_filename)) {
-				switch(strtolower($content_type)) {
-					case 'text/calendar':
-						$content_filename = 'calendar.ics';
-						break;
-						
+				$handled = false;
+				
+				switch($content_type) {
 					case 'text/plain':
-						$text = mailparse_msg_extract_part_file($section, $full_filename, NULL);
-						
-						if(isset($info['charset']) && !empty($info['charset'])) {
-							
-							// Extract inline bounces as attachments
-							
-							$bounce_token = '------ This is a copy of the message, including all the headers. ------';
-							
-							if(false !== ($bounce_pos = @mb_strpos($text, $bounce_token, 0, $info['charset']))) {
-								$bounce_text = mb_substr($text, $bounce_pos + strlen($bounce_token), strlen($text), $info['charset']);
-								$text = mb_substr($text, 0, $bounce_pos, $info['charset']);
-								
-								$bounce_text = self::convertEncoding($bounce_text);
-								
-								$tmpname = ParserFile::makeTempFilename();
-								$rfc_attach = new ParserFile();
-								$rfc_attach->setTempFile($tmpname,'message/rfc822');
-								@file_put_contents($tmpname, $bounce_text);
-								$rfc_attach->file_size = filesize($tmpname);
-								$rfc_attach->mime_type = 'text/plain';
-								$rfc_attach_filename = sprintf("attached_message_%03d.txt",
-									++$message_counter_attached
-								);
-								$message->files[$rfc_attach_filename] = $rfc_attach;
-								unset($rfc_attach);
-							}
-							
-							$message->body_encoding = $info['charset'];
-							$text = self::convertEncoding($text, $info['charset']);
-						}
-						
-						$message->body .= $text;
-						
-						unset($text);
-						$handled = true;
+						$handled = self::_handleMimepartTextPlain($section, $message);
 						break;
-					
+						
 					case 'text/html':
-						@$text = mailparse_msg_extract_part_file($section, $full_filename, NULL);
-						
-						if(isset($info['charset']) && !empty($info['charset'])) {
-							$text = self::convertEncoding($text, $info['charset']);
-						}
-						
-						if(0 != strlen(trim($text)))
-							$message->htmlbody .= $text;
-						
-						unset($text);
-						$handled = true;
+						$handled = self::_handleMimepartTextHtml($section, $message);
 						break;
-						 
+						
+					case 'text/calendar':
+						$content_filename = sprintf("calendar_%s.ics", uniqid());
+						break;
+						
 					case 'message/delivery-status':
-						@$message_content = mailparse_msg_extract_part_file($section, $full_filename, NULL);
-						$message_counter_delivery_status++;
+						$message_content = $section->extract_body(MAILPARSE_EXTRACT_RETURN);
 
 						$tmpname = ParserFile::makeTempFilename();
 						$bounce_attach = new ParserFile();
-						$bounce_attach->setTempFile($tmpname,'message/delivery-status');
+						$bounce_attach->setTempFile($tmpname, 'message/delivery-status');
 						@file_put_contents($tmpname, $message_content);
 						$bounce_attach->file_size = filesize($tmpname);
 						$bounce_attach->mime_type = 'message/delivery-status';
-						$bounce_attach_filename = sprintf("delivery_status_%03d.txt",
-							$message_counter_delivery_status
-						);
+						$bounce_attach_filename = sprintf("delivery_status_%s.txt", uniqid());
 						$message->files[$bounce_attach_filename] = $bounce_attach;
-						unset($bounce_attach);
 						$handled = true;
-						
-						// Skip any nested parts in this message/rfc822 parent
-						$ignore_mime_prefixes[] = $st . '.';
 						break;
 
 					case 'message/feedback-report':
-						$content_filename = 'feedback_report.txt';
+						$content_filename = sprintf("feedback_report_%s.txt", uniqid());
 						break;
 						
 					case 'message/rfc822':
-						@$message_content = mailparse_msg_extract_part_file($section, $full_filename, NULL);
-						$message_counter_attached++;
+						$message_content = $section->extract_body(MAILPARSE_EXTRACT_RETURN);
 
 						$tmpname = ParserFile::makeTempFilename();
 						$rfc_attach = new ParserFile();
@@ -765,25 +736,19 @@ class CerberusParser {
 						@file_put_contents($tmpname, $message_content);
 						$rfc_attach->file_size = filesize($tmpname);
 						$rfc_attach->mime_type = $content_type;
-						$rfc_attach_filename = sprintf("attached_message_%03d.txt",
-							$message_counter_attached
-						);
+						$rfc_attach_filename = sprintf("attached_message_%s.txt", uniqid());
 						$message->files[$rfc_attach_filename] = $rfc_attach;
-						unset($rfc_attach);
 						$handled = true;
-						
-						// Skip any nested parts in this message/rfc822 parent
-						$ignore_mime_prefixes[] = $st . '.';
 						break;
 						
 					case 'image/gif':
 					case 'image/jpg':
 					case 'image/jpeg':
 					case 'image/png':
-						if(isset($info['content-id'])) {
-							$content_filename = DevblocksPlatform::strToPermalink($info['content-id']);
+						if(isset($section->data['content-id']) && !empty($section->data['content-id'])) {
+							$content_filename = DevblocksPlatform::strToPermalink($section->data['content-id']);
 						} else {
-							$content_filename = 'untitled';
+							$content_filename = sprintf("image_%s", uniqid());
 						}
 						
 						switch(strtolower($content_type)) {
@@ -798,44 +763,46 @@ class CerberusParser {
 								$content_filename .= ".png";
 								break;
 						}
-						
 						break;
 				}
-			}
-
-			// whether or not it has a content-name, we need to add it as an attachment (if not already handled)
-			if(!$handled) {
-				if (false === strpos(strtolower($info['content-type']),'multipart')) {
-					if(!$is_attachments_enabled) {
-						continue; // skip attachment
-					}
-					$attach = new ParseFileBuffer($section, $info, $full_filename);
-					
-					// [TODO] This could be more efficient by not even saving in the first place above:
-					// Make sure our attachment is under the max preferred size
-					if(filesize($attach->tmpname) > ($attachments_max_size * 1024000)) {
-						@unlink($attach->tmpname);
-						continue;
-					}
-					
-					if(empty($content_filename))
-						$content_filename = 'unnamed_attachment';
-					
-					// content-name is not necessarily unique...
-					if(isset($message->files[$content_filename])) {
-						$j=1;
-						while (isset($message->files[$content_filename . '(' . $j . ')'])) {
-							$j++;
-						}
-						$content_filename = $content_filename . '(' . $j . ')';
-					}
-					
-					$message->files[$content_filename] = $attach;
-				}
+				
+				if($handled)
+					unset($mime_parts[$section_idx]);
 			}
 		}
+
+		// Handle file attachments
 		
-		// generate the plaintext part (if necessary)
+		$settings = DevblocksPlatform::getPluginSettingsService();
+		$is_attachments_enabled = $settings->get('cerberusweb.core',CerberusSettings::ATTACHMENTS_ENABLED,CerberusSettingsDefaults::ATTACHMENTS_ENABLED);
+		$attachments_max_size = $settings->get('cerberusweb.core',CerberusSettings::ATTACHMENTS_MAX_SIZE,CerberusSettingsDefaults::ATTACHMENTS_MAX_SIZE);
+		
+		if($is_attachments_enabled)
+		foreach($mime_parts as $section_idx => $section) {
+			// Pre-check: If the part is larger than our max allowed attachments, skip before writing
+			if(isset($section->data['disposition-size']) && $section->data['disposition-size'] > ($attachments_max_size * 1024000)) {
+				continue;
+			}
+			
+			$content_type = strtolower(isset($section->data['content-type']) ? $section->data['content-type'] : '');
+			$content_filename = self::_getMimePartFilename($section);
+			
+			$attach = new ParseFileBuffer($section);
+			
+			// Make sure our attachment is under the max preferred size
+			if(filesize($attach->tmpname) > ($attachments_max_size * 1024000)) {
+				@unlink($attach->tmpname);
+				continue;
+			}
+			
+			if(empty($content_filename))
+				$content_filename = sprintf("unnamed_attachment_%s", uniqid());
+			
+			$message->files[$content_filename] = $attach;
+		}
+		
+		// Generate the plaintext part (if necessary)
+		
 		if(empty($message->body) && !empty($message->htmlbody)) {
 			$message->body = DevblocksPlatform::stripHTML($message->htmlbody);
 		}
@@ -843,36 +810,56 @@ class CerberusParser {
 		return $message;
 	}
 
-	/**
-	 * Enter description here...
-	 *
-	 * @param string $source
-	 * @return $filename
-	 */
-	static public function saveMimeToFile($source, $path=null) {
-		if(empty($path))
-			$path = APP_TEMP_PATH . DIRECTORY_SEPARATOR;
-		else
-			$path = $path . DIRECTORY_SEPARATOR;
-		 
-		do {
-			$unique = sprintf("%s.%04d.msg",
-				time(),
-				mt_rand(0,9999)
-			);
-			$filename = $path . $unique;
-		} while(file_exists($filename));
-
-		$fp = fopen($filename,'w');
-
-		if($fp) {
-			fwrite($fp,$source,strlen($source));
-			@fclose($fp);
+	static private function _handleMimepartTextPlain($section, CerberusParserMessage $message) {
+		@$transfer_encoding = $section->data['transfer-encoding'];
+		$text = $section->extract_body(MAILPARSE_EXTRACT_RETURN);
+		
+		if(isset($section->data['charset']) && !empty($section->data['charset'])) {
+			
+			// Extract inline bounces as attachments
+			
+			$bounce_token = '------ This is a copy of the message, including all the headers. ------';
+			
+			if(false !== ($bounce_pos = @mb_strpos($text, $bounce_token, 0, $section->data['charset']))) {
+				$bounce_text = mb_substr($text, $bounce_pos + strlen($bounce_token), strlen($text), $section->data['charset']);
+				$text = mb_substr($text, 0, $bounce_pos, $section->data['charset']);
+				
+				$bounce_text = self::convertEncoding($bounce_text);
+				
+				$tmpname = ParserFile::makeTempFilename();
+				$rfc_attach = new ParserFile();
+				$rfc_attach->setTempFile($tmpname,'message/rfc822');
+				@file_put_contents($tmpname, $bounce_text);
+				$rfc_attach->file_size = filesize($tmpname);
+				$rfc_attach->mime_type = 'text/plain';
+				$rfc_attach_filename = sprintf("attached_message_%s.txt", uniqid());
+				$message->files[$rfc_attach_filename] = $rfc_attach;
+				unset($rfc_attach);
+			}
+			
+			$message->body_encoding = $section->data['charset'];
+			$text = self::convertEncoding($text, $section->data['charset']);
 		}
-
-		return $filename;
+		
+		$message->body .= $text;
+		
+		return true;
 	}
-
+	
+	static private function _handleMimepartTextHtml($section, CerberusParserMessage $message) {
+		@$transfer_encoding = $section->data['transfer-encoding'];
+		$text = $section->extract_body(MAILPARSE_EXTRACT_RETURN);
+		
+		if(isset($section->data['charset']) && !empty($section->data['charset'])) {
+			$text = self::convertEncoding($text, $section->data['charset']);
+		}
+		
+		if(0 != strlen(trim($text)))
+			$message->htmlbody .= $text;
+		
+		return true;
+	}
+	
 	/**
 	 * @param CerberusParserMessage $message
 	 * @return integer
@@ -884,34 +871,37 @@ class CerberusParser {
 		 */
 		$logger = DevblocksPlatform::getConsoleLog();
 		$url_writer = DevblocksPlatform::getUrlService();
-		
-		$headers =& $message->headers;
 
-		/*
-		 * [mdf] Check attached files before creating the ticket because we may need to
-		 * overwrite the message-id also store any contents of rfc822 files so we can
-		 * include them after the body
-		 */
-		// [TODO] Refactor
-		if(is_array($message->files))
-		foreach ($message->files as $filename => $file) { /* @var $file ParserFile */
-			switch($file->mime_type) {
-				case 'message/rfc822':
-					$full_filename = $file->tmpname;
-					$mail = mailparse_msg_parse_file($full_filename);
-					$struct = mailparse_msg_get_structure($mail);
-					$msginfo = mailparse_msg_get_part_data($mail);
-					
-					$inline_headers = $msginfo['headers'];
-					if(isset($headers['from']) && (strtolower(substr($headers['from'], 0, 11))=='postmaster@' || strtolower(substr($headers['from'], 0, 14))=='mailer-daemon@')) {
-						$headers['in-reply-to'] = $inline_headers['message-id'];
-					}
-				break;
-			}
-		}
+		// Make sure the object is well-formatted and ready to send
+		$message->build();
 		
 		// Parse headers into $model
 		$model = new CerberusParserModel($message); /* @var $model CerberusParserModel */
+		
+		$log_headers = array(
+			'from' => 'From',
+			'to' => 'To',
+			'delivered-to' => 'Delivered-To',
+			'envelope-to' => 'Envelope-To',
+			'subject' => 'Subject',
+			'date' => 'Date',
+			'message-id' => 'Message-Id',
+			'in-reply-to' => 'In-Reply-To',
+			'references' => 'References',
+		);
+		
+		foreach($log_headers as $log_header => $log_label) {
+			if(!isset($message->headers[$log_header]))
+				continue;
+			
+			$vals = $message->headers[$log_header];
+			
+			if(!is_array($vals))
+				$vals = array($vals);
+			
+			foreach($vals as $val)
+				$logger->info("[Parser] [Headers] " . $log_label . ': ' . $val);
+		}
 		
 		if(false == ($validated = $model->validate()))
 			return $validated; // false or null
@@ -1117,15 +1107,15 @@ class CerberusParser {
 							switch(strtolower($matches[1])) {
 								case 'o':
 								case 'open':
-									$properties['closed'] = 0;
+									$properties['status_id'] = Model_Ticket::STATUS_OPEN;
 									break;
 								case 'w':
 								case 'waiting':
-									$properties['closed'] = 2;
+									$properties['status_id'] = Model_Ticket::STATUS_WAITING;
 									break;
 								case 'c':
 								case 'closed':
-									$properties['closed'] = 1;
+									$properties['status_id'] = Model_Ticket::STATUS_CLOSED;
 									break;
 							}
 							
@@ -1173,7 +1163,6 @@ class CerberusParser {
 					}
 					
 					$properties['content'] = ltrim($body);
-					
 					
 					CerberusMail::sendTicketMessage($properties);
 
@@ -1256,6 +1245,10 @@ class CerberusParser {
 			DAO_Message::ADDRESS_ID => $model->getSenderAddressModel()->id,
 			DAO_Message::WORKER_ID => $model->isSenderWorker() ? $model->getSenderWorkerModel()->id : 0,
 		);
+		
+		if(isset($message->headers['message-id']))
+			$fields[DAO_Message::HASH_HEADER_MESSAGE_ID] = sha1($message->headers['message-id']);
+		
 		$model->setMessageId(DAO_Message::create($fields));
 
 		$message_id = $model->getMessageId();
@@ -1268,8 +1261,7 @@ class CerberusParser {
 		Storage_MessageContent::put($model->getMessageId(), $message->body);
 		
 		// Save headers
-		if(is_array($headers))
-			DAO_MessageHeader::creates($model->getMessageId(), $headers);
+		DAO_MessageHeaders::upsert($model->getMessageId(), $message->raw_headers);
 		
 		// [mdf] Loop through files to insert attachment records in the db, and move temporary files
 		foreach ($message->files as $filename => $file) { /* @var $file ParserFile */
@@ -1438,13 +1430,12 @@ class CerberusParser {
 			$change_fields = array(
 				DAO_Ticket::MASK => CerberusApplication::generateTicketMask(),
 				DAO_Ticket::SUBJECT => $model->getSubject(),
-				DAO_Ticket::IS_CLOSED => 0,
+				DAO_Ticket::STATUS_ID => Model_Ticket::STATUS_OPEN,
 				DAO_Ticket::FIRST_WROTE_ID => intval($model->getSenderAddressModel()->id),
 				DAO_Ticket::LAST_WROTE_ID => intval($model->getSenderAddressModel()->id),
 				DAO_Ticket::CREATED_DATE => time(),
 				DAO_Ticket::UPDATED_DATE => time(),
 				DAO_Ticket::ORG_ID => intval($model->getSenderAddressModel()->contact_org_id),
-				DAO_Ticket::LAST_ACTION_CODE => CerberusTicketActionCode::TICKET_OPENED,
 				DAO_Ticket::FIRST_MESSAGE_ID => $model->getMessageId(),
 				DAO_Ticket::LAST_MESSAGE_ID => $model->getMessageId(),
 				DAO_Ticket::GROUP_ID => $deliver_to_group->id, // this triggers move rules
@@ -1468,12 +1459,9 @@ class CerberusParser {
 			// Re-open and update our date on new replies
 			DAO_Ticket::update($model->getTicketId(),array(
 				DAO_Ticket::UPDATED_DATE => time(),
-				DAO_Ticket::IS_WAITING => 0,
-				DAO_Ticket::IS_CLOSED => 0,
-				DAO_Ticket::IS_DELETED => 0,
+				DAO_Ticket::STATUS_ID => Model_Ticket::STATUS_OPEN,
 				DAO_Ticket::LAST_MESSAGE_ID => $model->getMessageId(),
 				DAO_Ticket::LAST_WROTE_ID => $model->getSenderAddressModel()->id,
-				DAO_Ticket::LAST_ACTION_CODE => CerberusTicketActionCode::TICKET_CUSTOMER_REPLY,
 			));
 			// [TODO] The TICKET_CUSTOMER_REPLY should be sure of this message address not being a worker
 		}
@@ -1587,6 +1575,17 @@ class CerberusParser {
 		}
 		
 		return $text;
+	}
+	
+	static function fixQuotePrintableArray($input, $encoding=null) {
+		array_walk_recursive($input, function(&$v, $k) {
+			if(!is_string($v))
+				return;
+			
+			$v = self::fixQuotePrintableString($v);
+		});
+		
+		return $input;
 	}
 	
 	static function fixQuotePrintableString($input, $encoding=null) {

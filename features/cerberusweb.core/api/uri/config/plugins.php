@@ -2,17 +2,17 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
 | The latest version of this license can be found here:
-| http://cerberusweb.com/license
+| http://cerb.io/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://www.cerbweb.com	    http://www.webgroupmedia.com/
+|	http://cerb.io	    http://webgroup.media
 ***********************************************************************/
 
 class PageSection_SetupPlugins extends Extension_PageSection {
@@ -87,7 +87,7 @@ class PageSection_SetupPlugins extends Extension_PageSection {
 		$plugin = DevblocksPlatform::getPlugin($plugin_id);
 		$tpl->assign('plugin', $plugin);
 
-		$is_uninstallable = (APP_STORAGE_PATH == substr($plugin->getStoragePath(), 0, strlen(APP_STORAGE_PATH)));
+		$is_uninstallable = CERB_FEATURES_PLUGIN_LIBRARY && (APP_STORAGE_PATH == substr($plugin->getStoragePath(), 0, strlen(APP_STORAGE_PATH)));
 		$tpl->assign('is_uninstallable', $is_uninstallable);
 		
 		// Check requirements
@@ -129,7 +129,7 @@ class PageSection_SetupPlugins extends Extension_PageSection {
 		try {
 			$plugin = DevblocksPlatform::getPlugin($plugin_id);
 			
-			if($uninstall) {
+			if($uninstall && CERB_FEATURES_PLUGIN_LIBRARY) {
 				$plugin->uninstall();
 				DAO_Platform::cleanupPluginTables();
 				DAO_Platform::maint();

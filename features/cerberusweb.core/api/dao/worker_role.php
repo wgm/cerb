@@ -2,17 +2,17 @@
 /************************************************************************
  | Cerb(tm) developed by Webgroup Media, LLC.
  |-----------------------------------------------------------------------
- | All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
+ | All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
  |   unless specifically noted otherwise.
  |
  | This source code is released under the Devblocks Public License.
  | The latest version of this license can be found here:
- | http://cerberusweb.com/license
+ | http://cerb.io/license
  |
  | By using this software, you acknowledge having read this license
  | and agree to be bound thereby.
  | ______________________________________________________________________
- |	http://www.cerbweb.com	    http://www.webgroupmedia.com/
+ |	http://cerb.io	    http://webgroup.media
  ***********************************************************************/
 
 class DAO_WorkerRole extends Cerb_ORMHelper {
@@ -108,6 +108,9 @@ class DAO_WorkerRole extends Cerb_ORMHelper {
 					$roles[$role_id] = $role;
 				}
 			}
+			
+			if(!is_array($roles))
+				return false;
 
 			$cache->save($roles, self::_CACHE_WORKER_ROLES_PREFIX.$worker_id);
 		}
@@ -119,9 +122,15 @@ class DAO_WorkerRole extends Cerb_ORMHelper {
 		$cache = DevblocksPlatform::getCacheService();
 
 		if($nocache || null === ($privs = $cache->load(self::_CACHE_WORKER_PRIVS_PREFIX.$worker_id))) {
-			$worker = DAO_Worker::get($worker_id);
-			$memberships = $worker->getMemberships();
-			$roles = DAO_WorkerRole::getRolesByWorker($worker_id);
+			if(false === ($worker = DAO_Worker::get($worker_id)))
+				return false;
+			
+			if(false === ($memberships = $worker->getMemberships()))
+				return false;
+			
+			if(false === ($roles = DAO_WorkerRole::getRolesByWorker($worker_id)))
+				return false;
+			
 			$privs = array();
 			
 			foreach($roles as $role_id => $role) {
@@ -154,6 +163,10 @@ class DAO_WorkerRole extends Cerb_ORMHelper {
 				null,
 				Cerb_ORMHelper::OPT_GET_MASTER_ONLY
 			);
+			
+			if(!is_array($roles))
+				return false;
+			
 			$cache->save($roles, self::_CACHE_ROLES_ALL);
 		}
 		
@@ -178,7 +191,7 @@ class DAO_WorkerRole extends Cerb_ORMHelper {
 		;
 		
 		if($options & Cerb_ORMHelper::OPT_GET_MASTER_ONLY) {
-			$rs = $db->ExecuteMaster($sql);
+			$rs = $db->ExecuteMaster($sql, _DevblocksDatabaseManager::OPT_NO_READ_AFTER_WRITE);
 		} else {
 			$rs = $db->ExecuteSlave($sql);
 		}
@@ -207,6 +220,9 @@ class DAO_WorkerRole extends Cerb_ORMHelper {
 	 */
 	static private function _getObjectsFromResult($rs) {
 		$objects = array();
+		
+		if(!($rs instanceof mysqli_result))
+			return false;
 		
 		while($row = mysqli_fetch_assoc($rs)) {
 			$object = new Model_WorkerRole();
@@ -371,7 +387,6 @@ class Context_WorkerRole extends Extension_DevblocksContext {
 		);
 	}
 	
-	// [TODO] Interface
 	function getDefaultProperties() {
 		return array(
 		);

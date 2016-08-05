@@ -2,17 +2,17 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
 | The latest version of this license can be found here:
-| http://cerberusweb.com/license
+| http://cerb.io/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://www.cerbweb.com	    http://www.webgroupmedia.com/
+|	http://cerb.io	    http://webgroup.media
 ***********************************************************************/
 
 class DAO_Attachment extends Cerb_ORMHelper {
@@ -30,7 +30,8 @@ class DAO_Attachment extends Cerb_ORMHelper {
 		$db = DevblocksPlatform::getDatabaseService();
 		
 		$sql = "INSERT INTO attachment () VALUES ()";
-		$db->ExecuteMaster($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
+		if(false == ($db->ExecuteMaster($sql)))
+			return false;
 		$id = $db->LastInsertId();
 		
 		self::update($id, $fields);
@@ -83,6 +84,9 @@ class DAO_Attachment extends Cerb_ORMHelper {
 	
 	private static function _getObjectsFromResult($rs) {
 		$objects = array();
+		
+		if(!($rs instanceof mysqli_result))
+			return false;
 		
 		while($row = mysqli_fetch_assoc($rs)) {
 			$object = new Model_Attachment();
@@ -189,7 +193,7 @@ class DAO_Attachment extends Cerb_ORMHelper {
 	public static function getSearchQueryComponents($columns, $params, $sortBy=null, $sortAsc=null) {
 		$fields = SearchFields_Attachment::getFields();
 		
-		list($tables,$wheres) = parent::_parseSearchParams($params, array(),$fields,$sortBy);
+		list($tables,$wheres) = parent::_parseSearchParams($params, array(), 'SearchFields_Attachment', $sortBy);
 		
 		$select_sql = sprintf("SELECT ".
 			"a.id as %s, ".
@@ -220,7 +224,7 @@ class DAO_Attachment extends Cerb_ORMHelper {
 		$where_sql = "".
 			(!empty($wheres) ? sprintf("WHERE %s ",implode(' AND ',$wheres)) : "WHERE 1 ");
 			
-		$sort_sql = self::_buildSortClause($sortBy, $sortAsc, $fields);
+		$sort_sql = self::_buildSortClause($sortBy, $sortAsc, $fields, $select_sql, 'SearchFields_Attachment');
 		
 		$result = array(
 			'primary_table' => 'a',
@@ -263,7 +267,9 @@ class DAO_Attachment extends Cerb_ORMHelper {
 			$where_sql.
 			($has_multiple_values ? 'GROUP BY a.id ' : '').
 			$sort_sql;
-		$rs = $db->SelectLimit($sql,$limit,$page*$limit) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
+		
+		if(false == ($rs = $db->SelectLimit($sql,$limit,$page*$limit)))
+			return false;
 		
 		$results = array();
 		
@@ -291,7 +297,7 @@ class DAO_Attachment extends Cerb_ORMHelper {
 	}
 };
 
-class SearchFields_Attachment implements IDevblocksSearchFields {
+class SearchFields_Attachment extends DevblocksSearchFields {
 	const ID = 'a_id';
 	const DISPLAY_NAME = 'a_display_name';
 	const MIME_TYPE = 'a_mime_type';
@@ -305,10 +311,40 @@ class SearchFields_Attachment implements IDevblocksSearchFields {
 	const LINK_CONTEXT = 'al_context';
 	const LINK_CONTEXT_ID = 'al_context_id';
 	
+	static private $_fields = null;
+	
+	static function getPrimaryKey() {
+		return 'a.id';
+	}
+	
+	static function getCustomFieldContextKeys() {
+		return array(
+			CerberusContexts::CONTEXT_ATTACHMENT => new DevblocksSearchFieldContextKeys('a.id', self::ID),
+		);
+	}
+	
+	static function getWhereSQL(DevblocksSearchCriteria $param) {
+		if('cf_' == substr($param->field, 0, 3)) {
+			return self::_getWhereSQLFromCustomFields($param);
+		} else {
+			return $param->getWhereSQL(self::getFields(), self::getPrimaryKey());
+		}
+	}
+	
 	/**
 	 * @return DevblocksSearchField[]
 	 */
 	static function getFields() {
+		if(is_null(self::$_fields))
+			self::$_fields = self::_getFields();
+		
+		return self::$_fields;
+	}
+	
+	/**
+	 * @return DevblocksSearchField[]
+	 */
+	static function _getFields() {
 		$translate = DevblocksPlatform::getTranslationService();
 		
 		$columns = array(
@@ -436,17 +472,18 @@ class Storage_Attachments extends Extension_DevblocksStorageSchema {
 
 		$storage = DevblocksPlatform::getStorageService($profile);
 
-		// Save to storage
-		if(false === ($storage_key = $storage->put('attachments', $id, $contents)))
-			return false;
-			
-		if(is_resource($contents)) {
+		if(is_string($contents)) {
+			$storage_size = strlen($contents);
+		} else if(is_resource($contents)) {
 			$stats = fstat($contents);
 			$storage_size = $stats['size'];
 		} else {
-			$storage_size = strlen($contents);
-			unset($contents);
+			return false;
 		}
+		
+		// Save to storage
+		if(false === ($storage_key = $storage->put('attachments', $id, $contents)))
+			return false;
 		
 		// Update storage key
 		DAO_Attachment::update($id, array(
@@ -465,7 +502,9 @@ class Storage_Attachments extends Extension_DevblocksStorageSchema {
 		$db = DevblocksPlatform::getDatabaseService();
 		
 		$sql = sprintf("SELECT storage_extension, storage_key, storage_profile_id FROM attachment WHERE id IN (%s)", implode(',',$ids));
-		$rs = $db->ExecuteSlave($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
+		
+		if(false == ($rs = $db->ExecuteSlave($sql)))
+			return false;
 		
 		// Delete the physical files
 		
@@ -505,12 +544,16 @@ class Storage_Attachments extends Extension_DevblocksStorageSchema {
 			"FROM attachment ".
 			"WHERE attachment.updated < %d ".
 			"AND (attachment.storage_extension = %s AND attachment.storage_profile_id = %d) ".
-			"ORDER BY attachment.id ASC ",
+			"ORDER BY attachment.id ASC ".
+			"LIMIT 500",
 				time()-(86400*$archive_after_days),
 				$db->qstr($src_profile->extension_id),
 				$src_profile->id
 		);
 		$rs = $db->ExecuteSlave($sql);
+		
+		if(!($rs instanceof mysqli_result))
+			return false;
 		
 		while($row = mysqli_fetch_assoc($rs)) {
 			self::_migrate($dst_profile, $row);
@@ -543,6 +586,9 @@ class Storage_Attachments extends Extension_DevblocksStorageSchema {
 				$dst_profile->id
 		);
 		$rs = $db->ExecuteSlave($sql);
+		
+		if(!($rs instanceof mysqli_result))
+			return false;
 		
 		while($row = mysqli_fetch_assoc($rs)) {
 			self::_migrate($dst_profile, $row, true);
@@ -586,7 +632,7 @@ class Storage_Attachments extends Extension_DevblocksStorageSchema {
 		// Do as quicker strings if under 1MB?
 		$is_small = ($src_size < 1000000) ? true : false;
 		
-		// Allocate a temporary file for retrieving content
+		// If smaller than 1MB, load into a variable
 		if($is_small) {
 			if(false === ($data = $src_engine->get($ns, $src_key))) {
 				$logger->error(sprintf("[Storage] Error reading %s key (%s) from (%s)",
@@ -596,6 +642,7 @@ class Storage_Attachments extends Extension_DevblocksStorageSchema {
 				));
 				return;
 			}
+		// Otherwise, allocate a temporary file handle
 		} else {
 			$fp_in = DevblocksPlatform::getTempFile();
 			if(false === $src_engine->get($ns, $src_key, $fp_in)) {
@@ -637,7 +684,9 @@ class Storage_Attachments extends Extension_DevblocksStorageSchema {
 					$src_id,
 					$dst_profile->extension_id
 				));
-				fclose($fp_in);
+				
+				if(is_resource($fp_in))
+					fclose($fp_in);
 				return;
 			}
 		}
@@ -654,7 +703,8 @@ class Storage_Attachments extends Extension_DevblocksStorageSchema {
 			unset($data);
 		} else {
 			@unlink(DevblocksPlatform::getTempFileInfo($fp_in));
-			fclose($fp_in);
+			if(is_resource($fp_in))
+				fclose($fp_in);
 		}
 		
 		$src_engine->delete($ns, $src_key);
@@ -708,6 +758,9 @@ class View_AttachmentLink extends C4_AbstractView implements IAbstractView_Subto
 			$this->renderSortAsc,
 			$this->renderTotal
 		);
+		
+		$this->_lazyLoadCustomFieldsIntoObjects($objects, 'SearchFields_AttachmentLink');
+		
 		return $objects;
 	}
 	
@@ -744,6 +797,7 @@ class View_AttachmentLink extends C4_AbstractView implements IAbstractView_Subto
 	function getSubtotalCounts($column) {
 		$counts = array();
 		$fields = $this->getFields();
+		$context = CerberusContexts::CONTEXT_ATTACHMENT_LINK;
 
 		if(!isset($fields[$column]))
 			return array();
@@ -751,7 +805,7 @@ class View_AttachmentLink extends C4_AbstractView implements IAbstractView_Subto
 		switch($column) {
 			case SearchFields_AttachmentLink::ATTACHMENT_DISPLAY_NAME:
 			case SearchFields_AttachmentLink::ATTACHMENT_MIME_TYPE:
-				$counts = $this->_getSubtotalCountForStringColumn('DAO_AttachmentLink', $column);
+				$counts = $this->_getSubtotalCountForStringColumn($context, $column);
 				break;
 
 			case SearchFields_AttachmentLink::ATTACHMENT_STORAGE_EXTENSION:
@@ -762,7 +816,7 @@ class View_AttachmentLink extends C4_AbstractView implements IAbstractView_Subto
 					$label_map[$k] = $mft->name;
 				}
 				
-				$counts = $this->_getSubtotalCountForStringColumn('DAO_AttachmentLink', $column, $label_map);
+				$counts = $this->_getSubtotalCountForStringColumn($context, $column, $label_map);
 				break;
 				
 			case SearchFields_AttachmentLink::LINK_CONTEXT:
@@ -773,7 +827,7 @@ class View_AttachmentLink extends C4_AbstractView implements IAbstractView_Subto
 					$label_map[$k] = $mft->name;
 				}
 				
-				$counts = $this->_getSubtotalCountForStringColumn('DAO_AttachmentLink', $column, $label_map, 'in', 'contexts[]');
+				$counts = $this->_getSubtotalCountForStringColumn($context, $column, $label_map, 'in', 'contexts[]');
 				break;
 		}
 		
@@ -784,7 +838,7 @@ class View_AttachmentLink extends C4_AbstractView implements IAbstractView_Subto
 		$search_fields = SearchFields_AttachmentLink::getFields();
 		
 		$fields = array(
-			'_fulltext' => 
+			'text' => 
 				array(
 					'type' => DevblocksSearchCriteria::TYPE_TEXT,
 					'options' => array('param_key' => SearchFields_AttachmentLink::ATTACHMENT_DISPLAY_NAME, 'match' => DevblocksSearchCriteria::OPTION_TEXT_PARTIAL),
@@ -845,20 +899,16 @@ class View_AttachmentLink extends C4_AbstractView implements IAbstractView_Subto
 		return $fields;
 	}	
 	
-	function getParamsFromQuickSearchFields($fields) {
-		$search_fields = $this->getQuickSearchFields();
-		$params = DevblocksSearchCriteria::getParamsFromQueryFields($fields, $search_fields);
-
-		// Handle virtual fields and overrides
-		if(is_array($fields))
-		foreach($fields as $k => $v) {
-			switch($k) {
-				// ...
-			}
+	function getParamFromQuickSearchFieldTokens($field, $tokens) {
+		switch($field) {
+			default:
+				$search_fields = $this->getQuickSearchFields();
+				return DevblocksSearchCriteria::getParamFromQueryFieldTokens($field, $tokens, $search_fields);
+				break;
 		}
 		
-		return $params;
-	}	
+		return false;
+	}
 	
 	function render() {
 		$this->_sanitize();
@@ -993,68 +1043,6 @@ class View_AttachmentLink extends C4_AbstractView implements IAbstractView_Subto
 			$this->renderPage = 0;
 		}
 	}
-		
-	function doBulkUpdate($filter, $do, $ids=array()) {
-		@set_time_limit(600); // 10m
-		
-		$change_fields = array();
-		$deleted = false;
-
-		// Make sure we have actions
-		if(empty($do))
-			return;
-
-		// Make sure we have checked items if we want a checked list
-		if(0 == strcasecmp($filter,"checks") && empty($ids))
-			return;
-			
-		if(is_array($do))
-		foreach($do as $k => $v) {
-			switch($k) {
-				case 'deleted':
-					$deleted = !empty($v);
-					break;
-				default:
-					break;
-			}
-		}
-
-		$pg = 0;
-
-		if(empty($ids))
-		do {
-			list($objects,$null) = DAO_AttachmentLink::search(
-				$this->view_columns,
-				$this->getParams(),
-				100,
-				$pg++,
-				SearchFields_AttachmentLink::GUID,
-				true,
-				false
-			);
-			
-			foreach($objects as $o)
-				$ids[] = $o[SearchFields_AttachmentLink::GUID];
-			
-		} while(!empty($objects));
-
-		$batch_total = count($ids);
-		for($x=0;$x<=$batch_total;$x+=100) {
-			$batch_ids = array_slice($ids,$x,100);
-			
-			if(!$deleted) {
-				//DAO_AttachmentLink::update($batch_ids, $change_fields);
-			} else {
-				foreach($batch_ids as $batch_id) {
-					DAO_AttachmentLink::deleteByGUID($batch_id);
-				}
-			}
-			
-			unset($batch_ids);
-		}
-
-		unset($ids);
-	}
 };
 
 class DAO_AttachmentLink extends Cerb_ORMHelper {
@@ -1062,6 +1050,42 @@ class DAO_AttachmentLink extends Cerb_ORMHelper {
 	const ATTACHMENT_ID = 'attachment_id';
 	const CONTEXT = 'context';
 	const CONTEXT_ID = 'context_id';
+	
+	/**
+	 * @param Model_ContextBulkUpdate $update
+	 * @return boolean
+	 */
+	static function bulkUpdate(Model_ContextBulkUpdate $update) {
+		$do = $update->actions;
+		$ids = $update->context_ids;
+
+		// Make sure we have actions
+		if(empty($ids) || empty($do))
+			return false;
+		
+		$update->markInProgress();
+		
+		$change_fields = array();
+		$deleted = false;
+
+		if(is_array($do))
+		foreach($do as $k => $v) {
+			switch($k) {
+				case 'deleted':
+					$deleted = !empty($v);
+					break;
+				
+				default:
+					break;
+			}
+		}
+
+		if($deleted)
+			DAO_AttachmentLink::deleteByGUIDs($ids);
+		
+		$update->markCompleted();
+		return true;
+	}
 	
 	/**
 	 * @param string $where
@@ -1320,15 +1344,25 @@ class DAO_AttachmentLink extends Cerb_ORMHelper {
 		));
 	}
 	
-	static function deleteByGUID($guid) {
+	static function deleteByGUIDs($guids) {
+		if(!is_array($guids))
+			$guids = array($guids);
+		
 		$db = DevblocksPlatform::getDatabaseService();
-		$db->ExecuteMaster(sprintf("DELETE FROM attachment_link WHERE guid = %s",
-			$db->qstr($guid)
+		
+		foreach($guids as &$guid)
+			$guid = $db->qstr($guid);
+		
+		$db->ExecuteMaster(sprintf("DELETE FROM attachment_link WHERE guid IN (%s)",
+			implode(',', $guids)
 		));
 	}
 		
 	private static function _getObjectsFromResult($rs) {
 		$objects = array();
+		
+		if(!($rs instanceof mysqli_result))
+			return false;
 		
 		while($row = mysqli_fetch_assoc($rs)) {
 			$object = new Model_AttachmentLink();
@@ -1347,7 +1381,7 @@ class DAO_AttachmentLink extends Cerb_ORMHelper {
 	public static function getSearchQueryComponents($columns, $params, $sortBy=null, $sortAsc=null) {
 		$fields = SearchFields_AttachmentLink::getFields();
 		
-		list($tables,$wheres) = parent::_parseSearchParams($params, array(),$fields,$sortBy);
+		list($tables,$wheres) = parent::_parseSearchParams($params, array(), 'SearchFields_AttachmentLink', $sortBy);
 		
 		$select_sql = sprintf("SELECT ".
 			"al.attachment_id as %s, ".
@@ -1385,7 +1419,7 @@ class DAO_AttachmentLink extends Cerb_ORMHelper {
 		$where_sql = "".
 			(!empty($wheres) ? sprintf("WHERE %s ",implode(' AND ',$wheres)) : "WHERE 1 ");
 			
-		$sort_sql = self::_buildSortClause($sortBy, $sortAsc, $fields);
+		$sort_sql = self::_buildSortClause($sortBy, $sortAsc, $fields, $select_sql, 'SearchFields_AttachmentLink');
 		
 		$result = array(
 			'primary_table' => 'al',
@@ -1428,7 +1462,9 @@ class DAO_AttachmentLink extends Cerb_ORMHelper {
 			$where_sql.
 			($has_multiple_values ? 'GROUP BY al.attachment_id ' : '').
 			$sort_sql;
-		$rs = $db->SelectLimit($sql,$limit,$page*$limit) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
+		
+		if(false == ($rs = $db->SelectLimit($sql,$limit,$page*$limit)))
+			return false;
 
 		$results = array();
 		
@@ -1457,7 +1493,7 @@ class DAO_AttachmentLink extends Cerb_ORMHelper {
 		
 };
 
-class SearchFields_AttachmentLink implements IDevblocksSearchFields {
+class SearchFields_AttachmentLink extends DevblocksSearchFields {
 	const ID = 'al_attachment_id';
 	const LINK_CONTEXT = 'al_context';
 	const LINK_CONTEXT_ID = 'al_context_id';
@@ -1471,10 +1507,40 @@ class SearchFields_AttachmentLink implements IDevblocksSearchFields {
 	const ATTACHMENT_STORAGE_SHA1HASH = 'a_storage_sha1hash';
 	const ATTACHMENT_UPDATED = 'a_updated';
 	
+	static private $_fields = null;
+	
+	static function getPrimaryKey() {
+		return 'al.guid';
+	}
+	
+	static function getCustomFieldContextKeys() {
+		return array(
+			CerberusContexts::CONTEXT_ATTACHMENT => new DevblocksSearchFieldContextKeys('al.attachment_id', self::ID),
+		);
+	}
+	
+	static function getWhereSQL(DevblocksSearchCriteria $param) {
+		if('cf_' == substr($param->field, 0, 3)) {
+			return self::_getWhereSQLFromCustomFields($param);
+		} else {
+			return $param->getWhereSQL(self::getFields(), self::getPrimaryKey());
+		}
+	}
+	
 	/**
 	 * @return DevblocksSearchField[]
 	 */
 	static function getFields() {
+		if(is_null(self::$_fields))
+			self::$_fields = self::_getFields();
+		
+		return self::$_fields;
+	}
+	
+	/**
+	 * @return DevblocksSearchField[]
+	 */
+	static function _getFields() {
 		$translate = DevblocksPlatform::getTranslationService();
 		
 		$columns = array(
@@ -1521,6 +1587,8 @@ class Model_AttachmentLink {
 };
 
 class Context_Attachment extends Extension_DevblocksContext {
+	const ID = 'cerberusweb.contexts.attachment';
+	
 	function getMeta($context_id) {
 		$attachment = DAO_Attachment::get($context_id);
 
@@ -1726,6 +1794,8 @@ class Context_Attachment extends Extension_DevblocksContext {
 };
 
 class Context_AttachmentLink extends Extension_DevblocksContext {
+	const ID = 'cerberusweb.contexts.attachment_link';
+	
 	function getMeta($context_id) {
 		$link = DAO_AttachmentLink::getByGUID($context_id);
 

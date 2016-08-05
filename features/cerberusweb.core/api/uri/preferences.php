@@ -2,17 +2,17 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
 | The latest version of this license can be found here:
-| http://cerberusweb.com/license
+| http://cerb.io/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://www.cerbweb.com	    http://www.webgroupmedia.com/
+|	http://cerb.io	    http://webgroup.media
 ***********************************************************************/
 
 class ChPreferencesPage extends CerberusPageExtension {
@@ -164,7 +164,7 @@ class ChPreferencesPage extends CerberusPageExtension {
 		$tpl->display('devblocks:cerberusweb.core::preferences/tabs/notifications/bulk.tpl');
 	}
 
-	function doNotificationsBulkUpdateAction() {
+	function startNotificationsBulkUpdateJsonAction() {
 		// Filter: whole list or check
 		@$filter = DevblocksPlatform::importGPC($_REQUEST['filter'],'string','');
 		$ids = array();
@@ -183,15 +183,13 @@ class ChPreferencesPage extends CerberusPageExtension {
 		if(0 != strlen($is_read))
 			$do['is_read'] = $is_read;
 
-		// Do: Custom fields
-		//$do = DAO_CustomFieldValue::handleBulkPost($do);
-
 		switch($filter) {
 			// Checked rows
 			case 'checks':
 				@$ids_str = DevblocksPlatform::importGPC($_REQUEST['ids'],'string');
 				$ids = DevblocksPlatform::parseCsvString($ids_str);
 				break;
+				
 			case 'sample':
 				@$sample_size = min(DevblocksPlatform::importGPC($_REQUEST['filter_sample_size'],'integer',0),9999);
 				$filter = 'checks';
@@ -200,9 +198,21 @@ class ChPreferencesPage extends CerberusPageExtension {
 			default:
 				break;
 		}
-
-		$view->doBulkUpdate($filter, $do, $ids);
-		$view->render();
+		
+		// If we have specific IDs, add a filter for those too
+		if(!empty($ids)) {
+			$view->addParam(new DevblocksSearchCriteria(SearchFields_Notification::ID, 'in', $ids));
+		}
+		
+		// Create batches
+		$batch_key = DAO_ContextBulkUpdate::createFromView($view, $do);
+		
+		header('Content-Type: application/json; charset=utf-8');
+		
+		echo json_encode(array(
+			'cursor' => $batch_key,
+		));
+		
 		return;
 	}
 
@@ -416,7 +426,7 @@ class ChPreferencesPage extends CerberusPageExtension {
 		
 		// Timezones
 		$tpl->assign('timezones', $date_service->getTimezones());
-		@$server_timezone = date_default_timezone_get();
+		@$server_timezone = DevblocksPlatform::getTimezone();
 		$tpl->assign('server_timezone', $server_timezone);
 
 		// Languages
@@ -553,7 +563,7 @@ class ChPreferencesPage extends CerberusPageExtension {
 		// Time
 		
 		$_SESSION['timezone'] = $timezone;
-		@date_default_timezone_set($timezone);
+		DevblocksPlatform::setTimezone($timezone);
 		$worker_fields[DAO_Worker::TIMEZONE] = $timezone;
 		
 		@$time_format = DevblocksPlatform::importGPC($_REQUEST['time_format'],'string',null);

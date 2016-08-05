@@ -217,6 +217,11 @@
 				<seg>Access denied.</seg>
 			</tuv>
 		</tu>
+		<tu tuid="common.actions">
+			<tuv xml:lang="en_US">
+				<seg>Actions</seg>
+			</tuv>
+		</tu>
 		<tu tuid="common.active">
 			<tuv xml:lang="en_US">
 				<seg>active</seg>
@@ -357,6 +362,16 @@
 				<seg>cancel</seg>
 			</tuv>
 		</tu>
+		<tu tuid="common.card">
+			<tuv xml:lang="en_US">
+				<seg>card</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.cards">
+			<tuv xml:lang="en_US">
+				<seg>cards</seg>
+			</tuv>
+		</tu>
 		<tu tuid="common.category">
 			<tuv xml:lang="en_US">
 				<seg>category</seg>
@@ -415,6 +430,11 @@
 		<tu tuid="common.context_id">
 			<tuv xml:lang="en_US">
 				<seg>Context ID</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.contexts">
+			<tuv xml:lang="en_US">
+				<seg>Contexts</seg>
 			</tuv>
 		</tu>
 		<tu tuid="common.continue">
@@ -912,6 +932,16 @@
 				<seg>Not Spam</seg>
 			</tuv>
 		</tu>
+		<tu tuid="common.object">
+			<tuv xml:lang="en_US">
+				<seg>object</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.objects">
+			<tuv xml:lang="en_US">
+				<seg>objects</seg>
+			</tuv>
+		</tu>
 		<tu tuid="common.optional">
 			<tuv xml:lang="en_US">
 				<seg>optional</seg>
@@ -952,14 +982,34 @@
 				<seg>Label</seg>
 			</tuv>
 		</tu>
+		<tu tuid="common.language">
+			<tuv xml:lang="en_US">
+				<seg>Language</seg>
+			</tuv>
+		</tu>
 		<tu tuid="common.languages">
 			<tuv xml:lang="en_US">
 				<seg>Languages</seg>
 			</tuv>
 		</tu>
+		<tu tuid="common.last_activity">
+			<tuv xml:lang="en_US">
+				<seg>Last Activity</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.last_activity_date">
+			<tuv xml:lang="en_US">
+				<seg>Last Activity Date</seg>
+			</tuv>
+		</tu>
 		<tu tuid="common.last_login">
 			<tuv xml:lang="en_US">
 				<seg>Last Login</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.link">
+			<tuv xml:lang="en_US">
+				<seg>Link</seg>
 			</tuv>
 		</tu>
 		<tu tuid="common.links">
@@ -1057,6 +1107,26 @@
 				<seg>photo</seg>
 			</tuv>
 		</tu>
+		<tu tuid="common.plugin">
+			<tuv xml:lang="en_US">
+				<seg>plugin</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.plugins">
+			<tuv xml:lang="en_US">
+				<seg>plugins</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.portal">
+			<tuv xml:lang="en_US">
+				<seg>portal</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.portals">
+			<tuv xml:lang="en_US">
+				<seg>portals</seg>
+			</tuv>
+		</tu>
 		<tu tuid="common.preview">
 			<tuv xml:lang="en_US">
 				<seg>preview</seg>
@@ -1145,6 +1215,16 @@
 		<tu tuid="common.recommended">
 			<tuv xml:lang="en_US">
 				<seg>recommended</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.record">
+			<tuv xml:lang="en_US">
+				<seg>record</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.records">
+			<tuv xml:lang="en_US">
+				<seg>records</seg>
 			</tuv>
 		</tu>
 		<tu tuid="common.refresh">
@@ -1303,6 +1383,11 @@
 				<seg>Status</seg>
 			</tuv>
 		</tu>
+		<tu tuid="common.storage">
+			<tuv xml:lang="en_US">
+				<seg>storage</seg>
+			</tuv>
+		</tu>
 		<tu tuid="common.subtotals">
 			<tuv xml:lang="en_US">
 				<seg>Subtotals</seg>
@@ -1366,6 +1451,11 @@
 		<tu tuid="common.time.secs.num">
 			<tuv xml:lang="en_US">
 				<seg>%s sec</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.timezone">
+			<tuv xml:lang="en_US">
+				<seg>Timezone</seg>
 			</tuv>
 		</tu>
 		<tu tuid="common.title">
@@ -1691,6 +1781,9 @@
 		
 		<!-- Mailbox -->
 		
+		<tu tuid='dao.mailbox.checked_at'>
+			<tuv xml:lang="en_US"><seg>Checked At</seg></tuv>
+		</tu>
 		<tu tuid='dao.mailbox.protocol'>
 			<tuv xml:lang="en_US"><seg>Protocol</seg></tuv>
 		</tu>
@@ -1710,7 +1803,10 @@
 			<tuv xml:lang="en_US"><seg>Max Msg Size</seg></tuv>
 		</tu>
 		<tu tuid='dao.mailbox.ssl_ignore_validation'>
-			<tuv xml:lang="en_US"><seg>Ssl Ignore Validation</seg></tuv>
+			<tuv xml:lang="en_US"><seg>SSL Ignore Validation</seg></tuv>
+		</tu>
+		<tu tuid='dao.mailbox.auth_disable_plain'>
+			<tuv xml:lang="en_US"><seg>Disable PLAIN Auth</seg></tuv>
 		</tu>
 
 		<!-- Snippets -->
@@ -1753,6 +1849,24 @@
 		</tu>
 
 		<!-- ACL -->
+		
+		<!-- Contexts -->
+		
+		<tu tuid="acl.context.contact.worklist.broadcast">
+			<tuv xml:lang="en_US">
+				<seg>[Contacts] Can send broadcasts to contact worklists</seg>
+			</tuv>
+		</tu>
+		<tu tuid="acl.context.org.worklist.broadcast">
+			<tuv xml:lang="en_US">
+				<seg>[Orgs] Can send broadcasts to organization worklists</seg>
+			</tuv>
+		</tu>
+		<tu tuid="acl.context.worker.worklist.broadcast">
+			<tuv xml:lang="en_US">
+				<seg>[Workers] Can send broadcasts to worker worklists</seg>
+			</tuv>
+		</tu>
 		
 		<!-- Address Book -->
 		
@@ -1939,11 +2053,6 @@
 		<tu tuid="acl.core.ticket.view.actions.merge">
 			<tuv xml:lang="en_US">
 				<seg>[Tickets] Can merge tickets from lists</seg>
-			</tuv>
-		</tu>
-		<tu tuid="acl.core.ticket.view.actions.pile_sort">
-			<tuv xml:lang="en_US">
-				<seg>[Tickets] Can use the pile sorter on lists</seg>
 			</tuv>
 		</tu>
 		<tu tuid="acl.core.watchers.assign">
@@ -2254,6 +2363,18 @@ For example: http://www.cerbweb.com/support/</seg>
 				<seg>Target Context ID</seg>
 			</tuv>
 		</tu>
+		
+		<!-- ContextBulkUpdate -->
+		
+		<tu tuid='dao.context_bulk_update.batch_key'>
+			<tuv xml:lang="en_US"><seg>Batch Key</seg></tuv>
+		</tu>
+		<tu tuid='dao.context_bulk_update.context_ids'>
+			<tuv xml:lang="en_US"><seg>Context Ids</seg></tuv>
+		</tu>
+		<tu tuid='dao.context_bulk_update.num_records'>
+			<tuv xml:lang="en_US"><seg>Num Records</seg></tuv>
+		</tu>
 
 		<!-- ContextScheduledBehavior -->
 		
@@ -2278,54 +2399,6 @@ For example: http://www.cerbweb.com/support/</seg>
 		<tu tuid="cron.nothing_to_do">
 			<tuv xml:lang="en_US">
 				<seg>Nothing to do yet!  (Waiting %s seconds)</seg>
-			</tuv>
-		</tu>
-
-		<!-- Activities -->
-		
-		<tu tuid="activity.default">
-			<tuv xml:lang="en_US">
-				<seg>%s is browsing</seg>
-			</tuv>
-		</tu>
-		<tu tuid="activity.activity">
-			<tuv xml:lang="en_US">
-				<seg>%s is browsing the activity logs</seg>
-			</tuv>
-		</tu>
-		<tu tuid="activity.address_book">
-			<tuv xml:lang="en_US">
-				<seg>%s is browsing the address book</seg>
-			</tuv>
-		</tu>
-		<tu tuid="activity.config">
-			<tuv xml:lang="en_US">
-				<seg>%s is configuring the application</seg>
-			</tuv>
-		</tu>
-		<tu tuid="activity.display_ticket">
-			<tuv xml:lang="en_US">
-				<seg>%s is displaying ticket %s</seg>
-			</tuv>
-		</tu>
-		<tu tuid="activity.mail.search">
-			<tuv xml:lang="en_US">
-				<seg>%s is searching tickets</seg>
-			</tuv>
-		</tu>
-		<tu tuid="activity.mail.workspaces">
-			<tuv xml:lang="en_US">
-				<seg>%s is browsing %s in Workspaces</seg>
-			</tuv>
-		</tu>
-		<tu tuid="activity.simulator">
-			<tuv xml:lang="en_US">
-				<seg>%s is generating simulated tickets</seg>
-			</tuv>
-		</tu>
-		<tu tuid="activity.tickets">
-			<tuv xml:lang="en_US">
-				<seg>%s is browsing %s tickets</seg>
 			</tuv>
 		</tu>
 
@@ -2415,11 +2488,6 @@ For example: http://www.cerbweb.com/support/</seg>
 		<tu tuid="dashboard">
 			<tuv xml:lang="en_US">
 				<seg>Dashboard</seg>
-			</tuv>
-		</tu>
-		<tu tuid="dashboard.actions">
-			<tuv xml:lang="en_US">
-				<seg>Actions</seg>
 			</tuv>
 		</tu>
 		<tu tuid="dashboard.active_dashboard">
@@ -3062,6 +3130,11 @@ For example: http://www.cerbweb.com/support/</seg>
 				<seg>Has Attachments</seg>
 			</tuv>
 		</tu>
+		<tu tuid="message.search.header_message_id">
+			<tuv xml:lang="en_US">
+				<seg>Message-Id Header</seg>
+			</tuv>
+		</tu>
 
 		<!-- Preferences -->
 		
@@ -3249,6 +3322,11 @@ For example: *receipt*</seg>
 				<seg>Closed</seg>
 			</tuv>
 		</tu>
+		<tu tuid="status.completed">
+			<tuv xml:lang="en_US">
+				<seg>Completed</seg>
+			</tuv>
+		</tu>
 		<tu tuid="status.deleted">
 			<tuv xml:lang="en_US">
 				<seg>Deleted</seg>
@@ -3262,6 +3340,11 @@ For example: *receipt*</seg>
 		<tu tuid="status.waiting">
 			<tuv xml:lang="en_US">
 				<seg>Waiting for Reply</seg>
+			</tuv>
+		</tu>
+		<tu tuid="status.waiting.abbr">
+			<tuv xml:lang="en_US">
+				<seg>Waiting</seg>
 			</tuv>
 		</tu>
 
@@ -3313,11 +3396,6 @@ For example: *receipt*</seg>
 		<tu tuid="task.status.active">
 			<tuv xml:lang="en_US">
 				<seg>Active</seg>
-			</tuv>
-		</tu>
-		<tu tuid="task.status.completed">
-			<tuv xml:lang="en_US">
-				<seg>Completed</seg>
 			</tuv>
 		</tu>
 
@@ -3503,9 +3581,9 @@ For example: *receipt*</seg>
 
 		<!-- Whos Online -->
 		
-		<tu tuid="whos_online.heading">
+		<tu tuid="whos_online.currently_active">
 			<tuv xml:lang="en_US">
-				<seg>%s Worker(s) Signed On:</seg>
+				<seg>Currently active:</seg>
 			</tuv>
 		</tu>
 
@@ -3526,29 +3604,9 @@ For example: *receipt*</seg>
 				<seg>Administrator</seg>
 			</tuv>
 		</tu>
-		<tu tuid="worker.language">
-			<tuv xml:lang="en_US">
-				<seg>Language</seg>
-			</tuv>
-		</tu>
-		<tu tuid="worker.last_activity">
-			<tuv xml:lang="en_US">
-				<seg>Last Activity</seg>
-			</tuv>
-		</tu>
-		<tu tuid="worker.last_activity_date">
-			<tuv xml:lang="en_US">
-				<seg>Last Activity Date</seg>
-			</tuv>
-		</tu>
 		<tu tuid="worker.time_format">
 			<tuv xml:lang="en_US">
 				<seg>Time Format</seg>
-			</tuv>
-		</tu>
-		<tu tuid="worker.timezone">
-			<tuv xml:lang="en_US">
-				<seg>Timezone</seg>
 			</tuv>
 		</tu>
 		<tu tuid="worker.title">

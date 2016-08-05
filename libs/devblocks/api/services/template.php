@@ -8,12 +8,16 @@ require(DEVBLOCKS_PATH . 'libs/smarty/Smarty.class.php');
  * @ingroup services
  */
 class _DevblocksTemplateManager {
+	static $_instance = null;
+	static $_instance_sandbox = null;
+	
 	/**
 	 * Constructor
 	 *
 	 * @private
 	 */
 	private function _DevblocksTemplateManager() {}
+	
 	/**
 	 * Returns an instance of the Smarty Template Engine
 	 *
@@ -21,29 +25,32 @@ class _DevblocksTemplateManager {
 	 * @return Smarty
 	 */
 	static function getInstance() {
-		static $instance = null;
-		if(null == $instance) {
+		if(null == self::$_instance) {
 			$instance = new Smarty();
 			
 			$instance->template_dir = APP_PATH . '/templates';
-			$instance->compile_dir = APP_TEMP_PATH . '/templates_c';
+			$instance->compile_dir = APP_SMARTY_COMPILE_PATH;
 			$instance->cache_dir = APP_TEMP_PATH . '/cache';
 
-			$instance->use_sub_dirs = false;
+			$instance->use_sub_dirs = APP_SMARTY_COMPILE_USE_SUBDIRS;
 
-			$instance->caching = 0;
+			$instance->caching = Smarty::CACHING_OFF;
 			$instance->cache_lifetime = 0;
-			$instance->compile_check = DEVELOPMENT_MODE ? true : false;
 			
+			$instance->compile_check = DEVELOPMENT_MODE ? Smarty::COMPILECHECK_ON : Smarty::COMPILECHECK_OFF;
+			$instance->compile_id = APP_BUILD;
+
 			$instance->error_unassigned = false;
 			$instance->error_reporting = DEVELOPMENT_MODE ? (E_ALL & ~E_NOTICE) : (E_ERROR & ~E_NOTICE);
+			$instance->php_handling = false;
 			
 			// Auto-escape HTML output
 			$instance->loadFilter('variable','htmlspecialchars');
-			//$instance->register->variableFilter(array('_DevblocksTemplateManager','variable_filter_esc'));
 			
 			// Devblocks plugins
+			$instance->registerPlugin('function','fetch', array('_DevblocksTemplateManager', 'function_void'));
 			$instance->registerPlugin('block','devblocks_url', array('_DevblocksTemplateManager', 'block_devblocks_url'));
+			$instance->registerPlugin('block','php', array('_DevblocksTemplateManager', 'block_void'));
 			$instance->registerPlugin('modifier','devblocks_date', array('_DevblocksTemplateManager', 'modifier_devblocks_date'));
 			$instance->registerPlugin('modifier','devblocks_email_quotes_cull', array('_DevblocksTemplateManager', 'modifier_devblocks_email_quotes_cull'));
 			$instance->registerPlugin('modifier','devblocks_email_quote', array('_DevblocksTemplateManager', 'modifier_devblocks_email_quote'));
@@ -54,9 +61,71 @@ class _DevblocksTemplateManager {
 			$instance->registerPlugin('modifier','devblocks_prettybytes', array('_DevblocksTemplateManager', 'modifier_devblocks_prettybytes'));
 			$instance->registerPlugin('modifier','devblocks_prettysecs', array('_DevblocksTemplateManager', 'modifier_devblocks_prettysecs'));
 			$instance->registerPlugin('modifier','devblocks_translate', array('_DevblocksTemplateManager', 'modifier_devblocks_translate'));
+			
 			$instance->registerResource('devblocks', new _DevblocksSmartyTemplateResource());
+			
+			self::$_instance = $instance;
 		}
-		return $instance;
+		return self::$_instance;
+	}
+	
+	/**
+	 * Returns an instance of the Smarty Template Engine
+	 *
+	 * @static
+	 * @return Smarty
+	 */
+	static function getInstanceSandbox() {
+		if(null == self::$_instance_sandbox) {
+			$instance = clone self::getInstance();
+			
+			// Customize Smarty for the sandbox
+			$instance->compile_dir = APP_SMARTY_SANDBOX_COMPILE_PATH;
+			$instance->use_sub_dirs = APP_SMARTY_COMPILE_USE_SUBDIRS;
+			$instance->compile_id = null; //APP_BUILD;
+			
+			// Security policy
+			$security = new Smarty_Security($instance);
+			$security->php_handling = Smarty::PHP_REMOVE;
+			$security->secure_dir = array();
+			$security->trusted_uri = array(
+				'#devblocks:.*$#i',
+			);
+			$security->allow_super_globals = false;
+			$security->php_functions = array(
+				'array_keys',
+				'empty',
+				'explode',
+				'implode',
+				'in_array',
+				'is_array',
+				'isset',
+				'method_exists',
+				'strcasecmp',
+				'substr',
+				'uniqid',
+			);
+			$security->php_modifiers = array(
+				'array_keys',
+				'count',
+				'explode',
+				'md5',
+				'nl2br',
+				'sort',
+				'trim',
+			);
+			$security->static_classes = array(
+				'Model_CustomField',
+				'Model_Ticket',
+			);
+			$security->streams = array(
+				'none'
+			);
+			$instance->enableSecurity($security);
+			
+			self::$_instance_sandbox = $instance;
+		}
+		return self::$_instance_sandbox;
 	}
 
 	static function modifier_devblocks_translate($string) {
@@ -72,6 +141,16 @@ class _DevblocksTemplateManager {
 			@$translated = vsprintf($translated, $args);
 		
 		return $translated;
+	}
+	
+	// Disable the {fetch} function
+	static function function_void($params, Smarty_Internal_Template $template) {
+		return null;
+	}
+	
+	// Disable the {php} block
+	static function block_void($params, $content, Smarty_Internal_Template $template, &$repeat) {
+		return null;
 	}
 	
 	static function block_devblocks_url($params, $content, Smarty_Internal_Template $template, &$repeat) {
@@ -315,17 +394,36 @@ class _DevblocksSmartyTemplateResource extends Smarty_Resource_Custom {
 		// If not in DB, check plugin's relative path on disk
 		$path = $plugin->getStoragePath() . '/templates/' . $tpl_path;
 		
-		if(!file_exists($path))
+		if(false == ($source = @file_get_contents($path)))
 			return false;
 		
-		$stat = stat($path);
+		// Check the modified timestamp
+		$mtime = filemtime($path);
 		
-		$source = file_get_contents($path);
-		$mtime = $stat['mtime'];
 		return true;
 	}
 	
 	protected function fetchTimestamp($name) {
-		return null;
+		list($plugin_id, $tag, $tpl_path) = explode(':',$name,3);
+		
+		if(empty($plugin_id) || empty($tpl_path))
+			return false;
+		
+		$plugins = DevblocksPlatform::getPluginRegistry();
+			
+		if(null == ($plugin = @$plugins[$plugin_id])) /* @var $plugin DevblocksPluginManifest */
+			return false;
+		
+		// If we can overload this template through the DB, don't return an mtime (faster to do one query)
+		if(isset($plugin->manifest_cache['templates']))
+			return time();
+		
+		// Otherwise, check the mtime via the plugin's relative path on disk
+		$path = $plugin->getStoragePath() . '/templates/' . $tpl_path;
+		
+		if(false == ($mtime = @filemtime($path)))
+			return false;
+		
+		return $mtime;
 	}
 };

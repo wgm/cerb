@@ -2,17 +2,17 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
 | The latest version of this license can be found here:
-| http://cerberusweb.com/license
+| http://cerb.io/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://www.cerbweb.com	    http://www.webgroupmedia.com/
+|	http://cerb.io	    http://webgroup.media
 ***********************************************************************/
 
 class DAO_MailQueue extends Cerb_ORMHelper {
@@ -47,6 +47,60 @@ class DAO_MailQueue extends Cerb_ORMHelper {
 	
 	static function updateWhere($fields, $where) {
 		parent::_updateWhere('mail_queue', $fields, $where);
+	}
+	
+	/**
+	 * @param Model_ContextBulkUpdate $update
+	 * @return boolean
+	 */
+	static function bulkUpdate(Model_ContextBulkUpdate $update) {
+		$do = $update->actions;
+		$ids = $update->context_ids;
+
+		// Make sure we have actions
+		if(empty($ids) || empty($do))
+			return false;
+		
+		$update->markInProgress();
+		
+		$change_fields = array();
+		$custom_fields = array();
+		$deleted = false;
+
+		if(is_array($do))
+		foreach($do as $k => $v) {
+			switch($k) {
+				case 'status':
+					switch($v) {
+						case 'queue':
+							$change_fields[DAO_MailQueue::IS_QUEUED] = 1;
+							$change_fields[DAO_MailQueue::QUEUE_FAILS] = 0;
+							break;
+							
+						case 'draft':
+							$change_fields[DAO_MailQueue::IS_QUEUED] = 0;
+							$change_fields[DAO_MailQueue::QUEUE_FAILS] = 0;
+							break;
+							
+						case 'delete':
+							$deleted = true;
+							break;
+					}
+					break;
+				default:
+					break;
+			}
+		}
+		
+		if(!$deleted) {
+			if(!empty($change_fields))
+				DAO_MailQueue::update($ids, $change_fields);
+		} else {
+			DAO_MailQueue::delete($ids);
+		}
+		
+		$update->markCompleted();
+		return true;
 	}
 	
 	/**
@@ -140,6 +194,9 @@ class DAO_MailQueue extends Cerb_ORMHelper {
 	static private function _getObjectsFromResult($rs) {
 		$objects = array();
 		
+		if(!($rs instanceof mysqli_result))
+			return false;
+		
 		while($row = mysqli_fetch_assoc($rs)) {
 			$object = new Model_MailQueue();
 			$object->id = $row['id'];
@@ -188,7 +245,7 @@ class DAO_MailQueue extends Cerb_ORMHelper {
 	public static function getSearchQueryComponents($columns, $params, $sortBy=null, $sortAsc=null) {
 		$fields = SearchFields_MailQueue::getFields();
 		
-		list($tables,$wheres) = parent::_parseSearchParams($params, $columns, $fields, $sortBy);
+		list($tables,$wheres) = parent::_parseSearchParams($params, $columns, 'SearchFields_MailQueue', $sortBy);
 		
 		$select_sql = sprintf("SELECT ".
 			"mail_queue.id as %s, ".
@@ -218,7 +275,7 @@ class DAO_MailQueue extends Cerb_ORMHelper {
 		$where_sql = "".
 			(!empty($wheres) ? sprintf("WHERE %s ",implode(' AND ',$wheres)) : "WHERE 1 ");
 			
-		$sort_sql = self::_buildSortClause($sortBy, $sortAsc, $fields);
+		$sort_sql = self::_buildSortClause($sortBy, $sortAsc, $fields, $select_sql, 'SearchFields_MailQueue');
 		
 		$result = array(
 			'primary_table' => 'mail_queue',
@@ -265,13 +322,18 @@ class DAO_MailQueue extends Cerb_ORMHelper {
 			
 		// [TODO] Could push the select logic down a level too
 		if($limit > 0) {
-			$rs = $db->SelectLimit($sql,$limit,$page*$limit) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs mysqli_result */
+			if(false == ($rs = $db->SelectLimit($sql,$limit,$page*$limit)))
+				return false;
 		} else {
-			$rs = $db->ExecuteSlave($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs mysqli_result */
+			if(false == ($rs = $db->ExecuteSlave($sql)))
+				return false;
 			$total = mysqli_num_rows($rs);
 		}
 		
 		$results = array();
+		
+		if(!($rs instanceof mysqli_result))
+			return false;
 		
 		while($row = mysqli_fetch_assoc($rs)) {
 			$object_id = intval($row[SearchFields_MailQueue::ID]);
@@ -297,7 +359,7 @@ class DAO_MailQueue extends Cerb_ORMHelper {
 	}
 };
 
-class SearchFields_MailQueue implements IDevblocksSearchFields {
+class SearchFields_MailQueue extends DevblocksSearchFields {
 	const ID = 'm_id';
 	const WORKER_ID = 'm_worker_id';
 	const UPDATED = 'm_updated';
@@ -309,10 +371,42 @@ class SearchFields_MailQueue implements IDevblocksSearchFields {
 	const QUEUE_DELIVERY_DATE = 'm_queue_delivery_date';
 	const QUEUE_FAILS = 'm_queue_fails';
 	
+	static private $_fields = null;
+	
+	static function getPrimaryKey() {
+		return 'mail_queue.id';
+	}
+	
+	static function getCustomFieldContextKeys() {
+		return array(
+			CerberusContexts::CONTEXT_DRAFT => new DevblocksSearchFieldContextKeys('mail_queue.id', self::ID),
+			CerberusContexts::CONTEXT_TICKET => new DevblocksSearchFieldContextKeys('mail_queue.ticket_id', self::TICKET_ID),
+			CerberusContexts::CONTEXT_WORKER => new DevblocksSearchFieldContextKeys('mail_queue.worker_id', self::WORKER_ID),
+		);
+	}
+	
+	static function getWhereSQL(DevblocksSearchCriteria $param) {
+		if('cf_' == substr($param->field, 0, 3)) {
+			return self::_getWhereSQLFromCustomFields($param);
+		} else {
+			return $param->getWhereSQL(self::getFields(), self::getPrimaryKey());
+		}
+	}
+	
 	/**
 	 * @return DevblocksSearchField[]
 	 */
 	static function getFields() {
+		if(is_null(self::$_fields))
+			self::$_fields = self::_getFields();
+		
+		return self::$_fields;
+	}
+	
+	/**
+	 * @return DevblocksSearchField[]
+	 */
+	static function _getFields() {
 		$translate = DevblocksPlatform::getTranslationService();
 		
 		$columns = array(
@@ -422,12 +516,12 @@ class Model_MailQueue {
 			$properties['html_template_id'] = intval($this->params['html_template_id']);
 			
 		// Next action
-		$properties['closed'] = isset($this->params['next_is_closed']) ? intval($this->params['next_is_closed']) : 0;
+		if(isset($this->params['status_id']))
+			$properties['status_id'] = intval($this->params['status_id']);
 
 		// Org
-		if(isset($this->params['org_id'])) {
+		if(isset($this->params['org_id']))
 			$properties['org_id'] = intval($this->params['org_id']);
-		}
 		
 		// Worker
 		$properties['worker_id'] = !empty($this->worker_id) ? $this->worker_id : 0;
@@ -516,10 +610,6 @@ class Model_MailQueue {
 			$properties['link_forward_files'] = true;
 		}
 		
-//		'closed' => DevblocksPlatform::importGPC(@$_REQUEST['closed'],'integer',0),
-//		'bucket_id' => DevblocksPlatform::importGPC(@$_REQUEST['bucket_id'],'string',''),
-//		'ticket_reopen' => DevblocksPlatform::importGPC(@$_REQUEST['ticket_reopen'],'string',''),
-
 		// [TODO] Custom fields
 		
 		// Context links
@@ -568,7 +658,7 @@ class View_MailQueue extends C4_AbstractView implements IAbstractView_Subtotals,
 
 	function getData() {
 		$objects = DAO_MailQueue::search(
-			array(),
+			$this->view_columns,
 			$this->getParams(),
 			$this->renderLimit,
 			$this->renderPage,
@@ -576,6 +666,9 @@ class View_MailQueue extends C4_AbstractView implements IAbstractView_Subtotals,
 			$this->renderSortAsc,
 			$this->renderTotal
 		);
+		
+		$this->_lazyLoadCustomFieldsIntoObjects($objects, 'SearchFields_MailQueue');
+		
 		return $objects;
 	}
 	
@@ -620,6 +713,7 @@ class View_MailQueue extends C4_AbstractView implements IAbstractView_Subtotals,
 	function getSubtotalCounts($column) {
 		$counts = array();
 		$fields = $this->getFields();
+		$context = CerberusContexts::CONTEXT_DRAFT;
 
 		if(!isset($fields[$column]))
 			return array();
@@ -630,7 +724,7 @@ class View_MailQueue extends C4_AbstractView implements IAbstractView_Subtotals,
 					'mail.compose' => 'Compose',
 					'ticket.reply' => 'Reply',
 				);
-				$counts = $this->_getSubtotalCountForStringColumn('DAO_MailQueue', $column, $label_map);
+				$counts = $this->_getSubtotalCountForStringColumn($context, $column, $label_map);
 				break;
 
 			case SearchFields_MailQueue::WORKER_ID:
@@ -638,13 +732,13 @@ class View_MailQueue extends C4_AbstractView implements IAbstractView_Subtotals,
 				$workers = DAO_Worker::getAll();
 				foreach($workers as $worker_id => $worker)
 					$label_map[$worker_id] = $worker->getName();
-				$counts = $this->_getSubtotalCountForStringColumn('DAO_MailQueue', $column, $label_map, 'in', 'worker_id[]');
+				$counts = $this->_getSubtotalCountForStringColumn($context, $column, $label_map, 'in', 'worker_id[]');
 				break;
 			
 			default:
 				// Custom fields
 				if('cf_' == substr($column,0,3)) {
-					$counts = $this->_getSubtotalCountForCustomColumn('DAO_MailQueue', $column, 'm.id');
+					$counts = $this->_getSubtotalCountForCustomColumn($context, $column);
 				}
 				
 				break;
@@ -657,7 +751,7 @@ class View_MailQueue extends C4_AbstractView implements IAbstractView_Subtotals,
 		$search_fields = SearchFields_MailQueue::getFields();
 		
 		$fields = array(
-			'_fulltext' => 
+			'text' => 
 				array(
 					'type' => DevblocksSearchCriteria::TYPE_TEXT,
 					'options' => array('param_key' => SearchFields_MailQueue::SUBJECT, 'match' => DevblocksSearchCriteria::OPTION_TEXT_PARTIAL),
@@ -697,23 +791,19 @@ class View_MailQueue extends C4_AbstractView implements IAbstractView_Subtotals,
 		ksort($fields);
 		
 		return $fields;
-	}	
-	
-	function getParamsFromQuickSearchFields($fields) {
-		$search_fields = $this->getQuickSearchFields();
-		$params = DevblocksSearchCriteria::getParamsFromQueryFields($fields, $search_fields);
-
-		// Handle virtual fields and overrides
-		if(is_array($fields))
-		foreach($fields as $k => $v) {
-			switch($k) {
-				// ...
-			}
-		}
-		
-		return $params;
 	}
 	
+	function getParamFromQuickSearchFieldTokens($field, $tokens) {
+		switch($field) {
+			default:
+				$search_fields = $this->getQuickSearchFields();
+				return DevblocksSearchCriteria::getParamFromQueryFieldTokens($field, $tokens, $search_fields);
+				break;
+		}
+		
+		return false;
+	}
+
 	function render() {
 		$this->_sanitize();
 		
@@ -832,81 +922,17 @@ class View_MailQueue extends C4_AbstractView implements IAbstractView_Subtotals,
 			$this->renderPage = 0;
 		}
 	}
-		
-	function doBulkUpdate($filter, $do, $ids=array()) {
-		@set_time_limit(600); // 10m
-		
-		$change_fields = array();
-		$custom_fields = array();
-		$deleted = false;
-
-		// Make sure we have actions
-		if(empty($do))
-			return;
-
-		// Make sure we have checked items if we want a checked list
-		if(0 == strcasecmp($filter,"checks") && empty($ids))
-			return;
-			
-		if(is_array($do))
-		foreach($do as $k => $v) {
-			switch($k) {
-				case 'status':
-					switch($v) {
-						case 'queue':
-							$change_fields[DAO_MailQueue::IS_QUEUED] = 1;
-							$change_fields[DAO_MailQueue::QUEUE_FAILS] = 0;
-							break;
-						case 'draft':
-							$change_fields[DAO_MailQueue::IS_QUEUED] = 0;
-							$change_fields[DAO_MailQueue::QUEUE_FAILS] = 0;
-							break;
-						case 'delete':
-							$deleted = true;
-							break;
-					}
-					break;
-				default:
-					break;
-			}
-		}
-
-		$pg = 0;
-
-		if(empty($ids))
-		do {
-			$params = $this->getParams();
-			list($objects,$null) = DAO_MailQueue::search(
-				array(),
-				$params,
-				100,
-				$pg++,
-				SearchFields_MailQueue::ID,
-				true,
-				false
-			);
-			$ids = array_merge($ids, array_keys($objects));
-			 
-		} while(!empty($objects));
-
-		$batch_total = count($ids);
-		for($x=0;$x<=$batch_total;$x+=100) {
-			$batch_ids = array_slice($ids,$x,100);
-			
-			if(!$deleted) {
-				DAO_MailQueue::update($batch_ids, $change_fields);
-			} else {
-				DAO_MailQueue::delete($batch_ids);
-			}
-			
-			unset($batch_ids);
-		}
-
-		unset($ids);
-	}
 };
 
 class Context_Draft extends Extension_DevblocksContext {
+	function getDaoClass() {
+		return 'DAO_MailQueue';
+	}
+	
+	function getSearchClass() {
+		return 'SearchFields_MailQueue';
+	}
+	
 	function getMeta($context_id) {
 		if(null == ($draft = DAO_MailQueue::get($context_id)))
 			return false;
@@ -951,7 +977,6 @@ class Context_Draft extends Extension_DevblocksContext {
 		return $labels;
 	}
 	
-	// [TODO] Interface
 	function getDefaultProperties() {
 		return array(
 			'to',

@@ -2,29 +2,29 @@
 /***********************************************************************
  | Cerb(tm) developed by Webgroup Media, LLC.
  |-----------------------------------------------------------------------
- | All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
+ | All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
  |   unless specifically noted otherwise.
  |
  | This source code is released under the Devblocks Public License.
  | The latest version of this license can be found here:
- | http://cerberusweb.com/license
+ | http://cerb.io/license
  |
  | By using this software, you acknowledge having read this license
  | and agree to be bound thereby.
  | ______________________________________________________________________
- |	http://www.cerbweb.com	    http://www.webgroupmedia.com/
+ |	http://cerb.io	    http://webgroup.media
  ***********************************************************************/
 /*
- * IMPORTANT LICENSING NOTE from your friends on the Cerb Development Team
+ * IMPORTANT LICENSING NOTE from your friends at Cerb
  *
- * Sure, it would be so easy to just cheat and edit this file to use the
- * software without paying for it.  But we trust you anyway.  In fact, we're
- * writing this software for you!
+ * Sure, it would be really easy to just cheat and edit this file to use
+ * Cerb without paying for a license.  We trust you anyway.
  *
- * Quality software backed by a dedicated team takes money to develop.  We
- * don't want to be out of the office bagging groceries when you call up
- * needing a helping hand.  We'd rather spend our free time coding your
- * feature requests than mowing the neighbors' lawns for rent money.
+ * It takes a significant amount of time and money to develop, maintain,
+ * and support high-quality enterprise software with a dedicated team.
+ * For Cerb's entire history we've avoided taking money from outside
+ * investors, and instead we've relied on actual sales from satisfied
+ * customers to keep the project running.
  *
  * We've never believed in hiding our source code out of paranoia over not
  * getting paid.  We want you to have the full source code and be able to
@@ -32,19 +32,12 @@
  * having less of everything than you might need (time, people, money,
  * energy).  We shouldn't be your bottleneck.
  *
- * We've been building our expertise with this project since January 2002.  We
- * promise spending a couple bucks [Euro, Yuan, Rupees, Galactic Credits] to
- * let us take over your shared e-mail headache is a worthwhile investment.
- * It will give you a sense of control over your inbox that you probably
- * haven't had since spammers found you in a game of 'E-mail Battleship'.
- * Miss. Miss. You sunk my inbox!
+ * As a legitimate license owner, your feedback will help steer the project.
+ * We'll also prioritize your issues, and work closely with you to make sure
+ * your teams' needs are being met.
  *
- * A legitimate license entitles you to support from the developers,
- * and the warm fuzzy feeling of feeding a couple of obsessed developers
- * who want to help you get more done.
- *
- \* - Jeff Standen, Darren Sugita, Dan Hildebrandt
- *	 Webgroup Media LLC - Developers of Cerb
+ * - Jeff Standen and Dan Hildebrandt
+ *	 Founders at Webgroup Media LLC; Developers of Cerb
  */
 
 if(class_exists('C4_AbstractView')):
@@ -86,6 +79,9 @@ class View_DevblocksStorageProfile extends C4_AbstractView implements IAbstractV
 			$this->renderSortAsc,
 			$this->renderTotal
 		);
+		
+		$this->_lazyLoadCustomFieldsIntoObjects($objects, 'SearchFields_DevblocksStorageProfile');
+		
 		return $objects;
 	}
 	
@@ -93,7 +89,7 @@ class View_DevblocksStorageProfile extends C4_AbstractView implements IAbstractV
 		$search_fields = SearchFields_DevblocksStorageProfile::getFields();
 		
 		$fields = array(
-			'_fulltext' => 
+			'text' => 
 				array(
 					'type' => DevblocksSearchCriteria::TYPE_TEXT,
 					'options' => array('param_key' => SearchFields_DevblocksStorageProfile::NAME, 'match' => DevblocksSearchCriteria::OPTION_TEXT_PARTIAL),
@@ -114,33 +110,19 @@ class View_DevblocksStorageProfile extends C4_AbstractView implements IAbstractV
 		ksort($fields);
 		
 		return $fields;
-	}	
+	}
 	
-	function getParamsFromQuickSearchFields($fields) {
-		$params = array();
-
-		if(is_array($fields))
-		foreach($fields as $k => $v) {
-			
-			switch($k) {
-				// Texts (fuzzy)
-				
-				case '_fulltext':
-					$field_keys = array(
-						'_fulltext' => SearchFields_DevblocksStorageProfile::NAME,
-					);
-					
-					@$field_key = $field_keys[$k];
-					
-					if($field_key && false != ($param = DevblocksSearchCriteria::getTextParamFromQuery($field_key, $v, DevblocksSearchCriteria::OPTION_TEXT_PARTIAL)))
-						$params[$field_key] = $param;
-					break;
-			}
+	function getParamFromQuickSearchFieldTokens($field, $tokens) {
+		switch($field) {
+			default:
+				$search_fields = $this->getQuickSearchFields();
+				return DevblocksSearchCriteria::getParamFromQueryFieldTokens($field, $tokens, $search_fields);
+				break;
 		}
 		
-		return $params;
+		return false;
 	}
-
+	
 	function render() {
 		$this->_sanitize();
 		
@@ -217,64 +199,6 @@ class View_DevblocksStorageProfile extends C4_AbstractView implements IAbstractV
 			$this->addParam($criteria);
 			$this->renderPage = 0;
 		}
-	}
-		
-	function doBulkUpdate($filter, $do, $ids=array()) {
-		@set_time_limit(600); // 10m
-		
-		$change_fields = array();
-		$custom_fields = array();
-
-		// Make sure we have actions
-		if(empty($do))
-			return;
-
-		// Make sure we have checked items if we want a checked list
-		if(0 == strcasecmp($filter,"checks") && empty($ids))
-			return;
-			
-		if(is_array($do))
-		foreach($do as $k => $v) {
-			switch($k) {
-				// [TODO] Implement actions
-				case 'example':
-					//$change_fields[DAO_DevblocksStorageProfile::EXAMPLE] = 'some value';
-					break;
-				default:
-					break;
-			}
-		}
-
-		$pg = 0;
-
-		if(empty($ids))
-		do {
-			list($objects,$null) = DAO_DevblocksStorageProfile::search(
-				array(),
-				$this->getParams(),
-				100,
-				$pg++,
-				SearchFields_DevblocksStorageProfile::ID,
-				true,
-				false
-			);
-			$ids = array_merge($ids, array_keys($objects));
-			 
-		} while(!empty($objects));
-
-		$batch_total = count($ids);
-		for($x=0;$x<=$batch_total;$x+=100) {
-			$batch_ids = array_slice($ids,$x,100);
-			
-			DAO_DevblocksStorageProfile::update($batch_ids, $change_fields);
-
-			// Custom Fields
-			//self::_doBulkSetCustomFields(ChCustomFieldSource_DevblocksStorageProfile::ID, $custom_fields, $batch_ids);
-			
-			unset($batch_ids);
-		}
-
-		unset($ids);
 	}
 };
 endif;

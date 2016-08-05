@@ -1,8 +1,8 @@
 {$view_context = CerberusContexts::CONTEXT_ORG}
 {$view_fields = $view->getColumnsAvailable()}
-{assign var=results value=$view->getData()}
-{assign var=total value=$results[1]}
-{assign var=data value=$results[0]}
+{$results = $view->getData()}
+{$total = $results[1]}
+{$data = $results[0]}
 
 {include file="devblocks:cerberusweb.core::internal/views/view_marquee.tpl" view=$view}
 
@@ -67,17 +67,24 @@
 	{$object_watchers = DAO_ContextLink::getContextLinks($view_context, array_keys($data), CerberusContexts::CONTEXT_WORKER)}
 	{foreach from=$data item=result key=idx name=results}
 
+	{* Bulk lazy load contacts for this page *}
+	{$object_addys = []}
+	{if in_array(SearchFields_ContactOrg::EMAIL_ID, $view->view_columns)}
+		{$addy_ids = DevblocksPlatform::extractArrayValues($results, SearchFields_ContactOrg::EMAIL_ID)}
+		{$object_addys = DAO_Address::getIds($addy_ids)}
+	{/if}
+
 	{if $smarty.foreach.results.iteration % 2}
-		{assign var=tableRowClass value="even"}
+		{$tableRowClass = "even"}
 	{else}
-		{assign var=tableRowClass value="odd"}
+		{$tableRowClass = "odd"}
 	{/if}
 	<tbody style="cursor:pointer;">
 		<tr class="{$tableRowClass}">
 			<td align="center" rowspan="2">
 				{include file="devblocks:cerberusweb.core::internal/watchers/context_follow_button.tpl" context=$view_context context_id=$result.c_id}
 			</td>
-			<td colspan="{$smarty.foreach.headers.total}">
+			<td data-column="label" colspan="{$smarty.foreach.headers.total}">
 				<input type="checkbox" name="row_id[]" value="{$result.c_id}" style="display:none;">
 				<a href="{devblocks_url}c=profiles&type=org&id={$result.c_id}-{$result.c_name|devblocks_permalink}{/devblocks_url}" class="subject">{$result.c_name}</a> 
 				<button type="button" class="peek cerb-peek-trigger" data-context="{CerberusContexts::CONTEXT_ORG}" data-context-id="{$result.c_id}"><span class="glyphicons glyphicons-new-window-alt"></span></button>
@@ -88,13 +95,20 @@
 			{if substr($column,0,3)=="cf_"}
 				{include file="devblocks:cerberusweb.core::internal/custom_fields/view/cell_renderer.tpl"}
 			{elseif $column=="c_id"}
-			<td>{$result.c_id}&nbsp;</td>
+			<td data-column="{$column}">{$result.c_id}&nbsp;</td>
+			{elseif $column == SearchFields_ContactOrg::EMAIL_ID}
+			<td data-column="{$column}">
+				{if isset($object_addys.{$result.$column})}
+				{$addy = $object_addys.{$result.$column}}
+				<a href="javascript:;" class="cerb-peek-trigger" data-context="{CerberusContexts::CONTEXT_ADDRESS}" data-context-id="{$addy->id}">{$addy->email}</a>
+				{/if}
+			</td>
 			{elseif $column=="c_website"}
-			<td><a href="{$result.c_website}" target="_blank">{$result.c_website|truncate:45:'...':true}</a>&nbsp;</td>
+			<td data-column="{$column}"><a href="{$result.c_website}" target="_blank">{$result.c_website|truncate:45:'...':true}</a>&nbsp;</td>
 			{elseif in_array($column, ["c_created", "c_updated"])}
-			<td title="{$result.$column|devblocks_date}">{$result.$column|devblocks_prettytime}&nbsp;</td>
+			<td data-column="{$column}" title="{$result.$column|devblocks_date}">{$result.$column|devblocks_prettytime}&nbsp;</td>
 			{else}
-			<td>{$result.$column}</td>
+			<td data-column="{$column}">{$result.$column}</td>
 			{/if}
 		{/foreach}
 		</tr>
@@ -128,8 +142,8 @@
 	{if $total}
 	<div style="float:left;" id="{$view->id}_actions">
 		<button type="button" class="action-always-show action-explore" onclick="this.form.explore_from.value=$(this).closest('form').find('tbody input:checkbox:checked:first').val();this.form.a.value='viewOrgsExplore';this.form.submit();"><span class="glyphicons glyphicons-play-button"></span> {'common.explore'|devblocks_translate|lower}</button>
-		{if $active_worker->hasPriv('core.addybook.org.actions.update')}<button type="button" class="action-always-show action-bulkupdate" onclick="genericAjaxPopup('peek','c=contacts&a=showOrgBulkPanel&view_id={$view->id}&ids=' + Devblocks.getFormEnabledCheckboxValues('viewForm{$view->id}','row_id[]'),null,false,'500');"><span class="glyphicons glyphicons-folder-closed"></span> {'common.bulk_update'|devblocks_translate|lower}</button>{/if}
-		{if $active_worker->hasPriv('core.addybook.org.actions.merge')}<button type="button" onclick="genericAjaxPopup('peek','c=contacts&a=showOrgMergePeek&view_id={$view->id}&org_ids=' + Devblocks.getFormEnabledCheckboxValues('viewForm{$view->id}','row_id[]'),null,false,'500');"><span class="glyphicons glyphicons-git-merge"></span> {'mail.merge'|devblocks_translate|lower}</button>{/if}
+		{if $active_worker->hasPriv('core.addybook.org.actions.update')}<button type="button" class="action-always-show action-bulkupdate" onclick="genericAjaxPopup('peek','c=profiles&a=handleSectionAction&section=org&action=showBulkPopup&view_id={$view->id}&ids=' + Devblocks.getFormEnabledCheckboxValues('viewForm{$view->id}','row_id[]'),null,false,'50%');"><span class="glyphicons glyphicons-folder-closed"></span> {'common.bulk_update'|devblocks_translate|lower}</button>{/if}
+		{if $active_worker->hasPriv('core.addybook.org.actions.merge')}<button type="button" onclick="genericAjaxPopup('peek','c=contacts&a=showOrgMergePeek&view_id={$view->id}&org_ids=' + Devblocks.getFormEnabledCheckboxValues('viewForm{$view->id}','row_id[]'),null,false,'50%');"><span class="glyphicons glyphicons-git-merge"></span> {'mail.merge'|devblocks_translate|lower}</button>{/if}
 	</div>
 	{/if}
 </div>
@@ -141,46 +155,45 @@
 {include file="devblocks:cerberusweb.core::internal/views/view_common_jquery_ui.tpl"}
 
 <script type="text/javascript">
-$frm = $('#viewForm{$view->id}');
-
-{if $pref_keyboard_shortcuts}
-$frm.bind('keyboard_shortcut',function(event) {
-	//console.log("{$view->id} received " + (indirect ? 'indirect' : 'direct') + " keyboard event for: " + event.keypress_event.which);
+$(function() {
+	var $frm = $('#viewForm{$view->id}');
 	
-	$view_actions = $('#{$view->id}_actions');
+	{if $pref_keyboard_shortcuts}
+	$frm.bind('keyboard_shortcut',function(event) {
+		var $view_actions = $('#{$view->id}_actions');
+		var hotkey_activated = true;
 	
-	hotkey_activated = true;
-
-	switch(event.keypress_event.which) {
-		case 98: // (b) bulk update
-			$btn = $view_actions.find('button.action-bulkupdate');
-		
-			if(event.indirect) {
-				$btn.select().focus();
-				
-			} else {
-				$btn.click();
-			}
-			break;
-		
-		case 101: // (e) explore
-			$btn = $view_actions.find('button.action-explore');
-		
-			if(event.indirect) {
-				$btn.select().focus();
-				
-			} else {
-				$btn.click();
-			}
-			break;
+		switch(event.keypress_event.which) {
+			case 98: // (b) bulk update
+				var $btn = $view_actions.find('button.action-bulkupdate');
 			
-		default:
-			hotkey_activated = false;
-			break;
-	}
-
-	if(hotkey_activated)
-		event.preventDefault();
+				if(event.indirect) {
+					$btn.select().focus();
+					
+				} else {
+					$btn.click();
+				}
+				break;
+			
+			case 101: // (e) explore
+				var $btn = $view_actions.find('button.action-explore');
+			
+				if(event.indirect) {
+					$btn.select().focus();
+					
+				} else {
+					$btn.click();
+				}
+				break;
+				
+			default:
+				hotkey_activated = false;
+				break;
+		}
+	
+		if(hotkey_activated)
+			event.preventDefault();
+	});
+	{/if}
 });
-{/if}
 </script>

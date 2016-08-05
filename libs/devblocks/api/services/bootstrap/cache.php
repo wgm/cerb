@@ -1,5 +1,5 @@
 <?php
-// [TODO] XCache and APC drivers
+// [TODO] opcache, XCache, and APC drivers
 class _DevblocksCacheManager {
 	private static $instance = null;
 	private static $_cacher = null;
@@ -29,6 +29,9 @@ class _DevblocksCacheManager {
 		if(self::$_cacher->id == $extension_id)
 			return;
 		
+		if(defined('DEVBLOCKS_CACHE_ENGINE_PREVENT_CHANGE') && DEVBLOCKS_CACHE_ENGINE_PREVENT_CHANGE)
+			return;
+		
 		if(false !== ($ext = Extension_DevblocksCacheEngine::get($extension_id))) {
 			if($ext->setConfig($config))
 				self::$_cacher = $ext;
@@ -41,15 +44,52 @@ class _DevblocksCacheManager {
 	}
 	
 	private function __construct() {
-		// Default to disk, and load directly without platform (bootstrap)
-		$manifest = new DevblocksExtensionManifest();
-		$manifest->id = DevblocksCacheEngine_Disk::ID;
-		$manifest->point = 'devblocks.cache.engine';
-		$manifest->plugin_id = 'devblocks.core';
-		$manifest->class = 'DevblocksCacheEngine_Disk';
-		$manifest->file = __FILE__;
-		$manifest->name = 'Filesystem';
-		$manifest->params = array();
+		$manifest = null;
+		$cache_config = array();
+		
+		// Load the default directly without platform (bootstrap)
+		if(defined('DEVBLOCKS_CACHE_ENGINE'))
+		switch(DEVBLOCKS_CACHE_ENGINE) {
+			case DevblocksCacheEngine_Redis::ID:
+				$manifest = new DevblocksExtensionManifest();
+				$manifest->id = DevblocksCacheEngine_Redis::ID;
+				$manifest->point = 'devblocks.cache.engine';
+				$manifest->plugin_id = 'devblocks.core';
+				$manifest->class = 'DevblocksCacheEngine_Redis';
+				$manifest->file = __FILE__;
+				$manifest->name = 'Redis';
+				$manifest->params = array();
+				break;
+			
+			case DevblocksCacheEngine_Memcache::ID:
+				$manifest = new DevblocksExtensionManifest();
+				$manifest->id = DevblocksCacheEngine_Memcache::ID;
+				$manifest->point = 'devblocks.cache.engine';
+				$manifest->plugin_id = 'devblocks.core';
+				$manifest->class = 'DevblocksCacheEngine_Memcache';
+				$manifest->file = __FILE__;
+				$manifest->name = 'Memcache';
+				$manifest->params = array();
+				break;
+		}
+		
+		if(!$manifest) {
+			// Default to disk
+			$manifest = new DevblocksExtensionManifest();
+			$manifest->id = DevblocksCacheEngine_Disk::ID;
+			$manifest->point = 'devblocks.cache.engine';
+			$manifest->plugin_id = 'devblocks.core';
+			$manifest->class = 'DevblocksCacheEngine_Disk';
+			$manifest->file = __FILE__;
+			$manifest->name = 'Filesystem';
+			$manifest->params = array();
+		}
+		
+		// Allow options override
+		if(defined('DEVBLOCKS_CACHE_ENGINE_OPTIONS')
+				&& DEVBLOCKS_CACHE_ENGINE_OPTIONS
+				&& false != ($options = json_decode(DEVBLOCKS_CACHE_ENGINE_OPTIONS, true)))
+			$cache_config = $options;
 		
 		$class_name = $manifest->class;
 
@@ -58,8 +98,8 @@ class _DevblocksCacheManager {
 		}
 		
 		if(false == ($ext = new $class_name($manifest))
-			|| false === ($ext->setConfig(array())))
-				die("[ERROR] Can't initialize the Devblocks cache.");
+			|| false === ($ext->setConfig($cache_config)))
+				DevblocksPlatform::dieWithHttpError("[ERROR] Can't initialize the Devblocks cache.", 500);
 			
 		// Always keep the disk cacher around, since we'll need it for the bootstrap caches
 		self::$_bootstrap_cacher = $ext;
@@ -321,19 +361,17 @@ class DevblocksCacheEngine_Disk extends Extension_DevblocksCacheEngine {
 			$wrapper['cache_until'] = time() + $ttl;
 		}
 		
-		if(false === ($fp = fopen($cache_file, 'a+')))
+		if(false === ($fp = fopen($cache_file, 'w')))
 			return false;
 		
 		// Lock for writing
 		flock($fp, LOCK_EX);
-		fseek($fp, 0);
-		ftruncate($fp, 0);
 		
 		if(false === fwrite($fp, serialize($wrapper)))
 			return false;
 		
 		// Set the permissions more securely
-		chmod($cache_file, 0640);
+		chmod($cache_file, 0660);
 		
 		fclose($fp);
 		
@@ -377,6 +415,10 @@ class DevblocksCacheEngine_Memcache extends Extension_DevblocksCacheEngine {
 	private $_driver = null;
 	private $_iteration = null;
 
+	public function getDriver() {
+		return $this->_driver;
+	}
+	
 	private function _getIteration($new=false) {
 		// First, check the class for our iteration
 		if(!$new && !is_null($this->_iteration))
@@ -501,6 +543,10 @@ class DevblocksCacheEngine_Redis extends Extension_DevblocksCacheEngine {
 	
 	private $_driver = null;
 	private $_iteration = null;
+	
+	public function getDriver() {
+		return $this->_driver;
+	}
 
 	private function _getIteration($new=false) {
 		// First, check the class for our iteration

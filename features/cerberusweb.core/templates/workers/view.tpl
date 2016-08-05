@@ -72,19 +72,19 @@
 	{foreach from=$data item=result key=idx name=results}
 
 	{if $smarty.foreach.results.iteration % 2}
-		{assign var=tableRowClass value="even"}
+		{$tableRowClass = "even"}
 	{else}
-		{assign var=tableRowClass value="odd"}
+		{$tableRowClass = "odd"}
 	{/if}
 	<tbody style="cursor:pointer;">
 		<tr class="{$tableRowClass}">
-			<td align="center" rowspan="2" nowrap="nowrap" style="padding:5px;">
+			<td data-column="*_watchers" align="center" rowspan="2" nowrap="nowrap" style="padding:5px;">
 				<div style="position:relative;">
 					<img src="{devblocks_url}c=avatars&context=worker&context_id={$result.w_id}{/devblocks_url}?v={$result.w_updated}" style="height:32px;width:32px;border-radius:16px;vertical-align:middle;">
 					{if $result.w_is_disabled}<span class="plugin_icon_overlay_disabled" style="background-size:32px 32px;"></span>{/if}
 				</div>
 			</td>
-			<td colspan="{$smarty.foreach.headers.total}">
+			<td data-column="label" colspan="{$smarty.foreach.headers.total}">
 				{$worker_name = "{$result.w_first_name}{if !empty($result.w_last_name)} {$result.w_last_name}{/if}"}
 				<input type="checkbox" name="row_id[]" value="{$result.w_id}" style="display:none;">
 				<a href="{devblocks_url}c=profiles&a=worker&id={$result.w_id}-{$worker_name|devblocks_permalink}{/devblocks_url}" class="subject">{$worker_name}</a>
@@ -96,14 +96,14 @@
 			{if substr($column,0,3)=="cf_"}
 				{include file="devblocks:cerberusweb.core::internal/custom_fields/view/cell_renderer.tpl"}
 			{elseif $column=="w_is_disabled"}
-				<td>{if $result.w_is_disabled}{'common.yes'|devblocks_translate|capitalize}{else}{'common.no'|devblocks_translate|capitalize}{/if}</td>
+				<td data-column="{$column}">{if $result.w_is_disabled}{'common.yes'|devblocks_translate|capitalize}{else}{'common.no'|devblocks_translate|capitalize}{/if}</td>
 			{elseif $column=="w_is_superuser"}
-				<td>{if $result.w_is_superuser}{'common.yes'|devblocks_translate|capitalize}{else}{'common.no'|devblocks_translate|capitalize}{/if}</td>
+				<td data-column="{$column}">{if $result.w_is_superuser}{'common.yes'|devblocks_translate|capitalize}{else}{'common.no'|devblocks_translate|capitalize}{/if}</td>
 			{elseif $column=="a_address_email"}
 				{$addy = $object_addys.{$result.w_email_id}}
-				<td><a href="javascript:;" class="cerb-peek-trigger" data-context="{CerberusContexts::CONTEXT_ADDRESS}" data-context-id="{$addy->id}" title="{$addy->email}">{$addy->email|truncate:64:'...':true:true}</a></td>
+				<td data-column="{$column}"><a href="javascript:;" class="cerb-peek-trigger" data-context="{CerberusContexts::CONTEXT_ADDRESS}" data-context-id="{$addy->id}" title="{$addy->email}">{$addy->email|truncate:64:'...':true:true}</a></td>
 			{elseif $column == SearchFields_Worker::GENDER}
-			<td>
+			<td data-column="{$column}">
 				{if $result.$column == 'M'}
 				<span class="glyphicons glyphicons-male"></span>
 				{elseif $result.$column == 'F'}
@@ -112,7 +112,7 @@
 				{/if}
 			</td>
 			{elseif $column=="w_calendar_id"}
-				<td>
+				<td data-column="{$column}">
 				{if $result.$column}
 					{$calendar = DAO_Calendar::get($result.$column)}
 					{if $calendar}
@@ -120,21 +120,21 @@
 					{/if}
 				{/if}
 				</td>
-			{elseif in_array($column, ['w_last_activity_date', 'w_updated'])}
+			{elseif in_array($column, ['w_updated'])}
 				{if !empty($result.$column)}
-				<td title="{$result.$column|devblocks_date}">{$result.$column|devblocks_prettytime}</td>
+				<td data-column="{$column}" title="{$result.$column|devblocks_date}">{$result.$column|devblocks_prettytime}</td>
 				{else}
-				<td>{'common.never'|devblocks_translate|lower}</td>
+				<td data-column="{$column}">{'common.never'|devblocks_translate|lower}</td>
 				{/if}
 			{elseif $column=="w_auth_extension_id"}
-				<td>
+				<td data-column="{$column}">
 					{if isset($auth_extensions.{$result.$column})}
 						{$auth_ext = $auth_extensions.{$result.$column}}
 						{$auth_ext->name}
 					{/if}
 				</td>
 			{else}
-			<td>{$result.$column}</td>
+			<td data-column="{$column}">{$result.$column}</td>
 			{/if}
 		{/foreach}
 		</tr>
@@ -169,7 +169,7 @@
 	<div style="float:left;" id="{$view->id}_actions">
 		<button type="button" class="action-always-show action-explore"><span class="glyphicons glyphicons-play-button"></span> {'common.explore'|devblocks_translate|lower}</button>
 		{if $active_worker && $active_worker->is_superuser}
-			<button type="button" class="action-always-show action-bulkupdate" onclick="genericAjaxPopup('peek','c=config&a=handleSectionAction&section=workers&action=showWorkersBulkPanel&view_id={$view->id}&ids=' + Devblocks.getFormEnabledCheckboxValues('viewForm{$view->id}','row_id[]'),null,false,'500');"><span class="glyphicons glyphicons-folder-closed"></span></a> bulk update</button>
+			<button type="button" class="action-always-show action-bulkupdate" onclick="genericAjaxPopup('peek','c=profiles&a=handleSectionAction&section=worker&action=showBulkPopup&view_id={$view->id}&ids=' + Devblocks.getFormEnabledCheckboxValues('viewForm{$view->id}','row_id[]'),null,false,'50%');"><span class="glyphicons glyphicons-folder-closed"></span></a> bulk update</button>
 		{/if}
 	</div>
 	{/if}
@@ -182,44 +182,43 @@
 {include file="devblocks:cerberusweb.core::internal/views/view_common_jquery_ui.tpl"}
 
 <script type="text/javascript">
-var $frm = $('#viewForm{$view->id}');
-var $frm_actions = $('#{$view->id}_actions');
-
-$frm_actions.find('button.action-explore').click(function() {
-	var checkedId = $frm.find('tbody input:checkbox:checked:first').val();
-	$frm.find('input:hidden[name=explore_from]').val(checkedId);
+$(function() {
+	var $frm = $('#viewForm{$view->id}');
+	var $frm_actions = $('#{$view->id}_actions');
 	
-	$frm.find('input:hidden[name=action]').val('viewExplore');
-	$frm.submit();
-});
-
-{if $pref_keyboard_shortcuts}
-$frm.bind('keyboard_shortcut',function(event) {
-	//console.log("{$view->id} received " + (indirect ? 'indirect' : 'direct') + " keyboard event for: " + event.keypress_event.which);
-	
-	var $view_actions = $('#{$view->id}_actions');
-	
-	var hotkey_activated = true;
-
-	switch(event.keypress_event.which) {
-		case 98: // (b) bulk update
-			var $btn = $view_actions.find('button.action-bulkupdate');
+	$frm_actions.find('button.action-explore').click(function() {
+		var checkedId = $frm.find('tbody input:checkbox:checked:first').val();
+		$frm.find('input:hidden[name=explore_from]').val(checkedId);
 		
-			if(event.indirect) {
-				$btn.select().focus();
-				
-			} else {
-				$btn.click();
-			}
-			break;
-		
-		default:
-			hotkey_activated = false;
-			break;
-	}
-
-	if(hotkey_activated)
-		event.preventDefault();
+		$frm.find('input:hidden[name=action]').val('viewExplore');
+		$frm.submit();
+	});
+	
+	{if $pref_keyboard_shortcuts}
+	$frm.bind('keyboard_shortcut',function(event) {
+		var $view_actions = $('#{$view->id}_actions');
+		var hotkey_activated = true;
+	
+		switch(event.keypress_event.which) {
+			case 98: // (b) bulk update
+				var $btn = $view_actions.find('button.action-bulkupdate');
+			
+				if(event.indirect) {
+					$btn.select().focus();
+					
+				} else {
+					$btn.click();
+				}
+				break;
+			
+			default:
+				hotkey_activated = false;
+				break;
+		}
+	
+		if(hotkey_activated)
+			event.preventDefault();
+	});
+	{/if}
 });
-{/if}
 </script>

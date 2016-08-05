@@ -2,24 +2,20 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
 | The latest version of this license can be found here:
-| http://cerberusweb.com/license
+| http://cerb.io/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://www.cerbweb.com	    http://www.webgroupmedia.com/
+|	http://cerb.io	    http://webgroup.media
 ***********************************************************************/
 
 class ChContactsPage extends CerberusPageExtension {
-	function getActivity() {
-		return new Model_Activity('activity.address_book');
-	}
-	
 	function isVisible() {
 		// The current session must be a logged-in worker to use this page.
 		if(null == ($worker = CerberusApplication::getActiveWorker()))
@@ -239,7 +235,7 @@ class ChContactsPage extends CerberusPageExtension {
 			$view = new View_Ticket();
 			$view->id = $view_id;
 			$view->view_columns = array(
-				SearchFields_Ticket::TICKET_LAST_ACTION_CODE,
+				SearchFields_Ticket::TICKET_LAST_WROTE,
 				SearchFields_Ticket::TICKET_CREATED_DATE,
 				SearchFields_Ticket::TICKET_GROUP_ID,
 				SearchFields_Ticket::TICKET_BUCKET_ID,
@@ -250,9 +246,8 @@ class ChContactsPage extends CerberusPageExtension {
 			$view->renderSortAsc = false;
 		}
 	
-
 		$params_required = array(
-			SearchFields_Ticket::TICKET_DELETED => new DevblocksSearchCriteria(SearchFields_Ticket::TICKET_DELETED,DevblocksSearchCriteria::OPER_EQ,0)
+			SearchFields_Ticket::TICKET_STATUS_ID => new DevblocksSearchCriteria(SearchFields_Ticket::TICKET_STATUS_ID,DevblocksSearchCriteria::OPER_NEQ,Model_Ticket::STATUS_DELETED)
 		);
 		
 		if(empty($ids)) {
@@ -271,101 +266,6 @@ class ChContactsPage extends CerberusPageExtension {
 		exit;
 	}
 
-	function findTicketsAction() {
-		@$email = DevblocksPlatform::importGPC($_REQUEST['email'],'string','');
-		@$closed = DevblocksPlatform::importGPC($_REQUEST['closed'],'string','');
-		
-		if(null == ($address = DAO_Address::lookupAddress($email, false)))
-			return;
-		
-		if(null == ($ticket_context = Extension_DevblocksContext::get(CerberusContexts::CONTEXT_TICKET)))
-			return;
-		
-		if(null == ($search_view = $ticket_context->getSearchView()))
-			return;
-		
-		$search_view->removeAllParams();
-		
-		if(!empty($address))
-			$search_view->addParam(new DevblocksSearchCriteria(SearchFields_Ticket::REQUESTER_ADDRESS,'=',$address->email));
-
-		if(0 != strlen($closed))
-			$search_view->addParam(new DevblocksSearchCriteria(SearchFields_Ticket::TICKET_CLOSED,'=',$closed));
-			
-		$search_view->renderPage = 0;
-		
-		DevblocksPlatform::setHttpResponse(new DevblocksHttpResponse(array('search','ticket')));
-	}
-	
-	function showAddressBatchPanelAction() {
-		@$ids = DevblocksPlatform::importGPC($_REQUEST['ids']);
-		@$view_id = DevblocksPlatform::importGPC($_REQUEST['view_id']);
-
-		$active_worker = CerberusApplication::getActiveWorker();
-		
-		$tpl = DevblocksPlatform::getTemplateService();
-		$tpl->assign('view_id', $view_id);
-
-		if(!empty($ids)) {
-			$tpl->assign('ids', $ids);
-		}
-		
-		// Custom fields
-		$custom_fields = DAO_CustomField::getByContext(CerberusContexts::CONTEXT_ADDRESS, false);
-		$tpl->assign('custom_fields', $custom_fields);
-		
-		// Groups
-		$groups = DAO_Group::getAll();
-		$tpl->assign('groups', $groups);
-		
-		// Broadcast
-		CerberusContexts::getContext(CerberusContexts::CONTEXT_ADDRESS, null, $token_labels, $token_values);
-		$tpl->assign('token_labels', $token_labels);
-		
-		// HTML templates
-		$html_templates = DAO_MailHtmlTemplate::getAll();
-		$tpl->assign('html_templates', $html_templates);
-		
-		// Macros
-		
-		$macros = DAO_TriggerEvent::getReadableByActor(
-			$active_worker,
-			'event.macro.address'
-		);
-		$tpl->assign('macros', $macros);
-		
-		$tpl->display('devblocks:cerberusweb.core::contacts/addresses/bulk.tpl');
-	}
-	
-	function showOrgBulkPanelAction() {
-		@$ids = DevblocksPlatform::importGPC($_REQUEST['ids']);
-		@$view_id = DevblocksPlatform::importGPC($_REQUEST['view_id']);
-
-		$active_worker = CerberusApplication::getActiveWorker();
-		
-		$tpl = DevblocksPlatform::getTemplateService();
-		$tpl->assign('view_id', $view_id);
-
-		if(!empty($ids)) {
-			$org_ids = DevblocksPlatform::parseCsvString($ids);
-			$tpl->assign('org_ids', implode(',', $org_ids));
-		}
-		
-		// Custom Fields
-		$custom_fields = DAO_CustomField::getByContext(CerberusContexts::CONTEXT_ORG, false);
-		$tpl->assign('custom_fields', $custom_fields);
-		
-		// Macros
-		
-		$macros = DAO_TriggerEvent::getReadableByActor(
-			$active_worker,
-			'event.macro.org'
-		);
-		$tpl->assign('macros', $macros);
-		
-		$tpl->display('devblocks:cerberusweb.core::contacts/orgs/bulk.tpl');
-	}
-	
 	function showOrgMergePeekAction() {
 		@$view_id = DevblocksPlatform::importGPC($_REQUEST['view_id'],'string','');
 		@$org_ids = DevblocksPlatform::importGPC($_REQUEST['org_ids'],'string','');
@@ -720,414 +620,6 @@ class ChContactsPage extends CerberusPageExtension {
 		exit;
 	}
 	
-	function saveOrgPeekAction() {
-		@$id = DevblocksPlatform::importGPC($_REQUEST['id'],'integer', 0);
-		@$view_id = DevblocksPlatform::importGPC($_REQUEST['view_id'],'string','');
-		@$delete = DevblocksPlatform::importGPC($_REQUEST['do_delete'],'integer',0);
-		
-		$active_worker = CerberusApplication::getActiveWorker();
-
-		header('Content-Type: application/json; charset=' . LANG_CHARSET_CODE);
-		
-		try {
-		
-			if(!empty($id) && !empty($delete)) { // delete
-				if(!$active_worker->hasPriv('core.addybook.org.actions.delete'))
-					throw new Exception_DevblocksAjaxValidationError("You don't have permission to delete this record.");
-				
-				DAO_ContactOrg::delete($id);
-				
-				echo json_encode(array(
-					'status' => true,
-					'id' => $id,
-					'view_id' => $view_id,
-				));
-				return;
-				
-			} else { // create/edit
-				@$org_name = DevblocksPlatform::importGPC($_REQUEST['org_name'],'string','');
-				@$street = DevblocksPlatform::importGPC($_REQUEST['street'],'string','');
-				@$city = DevblocksPlatform::importGPC($_REQUEST['city'],'string','');
-				@$province = DevblocksPlatform::importGPC($_REQUEST['province'],'string','');
-				@$postal = DevblocksPlatform::importGPC($_REQUEST['postal'],'string','');
-				@$country = DevblocksPlatform::importGPC($_REQUEST['country'],'string','');
-				@$phone = DevblocksPlatform::importGPC($_REQUEST['phone'],'string','');
-				@$website = DevblocksPlatform::importGPC($_REQUEST['website'],'string','');
-				@$comment = DevblocksPlatform::importGPC($_REQUEST['comment'],'string','');
-				
-				// Validation
-				if(empty($org_name))
-					throw new Exception_DevblocksAjaxValidationError("The 'Name' field is required.", 'org_name');
-				
-				// Privs
-				if($active_worker->hasPriv('core.addybook.org.actions.update')) {
-					$fields = array(
-						DAO_ContactOrg::NAME => $org_name,
-						DAO_ContactOrg::STREET => $street,
-						DAO_ContactOrg::CITY => $city,
-						DAO_ContactOrg::PROVINCE => $province,
-						DAO_ContactOrg::POSTAL => $postal,
-						DAO_ContactOrg::COUNTRY => $country,
-						DAO_ContactOrg::PHONE => $phone,
-						DAO_ContactOrg::WEBSITE => $website,
-					);
-			
-					if($id==0) {
-						if(false == ($id = DAO_ContactOrg::create($fields)))
-							throw new Exception_DevblocksAjaxValidationError("Failed to create a new record.");
-						
-						// Watchers
-						@$add_watcher_ids = DevblocksPlatform::sanitizeArray(DevblocksPlatform::importGPC($_REQUEST['add_watcher_ids'],'array',array()),'integer',array('unique','nonzero'));
-						if(!empty($add_watcher_ids))
-							CerberusContexts::addWatchers(CerberusContexts::CONTEXT_ORG, $id, $add_watcher_ids);
-						
-						// Context Link (if given)
-						@$link_context = DevblocksPlatform::importGPC($_REQUEST['link_context'],'string','');
-						@$link_context_id = DevblocksPlatform::importGPC($_REQUEST['link_context_id'],'integer','');
-						if(!empty($id) && !empty($link_context) && !empty($link_context_id)) {
-							DAO_ContextLink::setLink(CerberusContexts::CONTEXT_ORG, $id, $link_context, $link_context_id);
-						}
-						
-						// View marquee
-						if(!empty($id) && !empty($view_id)) {
-							C4_AbstractView::setMarqueeContextCreated($view_id, CerberusContexts::CONTEXT_ORG, $id);
-						}
-						
-					}
-					else {
-						DAO_ContactOrg::update($id, $fields);
-					}
-					
-					if($id) {
-						// Custom field saves
-						@$field_ids = DevblocksPlatform::importGPC($_POST['field_ids'], 'array', array());
-						DAO_CustomFieldValue::handleFormPost(CerberusContexts::CONTEXT_ORG, $id, $field_ids);
-						
-						// Avatar image
-						@$avatar_image = DevblocksPlatform::importGPC($_REQUEST['avatar_image'], 'string', '');
-						DAO_ContextAvatar::upsertWithImage(CerberusContexts::CONTEXT_ORG, $id, $avatar_image);
-						
-						// Comments
-						if(!empty($comment)) {
-							$also_notify_worker_ids = array_keys(CerberusApplication::getWorkersByAtMentionsText($comment));
-							
-							$fields = array(
-								DAO_Comment::CREATED => time(),
-								DAO_Comment::CONTEXT => CerberusContexts::CONTEXT_ORG,
-								DAO_Comment::CONTEXT_ID => $id,
-								DAO_Comment::COMMENT => $comment,
-								DAO_Comment::OWNER_CONTEXT => CerberusContexts::CONTEXT_WORKER,
-								DAO_Comment::OWNER_CONTEXT_ID => $active_worker->id,
-							);
-							$comment_id = DAO_Comment::create($fields, $also_notify_worker_ids);
-						}
-						
-						// Index immediately
-						$search = Extension_DevblocksSearchSchema::get(Search_Org::ID);
-						$search->indexIds(array($id));
-					}
-				}
-			}
-			
-			echo json_encode(array(
-				'status' => true,
-				'id' => $id,
-				'label' => $org_name,
-				'view_id' => $view_id,
-			));
-			return;
-			
-		} catch (Exception_DevblocksAjaxValidationError $e) {
-				echo json_encode(array(
-					'status' => false,
-					'id' => $id,
-					'error' => $e->getMessage(),
-					'field' => $e->getFieldName(),
-				));
-				return;
-			
-		} catch (Exception $e) {
-				echo json_encode(array(
-					'status' => false,
-					'id' => $id,
-					'error' => 'An error occurred.',
-				));
-				return;
-			
-		}
-	}
-	
-	function doAddressBatchUpdateAction() {
-		$active_worker = CerberusApplication::getActiveWorker();
-		
-		@$filter = DevblocksPlatform::importGPC($_REQUEST['filter'],'string','');
-		$ids = array();
-		
-		@$view_id = DevblocksPlatform::importGPC($_REQUEST['view_id'],'string');
-		$view = C4_AbstractViewLoader::getView($view_id);
-		$view->setAutoPersist(false);
-
-		@$org_id = DevblocksPlatform::importGPC($_POST['org_id'],'string',null);
-		@$sla = DevblocksPlatform::importGPC($_POST['sla'],'string','');
-		@$is_banned = DevblocksPlatform::importGPC($_POST['is_banned'],'integer',0);
-		@$is_defunct = DevblocksPlatform::importGPC($_POST['is_defunct'],'integer',0);
-
-		// Scheduled behavior
-		@$behavior_id = DevblocksPlatform::importGPC($_POST['behavior_id'],'string','');
-		@$behavior_when = DevblocksPlatform::importGPC($_POST['behavior_when'],'string','');
-		@$behavior_params = DevblocksPlatform::importGPC($_POST['behavior_params'],'array',array());
-		
-		$do = array();
-		
-		// Do: Organization
-		if(0 != strlen($org_id)) {
-			$do['org_id'] = $org_id;
-		}
-		
-		// Do: SLA
-		if('' != $sla)
-			$do['sla'] = $sla;
-		
-		// Do: Banned
-		if(0 != strlen($is_banned))
-			$do['banned'] = $is_banned;
-		
-		// Do: Defunct
-		if(0 != strlen($is_defunct))
-			$do['defunct'] = $is_defunct;
-		
-		// Do: Scheduled Behavior
-		if(0 != strlen($behavior_id)) {
-			$do['behavior'] = array(
-				'id' => $behavior_id,
-				'when' => $behavior_when,
-				'params' => $behavior_params,
-			);
-		}
-		
-		// Broadcast: Compose
-		if($active_worker->hasPriv('core.addybook.addy.view.actions.broadcast')) {
-			@$do_broadcast = DevblocksPlatform::importGPC($_REQUEST['do_broadcast'],'string',null);
-			@$broadcast_group_id = DevblocksPlatform::importGPC($_REQUEST['broadcast_group_id'],'integer',0);
-			@$broadcast_subject = DevblocksPlatform::importGPC($_REQUEST['broadcast_subject'],'string',null);
-			@$broadcast_message = DevblocksPlatform::importGPC($_REQUEST['broadcast_message'],'string',null);
-			@$broadcast_format = DevblocksPlatform::importGPC($_REQUEST['broadcast_format'],'string',null);
-			@$broadcast_html_template_id = DevblocksPlatform::importGPC($_REQUEST['broadcast_html_template_id'],'integer',0);
-			@$broadcast_is_queued = DevblocksPlatform::importGPC($_REQUEST['broadcast_is_queued'],'integer',0);
-			@$broadcast_is_closed = DevblocksPlatform::importGPC($_REQUEST['broadcast_next_is_closed'],'integer',0);
-			@$broadcast_file_ids = DevblocksPlatform::sanitizeArray(DevblocksPlatform::importGPC($_REQUEST['broadcast_file_ids'],'array',array()), 'integer', array('nonzero','unique'));
-			
-			if(0 != strlen($do_broadcast) && !empty($broadcast_subject) && !empty($broadcast_message)) {
-				$do['broadcast'] = array(
-					'subject' => $broadcast_subject,
-					'message' => $broadcast_message,
-					'format' => $broadcast_format,
-					'html_template_id' => $broadcast_html_template_id,
-					'is_queued' => $broadcast_is_queued,
-					'next_is_closed' => $broadcast_is_closed,
-					'group_id' => $broadcast_group_id,
-					'worker_id' => $active_worker->id,
-					'file_ids' => $broadcast_file_ids,
-				);
-			}
-		}
-			
-		// Do: Custom fields
-		$do = DAO_CustomFieldValue::handleBulkPost($do);
-		
-		switch($filter) {
-			// Checked rows
-			case 'checks':
-				@$address_id_str = DevblocksPlatform::importGPC($_REQUEST['ids'],'string');
-				$ids = DevblocksPlatform::parseCsvString($address_id_str);
-				break;
-			case 'sample':
-				@$sample_size = min(DevblocksPlatform::importGPC($_REQUEST['filter_sample_size'],'integer',0),9999);
-				$filter = 'checks';
-				$ids = $view->getDataSample($sample_size);
-				break;
-			default:
-				break;
-		}
-		
-		$view->doBulkUpdate($filter, $do, $ids);
-		$view->render();
-		return;
-	}
-
-	function doAddressBulkUpdateBroadcastTestAction() {
-		@$view_id = DevblocksPlatform::importGPC($_REQUEST['view_id'],'string');
-		
-		$active_worker = CerberusApplication::getActiveWorker();
-		$tpl_builder = DevblocksPlatform::getTemplateBuilder();
-		
-		$view = C4_AbstractViewLoader::getView($view_id);
-		$view->setAutoPersist(false);
-
-		$tpl = DevblocksPlatform::getTemplateService();
-		
-		if($active_worker->hasPriv('core.addybook.addy.view.actions.broadcast')) {
-			@$broadcast_subject = DevblocksPlatform::importGPC($_REQUEST['broadcast_subject'],'string',null);
-			@$broadcast_message = DevblocksPlatform::importGPC($_REQUEST['broadcast_message'],'string',null);
-			@$broadcast_format = DevblocksPlatform::importGPC($_REQUEST['broadcast_format'],'string',null);
-			@$broadcast_html_template_id = DevblocksPlatform::importGPC($_REQUEST['broadcast_html_template_id'],'integer',0);
-			@$broadcast_group_id = DevblocksPlatform::importGPC($_REQUEST['broadcast_group_id'],'integer',0);
-			
-			@$filter = DevblocksPlatform::importGPC($_REQUEST['filter'],'string','');
-			@$ids = DevblocksPlatform::importGPC($_REQUEST['address_ids'],'string','');
-			
-			// Filter to checked
-			if('checks' == $filter && !empty($ids)) {
-				$view->addParam(new DevblocksSearchCriteria(SearchFields_Address::ID,'in',explode(',', $ids)));
-			}
-			
-			$results = $view->getDataSample(1);
-			
-			if(empty($results)) {
-				$success = false;
-				$output = "There aren't any rows in this view!";
-				
-			} else {
-				@$addy = DAO_Address::get(current($results));
-				
-				// Try to build the template
-				CerberusContexts::getContext(CerberusContexts::CONTEXT_ADDRESS, $addy, $token_labels, $token_values);
-
-				if(empty($broadcast_subject)) {
-					$success = false;
-					$output = "Subject is blank.";
-				
-				} else {
-					$template = "Subject: $broadcast_subject\n\n$broadcast_message";
-					
-					if(false === ($out = $tpl_builder->build($template, $token_values))) {
-						// If we failed, show the compile errors
-						$errors = $tpl_builder->getErrors();
-						$success= false;
-						$output = @array_shift($errors);
-						
-					} else {
-						// If successful, return the parsed template
-						$success = true;
-						$output = $out;
-						
-						switch($broadcast_format) {
-							case 'parsedown':
-								// Markdown
-								$output = DevblocksPlatform::parseMarkdown($output);
-								
-								// HTML Template
-								
-								$html_template = null;
-								
-								if($broadcast_html_template_id)
-									$html_template = DAO_MailHtmlTemplate::get($broadcast_html_template_id);
-								
-								if(!$html_template && false != ($group = DAO_Group::get($broadcast_group_id)))
-									$html_template = $group->getReplyHtmlTemplate(0);
-								
-								if(!$html_template && false != ($replyto = DAO_AddressOutgoing::getDefault()))
-									$html_template = $replyto->getReplyHtmlTemplate();
-								
-								if($html_template)
-									$output = $tpl_builder->build($html_template->content, array('message_body' => $output));
-								
-								// HTML Purify
-								$output = DevblocksPlatform::purifyHTML($output, true);
-								break;
-								
-							default:
-								$output = nl2br(DevblocksPlatform::strEscapeHtml($output));
-								break;
-						}
-					}
-				}
-			}
-			
-			if($success) {
-				header("Content-Type: text/html; charset=" . LANG_CHARSET_CODE);
-				echo sprintf('<html><head><meta http-equiv="content-type" content="text/html; charset=%s"></head><body>',
-					LANG_CHARSET_CODE
-				);
-				echo $output;
-				echo '</body></html>';
-				
-			} else {
-				echo $output;
-			}
-		}
-	}
-	
-	function doOrgBulkUpdateAction() {
-		// Filter: whole list or check
-		@$filter = DevblocksPlatform::importGPC($_REQUEST['filter'],'string','');
-		$ids = array();
-		
-		// View
-		@$view_id = DevblocksPlatform::importGPC($_REQUEST['view_id'],'string');
-		$view = C4_AbstractViewLoader::getView($view_id);
-		$view->setAutoPersist(false);
-		
-		// Org fields
-		@$country = trim(DevblocksPlatform::importGPC($_POST['country'],'string',''));
-
-		// Scheduled behavior
-		@$behavior_id = DevblocksPlatform::importGPC($_POST['behavior_id'],'string','');
-		@$behavior_when = DevblocksPlatform::importGPC($_POST['behavior_when'],'string','');
-		@$behavior_params = DevblocksPlatform::importGPC($_POST['behavior_params'],'array',array());
-		
-		$do = array();
-		
-		// Do: Country
-		if(0 != strlen($country))
-			$do['country'] = $country;
-			
-		// Do: Scheduled Behavior
-		if(0 != strlen($behavior_id)) {
-			$do['behavior'] = array(
-				'id' => $behavior_id,
-				'when' => $behavior_when,
-				'params' => $behavior_params,
-			);
-		}
-		
-		// Watchers
-		$watcher_params = array();
-		
-		@$watcher_add_ids = DevblocksPlatform::importGPC($_REQUEST['do_watcher_add_ids'],'array',array());
-		if(!empty($watcher_add_ids))
-			$watcher_params['add'] = $watcher_add_ids;
-			
-		@$watcher_remove_ids = DevblocksPlatform::importGPC($_REQUEST['do_watcher_remove_ids'],'array',array());
-		if(!empty($watcher_remove_ids))
-			$watcher_params['remove'] = $watcher_remove_ids;
-		
-		if(!empty($watcher_params))
-			$do['watchers'] = $watcher_params;
-			
-		// Do: Custom fields
-		$do = DAO_CustomFieldValue::handleBulkPost($do);
-		
-		switch($filter) {
-			// Checked rows
-			case 'checks':
-				@$org_ids_str = DevblocksPlatform::importGPC($_REQUEST['org_ids'],'string');
-				$ids = DevblocksPlatform::parseCsvString($org_ids_str);
-				break;
-			case 'sample':
-				@$sample_size = min(DevblocksPlatform::importGPC($_REQUEST['filter_sample_size'],'integer',0),9999);
-				$filter = 'checks';
-				$ids = $view->getDataSample($sample_size);
-				break;
-			default:
-				break;
-		}
-		
-		$view->doBulkUpdate($filter, $do, $ids);
-		$view->render();
-		return;
-	}
-	
 	function getOrgsAutoCompletionsAction() {
 		@$starts_with = DevblocksPlatform::importGPC($_REQUEST['term'],'string','');
 		@$callback = DevblocksPlatform::importGPC($_REQUEST['callback'],'string','');
@@ -1172,9 +664,14 @@ class ChContactsPage extends CerberusPageExtension {
 			"LIMIT 0,25",
 			$db->qstr($starts_with.'%')
 		);
-		$rs = $db->ExecuteSlave($sql);
+		
+		if(false == ($rs = $db->ExecuteSlave($sql)))
+			return false;
 		
 		$list = array();
+		
+		if(!($rs instanceof mysqli_result))
+			return false;
 		
 		while($row = mysqli_fetch_assoc($rs)) {
 			$list[] = $row['country'];

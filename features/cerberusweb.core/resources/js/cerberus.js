@@ -180,6 +180,7 @@ $.fn.cerbDateInputHelper = function(options) {
 		$this
 			.attr('placeholder', '+2 hours; +4 hours @Calendar; Jan 15 2018 2pm; 5pm America/New York')
 			.autocomplete({
+				delay: 300,
 				minLength: 1,
 				autoFocus: false,
 				source: function(request, response) {
@@ -371,15 +372,16 @@ var cAjaxCalls = function() {
 		}
 	}
 	
-	this.viewAddFilter = function(view_id, field, oper, values) {
+	this.viewAddFilter = function(view_id, field, oper, values, replace) {
 		var $view = $('#view'+view_id);
 		
 		var post_str = 'c=internal' +
 			'&a=viewAddFilter' + 
 			'&id=' + view_id +
+			'&replace=' + encodeURIComponent(replace ? 1 : 0) +
 			'&field=' + encodeURIComponent(field) +
 			'&oper=' + encodeURIComponent(oper) +
-			'&' + $.param(values, true)  
+			'&' + $.param(values, true)
 			;
 		
 		var cb = function(o) {
@@ -453,6 +455,9 @@ var cAjaxCalls = function() {
 	this.emailAutoComplete = function(sel, options) {
 		var url = DevblocksAppPath+'ajax.php?c=internal&a=autocomplete&context=cerberusweb.contexts.address&_csrf_token=' + $('meta[name="_csrf_token"]').attr('content');
 		if(null == options) options = { };
+		
+		if(null == options.delay)
+			options.delay = 300;
 
 		if(null == options.minLength)
 			options.minLength = 1;
@@ -534,6 +539,9 @@ var cAjaxCalls = function() {
 		
 		options.source = DevblocksAppPath+'ajax.php?c=contacts&a=getOrgsAutoCompletions&_csrf_token=' + $('meta[name="_csrf_token"]').attr('content');
 		
+		if(null == options.delay)
+			options.delay = 300;
+		
 		if(null == options.minLength)
 			options.minLength = 1;
 		
@@ -550,6 +558,9 @@ var cAjaxCalls = function() {
 		if(null == options) options = { };
 		
 		options.source = DevblocksAppPath+'ajax.php?c=contacts&a=getCountryAutoCompletions&_csrf_token=' + $('meta[name="_csrf_token"]').attr('content');
+		
+		if(null == options.delay)
+			options.delay = 300;
 		
 		if(null == options.minLength)
 			options.minLength = 1;
@@ -613,6 +624,7 @@ var cAjaxCalls = function() {
 			$autocomplete.insertBefore($button);
 			
 			$autocomplete.autocomplete({
+				delay: 300,
 				source: DevblocksAppPath+'ajax.php?c=internal&a=autocomplete&context=' + context + '&_csrf_token=' + $('meta[name="_csrf_token"]').attr('content'),
 				minLength: 1,
 				focus:function(event, ui) {
@@ -892,6 +904,26 @@ var ajax = new cAjaxCalls();
 		});
 	}
 	
+	// Abstract comments
+	
+	$.fn.cerbCommentTrigger = function(options) {
+		return this.each(function() {
+			var $button = $(this);
+			
+			$button.click(function() {
+				var context = encodeURIComponent($button.attr('data-context'));
+				var context_id = encodeURIComponent($button.attr('data-context-id'));
+				var $comment_popup = genericAjaxPopup('comment', 'c=internal&a=commentShowPopup&context=' + context + '&context_id=' + context_id, null, false, '50%');
+				$comment_popup.one('comment_save', function(event) {
+					$button.trigger('cerb-comment-saved');
+				});
+				$comment_popup.on('dialogclose', function(e) {
+					$button.trigger('cerb-comment-aborted');
+				});
+			});
+		});
+	}
+	
 	// File drag/drop zones
 	
 	$.fn.cerbAttachmentsDropZone = function() {
@@ -1132,6 +1164,7 @@ var ajax = new cAjaxCalls();
 				$autocomplete.insertAfter($trigger);
 				
 				$autocomplete.autocomplete({
+					delay: 300,
 					source: DevblocksAppPath+'ajax.php?c=internal&a=autocomplete&context=' + context + '&_csrf_token=' + $('meta[name="_csrf_token"]').attr('content'),
 					minLength: 1,
 					focus:function(event, ui) {

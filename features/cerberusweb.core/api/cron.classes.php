@@ -2,17 +2,17 @@
 /***********************************************************************
  | Cerb(tm) developed by Webgroup Media, LLC.
  |-----------------------------------------------------------------------
- | All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
+ | All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
  |   unless specifically noted otherwise.
  |
  | This source code is released under the Devblocks Public License.
  | The latest version of this license can be found here:
- | http://cerberusweb.com/license
+ | http://cerb.io/license
  |
  | By using this software, you acknowledge having read this license
  | and agree to be bound thereby.
  | ______________________________________________________________________
- |	http://www.cerbweb.com	    http://www.webgroupmedia.com/
+ |	http://cerb.io	    http://webgroup.media
  ***********************************************************************/
 
 /*
@@ -52,9 +52,9 @@ class ParseCron extends CerberusCronPageExtension {
 		$runtime = microtime(true);
 		 
 		// Allow runtime overloads (by host, etc.)
-		@$gpc_parse_max = DevblocksPlatform::importGPC($_REQUEST['parse_max'],'integer');
+		@$opt_parse_max = DevblocksPlatform::importGPC($_REQUEST['parse_max'],'integer');
 		
-		$total = !empty($gpc_parse_max) ? $gpc_parse_max : $this->getParam('max_messages', 500);
+		$total = !empty($opt_parse_max) ? $opt_parse_max : $this->getParam('max_messages', 500);
 
 		$mailDir = APP_MAIL_PATH . 'new' . DIRECTORY_SEPARATOR;
 		$subdirs = glob($mailDir . '*', GLOB_ONLYDIR);
@@ -130,8 +130,7 @@ class ParseCron extends CerberusCronPageExtension {
 
 		$time = microtime(true);
 
-		$mime = mailparse_msg_parse_file($full_filename);
-		$message = CerberusParser::parseMime($mime, $full_filename);
+		$message = CerberusParser::parseMimeFile($full_filename);
 
 		$time = microtime(true) - $time;
 		$logger->info("Decoded! (".sprintf("%d",($time*1000))." ms)");
@@ -153,8 +152,6 @@ class ParseCron extends CerberusCronPageExtension {
 			@unlink($full_filename);
 			$logger->info("The message source has been removed.");
 		}
-		
-		mailparse_msg_free($mime);
 	}
 
 	function configure($instance) {
@@ -188,13 +185,17 @@ class MaintCron extends CerberusCronPageExtension {
 		// Platform
 		DAO_Platform::maint();
 		
+		// Purge expired sessions
+		Cerb_DevblocksSessionHandler::gc(0);
+		
 		// Purge Deleted Content
 		$purge_waitdays = intval($this->getParam('purge_waitdays', 7));
 		$purge_waitsecs = time() - (intval($purge_waitdays) * 86400);
 
 		$sql = sprintf("DELETE FROM ticket ".
-			"WHERE is_deleted = 1 ".
+			"WHERE status_id = %d ".
 			"AND updated_date < %d ",
+			Model_Ticket::STATUS_DELETED,
 			$purge_waitsecs
 		);
 		$db->ExecuteMaster($sql);
@@ -383,7 +384,7 @@ class ImportCron extends CerberusCronPageExtension {
 				$file = $dest_file;
 				
 				// Parse the XML
-				if(!@$xml_root = simplexml_load_file($file)) { /* @var $xml_root SimpleXMLElement */
+				if(!@$xml_root = simplexml_load_file($file, 'SimpleXMLElement', LIBXML_PARSEHUGE)) { /* @var $xml_root SimpleXMLElement */
 					$logger->error("[Importer] Error parsing XML file: " . $file);
 					continue;
 				}
@@ -579,10 +580,10 @@ class ImportCron extends CerberusCronPageExtension {
 		$sSubject = substr((string) $xml->subject,0,255);
 		$sGroup = (string) $xml->group;
 		$sBucket = (string) $xml->bucket;
+		$sOrg = (string) $xml->org;
 		$iCreatedDate = (integer) $xml->created_date;
 		$iUpdatedDate = (integer) $xml->updated_date;
-		$isWaiting = (integer) $xml->is_waiting;
-		$isClosed = (integer) $xml->is_closed;
+		$sStatus = (string) $xml->status;
 		
 		if(empty($sMask)) {
 			$sMask = CerberusApplication::generateTicketMask();
@@ -639,58 +640,16 @@ class ImportCron extends CerberusCronPageExtension {
 			$bucket_name_to_id[$hash] = $iDestBucketId;
 		}
 			
+		// Org
+		$iOrgId = 0;
+		if(!empty($sOrg)) {
+			$iOrgId = DAO_ContactOrg::lookup($sOrg, true);
+		}
+		
 		// Xpath the first and last "from" out of "/ticket/messages/message/headers/from"
 		$aMessageNodes = $xml->xpath("/ticket/messages/message");
 		$iNumMessages = count($aMessageNodes);
-		
-		@$eFirstMessage = reset($aMessageNodes);
-		
-		if(is_null($eFirstMessage)) {
-			$logger->warning('[Importer] Ticket ' . $sMask . " doesn't have any messages.  Skipping.");
-			return false;
-		}
-		
-		if(is_null($eFirstMessage->headers) || is_null($eFirstMessage->headers->from)) {
-			$logger->warning('[Importer] Ticket ' . $sMask . " first message doesn't provide a sender address.");
-			return false;
-		}
 
-		$sFirstWrote = self::_parseRfcAddressList($eFirstMessage->headers->from, true);
-		
-		if(null == ($firstWroteInst = CerberusApplication::hashLookupAddress($sFirstWrote, true))) {
-			$logger->warning('[Importer] Ticket ' . $sMask . " - Invalid sender adddress: " . $sFirstWrote);
-			return false;
-		}
-		
-		$eLastMessage = end($aMessageNodes);
-		
-		if(is_null($eLastMessage)) {
-			$logger->warning('[Importer] Ticket ' . $sMask . " doesn't have any messages.  Skipping.");
-			return false;
-		}
-		
-		if(is_null($eLastMessage->headers) || is_null($eLastMessage->headers->from)) {
-			$logger->warning('[Importer] Ticket ' . $sMask . " last message doesn't provide a sender address.");
-			return false;
-		}
-		
-		$sLastWrote = self::_parseRfcAddressList($eLastMessage->headers->from, true);
-		
-		if(null == ($lastWroteInst = CerberusApplication::hashLookupAddress($sLastWrote, true))) {
-			$logger->warning('[Importer] Ticket ' . $sMask . ' last message has an invalid sender address: ' . $sLastWrote);
-			return false;
-		}
-
-		// Last action code + last worker
-		$sLastActionCode = CerberusTicketActionCode::TICKET_OPENED;
-		if($iNumMessages > 1) {
-			if(isset($email_to_worker_id[strtolower($lastWroteInst->email)])) {
-				$sLastActionCode = CerberusTicketActionCode::TICKET_WORKER_REPLY;
-			} else {
-				$sLastActionCode = CerberusTicketActionCode::TICKET_CUSTOMER_REPLY;
-			}
-		}
-		
 		// Dupe check by ticket mask
 		if(null != DAO_Ticket::getTicketByMask($sMask)) {
 			$logger->warning("[Importer] Ticket mask '" . $sMask . "' already exists.  Making it unique.");
@@ -706,20 +665,31 @@ class ImportCron extends CerberusCronPageExtension {
 			$logger->info("[Importer] The unique mask for '".$origMask."' is now '" . $sMask . "'");
 		}
 		
+		$statusId = 0;
+		
+		switch(strtolower($sStatus)) {
+			case 'waiting':
+				$statusId = 1;
+				break;
+			case 'closed':
+				$statusId = 2;
+				break;
+			case 'deleted':
+				$statusId = 3;
+				break;
+		}
+		
 		// Create ticket
 		$fields = array(
 			DAO_Ticket::MASK => $sMask,
 			DAO_Ticket::SUBJECT => $sSubject,
-			DAO_Ticket::IS_WAITING => $isWaiting,
-			DAO_Ticket::IS_CLOSED => $isClosed,
-			DAO_Ticket::FIRST_WROTE_ID => intval($firstWroteInst->id),
-			DAO_Ticket::LAST_WROTE_ID => intval($lastWroteInst->id),
-			DAO_Ticket::ORG_ID => intval($firstWroteInst->contact_org_id),
+			DAO_Ticket::STATUS_ID => intval($statusId),
+			DAO_Ticket::NUM_MESSAGES => $iNumMessages,
+			DAO_Ticket::ORG_ID => $iOrgId,
 			DAO_Ticket::CREATED_DATE => $iCreatedDate,
 			DAO_Ticket::UPDATED_DATE => $iUpdatedDate,
 			DAO_Ticket::GROUP_ID => intval($iDestGroupId),
 			DAO_Ticket::BUCKET_ID => intval($iDestBucketId),
-			DAO_Ticket::LAST_ACTION_CODE => $sLastActionCode,
 			DAO_Ticket::IMPORTANCE => 50,
 		);
 		$ticket_id = DAO_Ticket::create($fields);
@@ -733,15 +703,38 @@ class ImportCron extends CerberusCronPageExtension {
 			DAO_Ticket::createRequester($sRequesterAddy, $ticket_id);
 		}
 		
+		$first_message_id = 0;
+		$first_wrote_id = 0;
+		$first_outgoing_message_id = 0;
+		$last_message_id = 0;
+		$last_wrote_id = 0;
+		
 		// Create messages
 		if(!is_null($xml->messages)) {
 			$count_messages = count($xml->messages->message);
 			$seek_messages = 1;
 			foreach($xml->messages->message as $eMessage) { /* @var $eMessage SimpleXMLElement */
+				$iIsOutgoing = (integer) $eMessage->is_outgoing;
+				
 				$eHeaders =& $eMessage->headers; /* @var $eHeaders SimpleXMLElement */
-	
-				$sMsgFrom = (string) $eHeaders->from;
-				$sMsgDate = (string) $eHeaders->date;
+				$rawHeaders = (string) $eHeaders;
+				
+				// If we only have itemized headers, convert them back into raw
+				if(empty($rawHeaders)) {
+					$rawHeaders = '';
+				
+					foreach($eHeaders->children() as $eHeader) { /* @var $eHeader SimpleXMLElement */
+						$header_key = strtolower($eHeader->getName());
+						$header_val = (string) $eHeader;
+						$rawHeaders .= $header_key . ': ' . $header_val . "\r\n";
+					}
+				}
+				
+				// Parse raw headers
+				$headers = DAO_MessageHeaders::parse($rawHeaders, true, false);
+				
+				@$sMsgFrom = $headers['from'];
+				$sMsgDate = @$headers['date'] ?: date('r');
 				
 				$sMsgFrom = self::_parseRfcAddressList($sMsgFrom, true);
 				
@@ -756,33 +749,35 @@ class ImportCron extends CerberusCronPageExtension {
 				}
 	
 				@$msgWorkerId = intval($email_to_worker_id[strtolower($msgFromInst->email)]);
-	//			$logger->info('Checking if '.$msgFromInst->email.' is a worker');
 				
 				$fields = array(
 					DAO_Message::TICKET_ID => $ticket_id,
-					DAO_Message::CREATED_DATE => strtotime($sMsgDate),
+					DAO_Message::CREATED_DATE => intval(strtotime($sMsgDate)),
 					DAO_Message::ADDRESS_ID => $msgFromInst->id,
-					DAO_Message::IS_OUTGOING => !empty($msgWorkerId) ? 1 : 0,
+					DAO_Message::IS_OUTGOING => $iIsOutgoing,
+					DAO_Message::HASH_HEADER_MESSAGE_ID => isset($headers['message-id']) ? sha1(@$headers['message-id']) : '',
 					DAO_Message::WORKER_ID => !empty($msgWorkerId) ? $msgWorkerId : 0,
 				);
 				$email_id = DAO_Message::create($fields);
 				
+				if(empty($first_outgoing_message_id) && $iIsOutgoing)
+					$first_outgoing_message_id = $email_id;
+				
 				// First thread
 				if(1==$seek_messages) {
-					DAO_Ticket::update($ticket_id, array(
-						DAO_Ticket::FIRST_MESSAGE_ID => $email_id
-					), false);
+					$first_message_id = $email_id;
+					$first_wrote_id = $msgFromInst->id;
 				}
 				
 				// Last thread
 				if($count_messages==$seek_messages) {
-					DAO_Ticket::update($ticket_id, array(
-						DAO_Ticket::LAST_MESSAGE_ID => $email_id
-					), false);
+					$last_message_id = $email_id;
+					$last_wrote_id = $msgFromInst->id;
 				}
-	
+				
 				// Create attachments
 				if(!is_null($eMessage->attachments) && $eMessage->attachments instanceof Traversable)
+				if($eMessage->attachments->attachment instanceof Traversable)
 				foreach($eMessage->attachments->attachment as $eAttachment) { /* @var $eAttachment SimpleXMLElement */
 					$sFileName = (string) $eAttachment->name;
 					$sMimeType = (string) $eAttachment->mimetype;
@@ -835,35 +830,49 @@ class ImportCron extends CerberusCronPageExtension {
 				unset($sMessageContent);
 	
 				// Headers
-				foreach($eHeaders->children() as $eHeader) { /* @var $eHeader SimpleXMLElement */
-					DAO_MessageHeader::create($email_id, $eHeader->getName(), (string) $eHeader);
-				}
+				
+				DAO_MessageHeaders::upsert($email_id, $rawHeaders);
 				
 				$seek_messages++;
 			}
+			
+			// Update ticket message meta
+			DAO_Ticket::update($ticket_id, array(
+				DAO_Ticket::FIRST_MESSAGE_ID => $first_message_id,
+				DAO_Ticket::FIRST_WROTE_ID => $first_wrote_id,
+				DAO_Ticket::FIRST_OUTGOING_MESSAGE_ID => $first_outgoing_message_id,
+				DAO_Ticket::LAST_MESSAGE_ID => $last_message_id,
+				DAO_Ticket::LAST_WROTE_ID => $last_wrote_id,
+			), false);
 		}
 		
 		// Create comments
-		if(!is_null($xml->comments) && $xml->comments instanceof Traversable)
+		$default_sender = DAO_AddressOutgoing::getDefault();
+		
+		if(!is_null($xml->comments->comment) && $xml->comments->comment instanceof Traversable)
 		foreach($xml->comments->comment as $eComment) { /* @var $eMessage SimpleXMLElement */
 			$iCommentDate = (integer) $eComment->created_date;
-			$sCommentAuthor = (string) $eComment->author; // [TODO] Address Hash Lookup
+			$sCommentAuthor = (string) $eComment->author;
 			
 			$sCommentTextB64 = (string) $eComment->content;
 			$sCommentText = base64_decode($sCommentTextB64);
 			unset($sCommentTextB64);
 			
-			$commentAuthorInst = CerberusApplication::hashLookupAddress($sCommentAuthor, true);
+			if(empty($sCommentAuthor) || false == ($commentAuthorInst = CerberusApplication::hashLookupAddress($sCommentAuthor, true))) {
+				$iCommentAuthorId = $default_sender->address_id;
+			} else {
+				$iCommentAuthorId = $commentAuthorInst->id;
+			}
 			
-			// [TODO] Sanity checking
+			if(empty($iCommentAuthorId))
+				continue;
 			
 			$fields = array(
 				DAO_Comment::CONTEXT => CerberusContexts::CONTEXT_TICKET,
 				DAO_Comment::CONTEXT_ID => intval($ticket_id),
 				DAO_Comment::CREATED => intval($iCommentDate),
-				// [TODO] Worker?
 				DAO_Comment::OWNER_CONTEXT => CerberusContexts::CONTEXT_ADDRESS,
-				DAO_Comment::OWNER_CONTEXT_ID => intval($commentAuthorInst->id),
+				DAO_Comment::OWNER_CONTEXT_ID => intval($iCommentAuthorId),
 				DAO_Comment::COMMENT => $sCommentText,
 			);
 			$comment_id = DAO_Comment::create($fields);
@@ -883,7 +892,6 @@ class ImportCron extends CerberusCronPageExtension {
 			if(!is_array($rfcAddressList) || empty($rfcAddressList))
 				return NULL;
 			
-
 			$addresses = array();
 			foreach($rfcAddressList as $rfcAddress) {
 				if(empty($rfcAddress->host) || $rfcAddress->host == 'host') {
@@ -1093,25 +1101,32 @@ class MailboxCron extends CerberusCronPageExtension {
 		$logger->info("[Mailboxes] Started Mailbox Checker job");
 		
 		if (!extension_loaded("imap")) {
-			$logger->err("[Parser] The 'IMAP' extension is not loaded.  Aborting!");
+			$logger->err("[Mailboxes] The 'IMAP' extension is not loaded. Aborting!");
 			return false;
 		}
 		
 		if (!extension_loaded("mailparse")) {
-			$logger->err("[Parser] The 'mailparse' extension is not loaded.  Aborting!");
+			$logger->err("[Mailboxes] The 'mailparse' extension is not loaded. Aborting!");
 			return false;
 		}
 		
 		@set_time_limit(600); // 10m
 
-		$accounts = DAO_Mailbox::getAll();
-
+		if(false == ($accounts = DAO_Mailbox::getAll())) {
+			$logger->err("[Mailboxes] There are no mailboxes to check. Aborting!");
+			return false;
+		}
+		
+		// Sort by the least recently checked mailbox
+		DevblocksPlatform::sortObjects($accounts, 'checked_at');
+		
 		$timeout = ini_get('max_execution_time');
 		
 		// Allow runtime overloads (by host, etc.)
-		@$gpc_mailbox_max = DevblocksPlatform::importGPC($_REQUEST['mailbox_max'],'integer');
+		@$opt_max_messages = DevblocksPlatform::importGPC($_REQUEST['max_messages'],'integer');
+		@$opt_max_mailboxes = DevblocksPlatform::importGPC($_REQUEST['max_mailboxes'],'integer');
 		
-		$max_downloads = !empty($gpc_mailbox_max) ? $gpc_mailbox_max : $this->getParam('max_messages', (($timeout) ? 20 : 50));
+		$max_downloads = !empty($opt_max_messages) ? $opt_max_messages : $this->getParam('max_messages', (($timeout) ? 20 : 50));
 		
 		// [JAS]: Make sure our output directory is writeable
 		if(!is_writable(APP_MAIL_PATH . 'new' . DIRECTORY_SEPARATOR)) {
@@ -1132,6 +1147,11 @@ class MailboxCron extends CerberusCronPageExtension {
 				continue;
 			}
 			
+			if($opt_max_mailboxes && $mailboxes_checked >= $opt_max_mailboxes) {
+				$logger->info(sprintf("[Mailboxes] We're limited to checking %d mailboxes per invocation. Stopping early.", $opt_max_mailboxes));
+				break;
+			}
+			
 			// Per-account IMAP timeouts
 			$imap_timeout = !empty($account->timeout_secs) ? $account->timeout_secs : 30;
 			
@@ -1140,6 +1160,10 @@ class MailboxCron extends CerberusCronPageExtension {
 			imap_timeout(IMAP_CLOSETIMEOUT, $imap_timeout);
 			
 			$imap_timeout_read_ms = imap_timeout(IMAP_READTIMEOUT) * 1000; // ms
+			$imap_options = array();
+			
+			if($account->auth_disable_plain)
+				$imap_options['DISABLE_AUTHENTICATOR'] = 'PLAIN';
 			
 			$mailboxes_checked++;
 
@@ -1153,7 +1177,8 @@ class MailboxCron extends CerberusCronPageExtension {
 				!empty($account->username)?$account->username:"",
 				!empty($account->password)?$account->password:"",
 				null,
-				0
+				0,
+				$imap_options
 				))) {
 				
 				$logger->error("[Mailboxes] Failed with error: ".imap_last_error());
@@ -1163,6 +1188,7 @@ class MailboxCron extends CerberusCronPageExtension {
 				$delay_until = time() + (min($num_fails, 15) * 120);
 				
 				$fields = array(
+					DAO_Mailbox::CHECKED_AT => time(),
 					DAO_Mailbox::NUM_FAILS => $num_fails,
 					DAO_Mailbox::DELAY_UNTIL => $delay_until, // Delay 2 mins per consecutive failure
 				);
@@ -1291,15 +1317,14 @@ class MailboxCron extends CerberusCronPageExtension {
 			}
 			
 			// Clear the fail count if we had past fails
-			if($account->num_fails) {
-				DAO_Mailbox::update(
-					$account->id,
-					array(
-						DAO_Mailbox::NUM_FAILS => 0,
-						DAO_Mailbox::DELAY_UNTIL => 0,
-					)
-				);
-			}
+			DAO_Mailbox::update(
+				$account->id,
+				array(
+					DAO_Mailbox::CHECKED_AT => time(),
+					DAO_Mailbox::NUM_FAILS => 0,
+					DAO_Mailbox::DELAY_UNTIL => 0,
+				)
+			);
 			
 			imap_expunge($mailbox);
 			imap_close($mailbox);

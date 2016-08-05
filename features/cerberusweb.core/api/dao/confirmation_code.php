@@ -2,17 +2,17 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
 | The latest version of this license can be found here:
-| http://cerberusweb.com/license
+| http://cerb.io/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://www.cerbweb.com	    http://www.webgroupmedia.com/
+|	http://cerb.io	    http://webgroup.media
 ***********************************************************************/
 
 class DAO_ConfirmationCode extends Cerb_ORMHelper {
@@ -114,6 +114,9 @@ class DAO_ConfirmationCode extends Cerb_ORMHelper {
 	static private function _getObjectsFromResult($rs) {
 		$objects = array();
 		
+		if(!($rs instanceof mysqli_result))
+			return false;
+		
 		while($row = mysqli_fetch_assoc($rs)) {
 			$object = new Model_ConfirmationCode();
 			$object->id = $row['id'];
@@ -159,7 +162,7 @@ class DAO_ConfirmationCode extends Cerb_ORMHelper {
 	public static function getSearchQueryComponents($columns, $params, $sortBy=null, $sortAsc=null) {
 		$fields = SearchFields_ConfirmationCode::getFields();
 		
-		list($tables,$wheres) = parent::_parseSearchParams($params, $columns, $fields, $sortBy);
+		list($tables,$wheres) = parent::_parseSearchParams($params, $columns, 'SearchFields_ConfirmationCode', $sortBy);
 		
 		$select_sql = sprintf("SELECT ".
 			"confirmation_code.id as %s, ".
@@ -176,19 +179,10 @@ class DAO_ConfirmationCode extends Cerb_ORMHelper {
 			
 		$join_sql = "FROM confirmation_code ";
 		
-		// Custom field joins
-		//list($select_sql, $join_sql, $has_multiple_values) = self::_appendSelectJoinSqlForCustomFieldTables(
-		//	$tables,
-		//	$params,
-		//	'confirmation_code.id',
-		//	$select_sql,
-		//	$join_sql
-		//);
-				
 		$where_sql = "".
 			(!empty($wheres) ? sprintf("WHERE %s ",implode(' AND ',$wheres)) : "WHERE 1 ");
 			
-		$sort_sql = self::_buildSortClause($sortBy, $sortAsc, $fields);
+		$sort_sql = self::_buildSortClause($sortBy, $sortAsc, $fields, $select_sql, 'SearchFields_ConfirmationCode');
 	
 		return array(
 			'primary_table' => 'confirmation_code',
@@ -232,13 +226,18 @@ class DAO_ConfirmationCode extends Cerb_ORMHelper {
 			$sort_sql;
 			
 		if($limit > 0) {
-			$rs = $db->SelectLimit($sql,$limit,$page*$limit) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs mysqli_result */
+			if(false == ($rs = $db->SelectLimit($sql,$limit,$page*$limit)))
+				return false;
 		} else {
-			$rs = $db->ExecuteSlave($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs mysqli_result */
+			if(false == ($rs = $db->ExecuteSlave($sql)))
+				return false;
 			$total = mysqli_num_rows($rs);
 		}
 		
 		$results = array();
+		
+		if(!($rs instanceof mysqli_result))
+			return false;
 		
 		while($row = mysqli_fetch_assoc($rs)) {
 			$object_id = intval($row[SearchFields_ConfirmationCode::ID]);
@@ -264,17 +263,47 @@ class DAO_ConfirmationCode extends Cerb_ORMHelper {
 	}
 };
 
-class SearchFields_ConfirmationCode implements IDevblocksSearchFields {
+class SearchFields_ConfirmationCode extends DevblocksSearchFields {
 	const ID = 'c_id';
 	const NAMESPACE_KEY = 'c_namespace_key';
 	const CREATED = 'c_created';
 	const CONFIRMATION_CODE = 'c_confirmation_code';
 	const META_JSON = 'c_meta_json';
 	
+	static private $_fields = null;
+	
+	static function getPrimaryKey() {
+		return 'confirmation_code.id';
+	}
+	
+	static function getCustomFieldContextKeys() {
+		return array(
+			'' => new DevblocksSearchFieldContextKeys('confirmation_code.id', self::ID),
+		);
+	}
+	
+	static function getWhereSQL(DevblocksSearchCriteria $param) {
+		if('cf_' == substr($param->field, 0, 3)) {
+			return self::_getWhereSQLFromCustomFields($param);
+		} else {
+			return $param->getWhereSQL(self::getFields(), self::getPrimaryKey());
+		}
+	}
+		
 	/**
 	 * @return DevblocksSearchField[]
 	 */
 	static function getFields() {
+		if(is_null(self::$_fields))
+			self::$_fields = self::_getFields();
+		
+		return self::$_fields;
+	}
+	
+	/**
+	 * @return DevblocksSearchField[]
+	 */
+	static function _getFields() {
 		$translate = DevblocksPlatform::getTranslationService();
 		
 		$columns = array(

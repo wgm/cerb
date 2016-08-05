@@ -1,10 +1,7 @@
-{*
-{$view_context = CerberusContexts::CONTEXT_VIRTUAL_ATTENDANT}
-*}
 {$view_fields = $view->getColumnsAvailable()}
-{assign var=results value=$view->getData()}
-{assign var=total value=$results[1]}
-{assign var=data value=$results[0]}
+{$results = $view->getData()}
+{$total = $results[1]}
+{$data = $results[0]}
 
 {include file="devblocks:cerberusweb.core::internal/views/view_marquee.tpl" view=$view}
 
@@ -57,9 +54,9 @@
 	{foreach from=$data item=result key=idx name=results}
 
 	{if $smarty.foreach.results.iteration % 2}
-		{assign var=tableRowClass value="even"}
+		{$tableRowClass = "even"}
 	{else}
-		{assign var=tableRowClass value="odd"}
+		{$tableRowClass = "odd"}
 	{/if}
 	<tbody style="cursor:pointer;">
 		<tr class="{$tableRowClass}">
@@ -67,23 +64,23 @@
 			{if substr($column,0,3)=="cf_"}
 				{include file="devblocks:cerberusweb.core::internal/custom_fields/view/cell_renderer.tpl"}
 			{elseif $column == SearchFields_MailParseFail::NAME}
-			<td>
+			<td data-column="{$column}">
 				<input type="checkbox" name="row_id[]" value="{$result.mf_name}" style="display:none;">
 				<b class="subject">{$result.mf_name}</b>
-				<button type="button" class="peek" onclick="genericAjaxPopup('peek','c=config&a=handleSectionAction&section=mail_failed&action=showPeekPopup&file={$result.mf_name}&view_id={$view->id}',null,false,'550');"><span class="glyphicons glyphicons-new-window-alt"></span></button>
+				<button type="button" class="peek" onclick="genericAjaxPopup('peek','c=config&a=handleSectionAction&section=mail_failed&action=showPeekPopup&file={$result.mf_name}&view_id={$view->id}',null,false,'50%');"><span class="glyphicons glyphicons-new-window-alt"></span></button>
 			</td>
 			{elseif $column == SearchFields_MailParseFail::CTIME || $column == SearchFields_MailParseFail::MTIME}
-				<td title="{$result.$column|devblocks_date}">
+				<td data-column="{$column}" title="{$result.$column|devblocks_date}">
 					{if !empty($result.$column)}
 						{$result.$column|devblocks_prettytime}&nbsp;
 					{/if}
 				</td>
 			{elseif $column == SearchFields_MailParseFail::SIZE}
-				<td>
+				<td data-column="{$column}">
 					{$result.$column|devblocks_prettybytes}&nbsp;
 				</td>
 			{else}
-				<td>{$result.$column}</td>
+				<td data-column="{$column}">{$result.$column}</td>
 			{/if}
 		{/foreach}
 		</tr>
@@ -118,7 +115,7 @@
 	<div style="float:left;" id="{$view->id}_actions">
 		{*
 		<button type="button" class="action-always-show action-explore" onclick="this.form.explore_from.value=$(this).closest('form').find('tbody input:checkbox:checked:first').val();this.form.action.value='viewExplore';this.form.submit();"><span class="glyphicons glyphicons-play-button"></span> {'common.explore'|devblocks_translate|lower}</button>
-		{if $active_worker->hasPriv('calls.actions.update_all')}<button type="button" class="action-always-show action-bulkupdate" onclick="genericAjaxPopup('peek','c=profiles&a=handleSectionAction�ion=calendar&action=showBulkPanel&view_id={$view->id}&ids=' + Devblocks.getFormEnabledCheckboxValues('viewForm{$view->id}','row_id[]'),null,false,'500');"><span class="glyphicons glyphicons-folder-closed"></span> {'common.bulk_update'|devblocks_translate|lower}</button>{/if}
+		{if $active_worker->hasPriv('calls.actions.update_all')}<button type="button" class="action-always-show action-bulkupdate" onclick="genericAjaxPopup('peek','c=profiles&a=handleSectionAction&section=calendar&action=showBulkPanel&view_id={$view->id}&ids=' + Devblocks.getFormEnabledCheckboxValues('viewForm{$view->id}','row_id[]'),null,false,'50%');"><span class="glyphicons glyphicons-folder-closed"></span> {'common.bulk_update'|devblocks_translate|lower}</button>{/if}
 		*}
 	</div>
 	{/if}

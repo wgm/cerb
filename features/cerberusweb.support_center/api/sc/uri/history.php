@@ -9,11 +9,11 @@ class UmScHistoryController extends Extension_UmScController {
 	}
 	
 	function renderSidebar(DevblocksHttpResponse $response) {
-//		$tpl = DevblocksPlatform::getTemplateService();
+//		$tpl = DevblocksPlatform::getTemplateSandboxService();
 	}
 	
 	function writeResponse(DevblocksHttpResponse $response) {
-		$tpl = DevblocksPlatform::getTemplateService();
+		$tpl = DevblocksPlatform::getTemplateSandboxService();
 		
 		$umsession = ChPortalHelper::getSession();
 		$active_contact = $umsession->getProperty('sc_login', null);
@@ -45,7 +45,7 @@ class UmScHistoryController extends Extension_UmScController {
 			
 			if(empty($params_columns))
 				$params_columns = array(
-					SearchFields_Ticket::TICKET_LAST_ACTION_CODE,
+					SearchFields_Ticket::TICKET_LAST_WROTE,
 					SearchFields_Ticket::TICKET_UPDATED_DATE,
 				);
 				
@@ -54,7 +54,7 @@ class UmScHistoryController extends Extension_UmScController {
 			// Lock to current visitor
 			$history_view->addParamsRequired(array(
 				'_acl_reqs' => new DevblocksSearchCriteria(SearchFields_Ticket::REQUESTER_ID,'in',$shared_address_ids),
-				'_acl_status' => new DevblocksSearchCriteria(SearchFields_Ticket::TICKET_DELETED,'=',0),
+				'_acl_status' => new DevblocksSearchCriteria(SearchFields_Ticket::TICKET_STATUS_ID,'!=',Model_Ticket::STATUS_DELETED),
 			), true);
 			
 			UmScAbstractViewLoader::setView($history_view->id, $history_view);
@@ -119,12 +119,15 @@ class UmScHistoryController extends Extension_UmScController {
 			$tpl->assign('messages', $messages);
 			$tpl->assign('attachments', $attachments);
 			
+			$badge_extensions = DevblocksPlatform::getExtensions('cerberusweb.support_center.message.badge', true);
+			$tpl->assign('badge_extensions', $badge_extensions);
+			
 			$tpl->display("devblocks:cerberusweb.support_center:portal_".ChPortalHelper::getCode() . ":support_center/history/display.tpl");
 		}
 	}
 	
 	function configure(Model_CommunityTool $instance) {
-		$tpl = DevblocksPlatform::getTemplateService();
+		$tpl = DevblocksPlatform::getTemplateSandboxService();
 
 		$params = array(
 			'columns' => DAO_CommunityToolProperty::get($instance->code, self::PARAM_WORKLIST_COLUMNS_JSON, '[]', true),
@@ -191,14 +194,10 @@ class UmScHistoryController extends Extension_UmScController {
 			$fields[DAO_Ticket::SUBJECT] = $subject;
 		
 		// Status: Ignore deleted/waiting
-		if($is_closed && (!$ticket->is_deleted && !$ticket->is_closed)) {
-			$fields[DAO_Ticket::IS_WAITING] = 0;
-			$fields[DAO_Ticket::IS_CLOSED] = 1;
-			$fields[DAO_Ticket::IS_DELETED] = 0;
-		} elseif (!$is_closed && ($ticket->is_closed)) {
-			$fields[DAO_Ticket::IS_WAITING] = 0;
-			$fields[DAO_Ticket::IS_CLOSED] = 0;
-			$fields[DAO_Ticket::IS_DELETED] = 0;
+		if($is_closed && !in_array($ticket->status_id, array(Model_Ticket::STATUS_CLOSED, Model_Ticket::STATUS_DELETED))) {
+			$fields[DAO_Ticket::STATUS_ID] = Model_Ticket::STATUS_CLOSED;
+		} elseif (!$is_closed && ($ticket->status_id == Model_Ticket::STATUS_CLOSED)) {
+			$fields[DAO_Ticket::STATUS_ID] = Model_Ticket::STATUS_OPEN;
 		}
 		
 		if($fields)
@@ -321,7 +320,7 @@ class UmSc_TicketHistoryView extends C4_AbstractView {
 		$this->view_columns = array(
 			SearchFields_Ticket::TICKET_UPDATED_DATE,
 			SearchFields_Ticket::TICKET_SUBJECT,
-			SearchFields_Ticket::TICKET_LAST_ACTION_CODE,
+			SearchFields_Ticket::TICKET_LAST_WROTE,
 		);
 		
 		$this->addParamsHidden(array(
@@ -343,13 +342,16 @@ class UmSc_TicketHistoryView extends C4_AbstractView {
 			$this->renderSortAsc,
 			$this->renderTotal
 		);
+		
+		$this->_lazyLoadCustomFieldsIntoObjects($objects, 'SearchFields_Ticket');
+		
 		return $objects;
 	}
 
 	function render() {
 		//$this->_sanitize();
 		
-		$tpl = DevblocksPlatform::getTemplateService();
+		$tpl = DevblocksPlatform::getTemplateSandboxService();
 		$tpl->assign('id', $this->id);
 		$tpl->assign('view', $this);
 
@@ -358,6 +360,12 @@ class UmSc_TicketHistoryView extends C4_AbstractView {
 		
 		$buckets = DAO_Bucket::getAll();
 		$tpl->assign('buckets', $buckets);
+		
+		$workers = DAO_Worker::getAll();
+		$tpl->assign('workers', $workers);
+		
+		$custom_fields = DAO_CustomField::getAll();
+		$tpl->assign('custom_fields', $custom_fields);
 		
 		$tpl->display("devblocks:cerberusweb.support_center:portal_".ChPortalHelper::getCode() . ":support_center/history/view.tpl");
 	}
@@ -390,7 +398,7 @@ class UmSc_TicketHistoryView extends C4_AbstractView {
 	function renderCriteria($field) {
 		$umsession = ChPortalHelper::getSession();
 		$active_contact = $umsession->getProperty('sc_login', null);
-		$tpl = DevblocksPlatform::getTemplateService();
+		$tpl = DevblocksPlatform::getTemplateSandboxService();
 		
 		$tpl->assign('id', $this->id);
 

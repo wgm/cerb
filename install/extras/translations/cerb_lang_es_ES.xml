@@ -203,11 +203,6 @@
 				<seg>[Tickets] Puede fusionar tickets de las listas</seg>
 			</tuv>
 		</tu>
-		<tu tuid="acl.core.ticket.view.actions.pile_sort">
-			<tuv xml:lang="es_ES">
-				<seg>[Tickets] Puede usar el clasificador en pilas en listas</seg>
-			</tuv>
-		</tu>
 		<tu tuid="acl.core.watchers.assign">
 			<tuv xml:lang="es_ES">
 				<seg/>
@@ -483,56 +478,6 @@
 				<seg/>
 			</tuv>
 		</tu>
-		<tu tuid="activity.activity">
-			<tuv xml:lang="es_ES">
-				<seg>%s está viendo los logs de actividad</seg>
-			</tuv>
-		</tu>
-		<tu tuid="activity.address_book">
-			<tuv xml:lang="es_ES">
-				<seg>%s está viendo los contactos</seg>
-			</tuv>
-		</tu>
-		<tu tuid="activity.config">
-			<tuv xml:lang="es_ES">
-				<seg>%s está configurando el helpdesk</seg>
-			</tuv>
-		</tu>
-		<tu tuid="activity.default">
-			<tuv xml:lang="es_ES">
-				<seg>%s está viendo el helpdesk</seg>
-			</tuv>
-		</tu>
-		<tu tuid="activity.display_ticket">
-			<tuv xml:lang="es_ES">
-				<seg>%s está viendo el ticket %s</seg>
-			</tuv>
-		</tu>
-		<tu tuid="activity.kb">
-			<tuv xml:lang="es_ES">
-				<seg>%s está viendo la base de conocimientos</seg>
-			</tuv>
-		</tu>
-		<tu tuid="activity.mail.search">
-			<tuv xml:lang="es_ES">
-				<seg>%s esta buscanco tickets</seg>
-			</tuv>
-		</tu>
-		<tu tuid="activity.mail.workspaces">
-			<tuv xml:lang="es_ES">
-				<seg>%s está viendo %s en Área de trabajo</seg>
-			</tuv>
-		</tu>
-		<tu tuid="activity.simulator">
-			<tuv xml:lang="es_ES">
-				<seg>%s está generando tickets simulados</seg>
-			</tuv>
-		</tu>
-		<tu tuid="activity.tickets">
-			<tuv xml:lang="es_ES">
-				<seg>%s está viendo %s tickets</seg>
-			</tuv>
-		</tu>
 		<tu tuid="address.address">
 			<tuv xml:lang="es_ES">
 				<seg/>
@@ -693,11 +638,6 @@
 				<seg/>
 			</tuv>
 		</tu>
-		<tu tuid="call_entry.model.is_closed">
-			<tuv xml:lang="es_ES">
-				<seg/>
-			</tuv>
-		</tu>
 		<tu tuid="call_entry.model.is_outgoing">
 			<tuv xml:lang="es_ES">
 				<seg/>
@@ -771,6 +711,11 @@
 		<tu tuid="common.access_denied">
 			<tuv xml:lang="es_ES">
 				<seg>Acceso denegado.</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.actions">
+			<tuv xml:lang="es_ES">
+				<seg>Acciones</seg>
 			</tuv>
 		</tu>
 		<tu tuid="common.active">
@@ -1221,6 +1166,16 @@
 		<tu tuid="common.languages">
 			<tuv xml:lang="es_ES">
 				<seg>Idiomas</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.last_activity">
+			<tuv xml:lang="es_ES">
+				<seg>Última Actividad</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.last_activity_date">
+			<tuv xml:lang="es_ES">
+				<seg>Fecha Última Actividad</seg>
 			</tuv>
 		</tu>
 		<tu tuid="common.last_login">
@@ -2506,11 +2461,6 @@
 		<tu tuid="dashboard">
 			<tuv xml:lang="es_ES">
 				<seg>Panel de control</seg>
-			</tuv>
-		</tu>
-		<tu tuid="dashboard.actions">
-			<tuv xml:lang="es_ES">
-				<seg>Acciones</seg>
 			</tuv>
 		</tu>
 		<tu tuid="dashboard.active_dashboard">
@@ -4583,6 +4533,11 @@ Por ejemplo: *recibo*</seg>
 				<seg>Cerrado</seg>
 			</tuv>
 		</tu>
+		<tu tuid="status.completed">
+			<tuv xml:lang="es_ES">
+				<seg>Resuelto</seg>
+			</tuv>
+		</tu>
 		<tu tuid="status.deleted">
 			<tuv xml:lang="es_ES">
 				<seg>Borrado</seg>
@@ -4616,11 +4571,6 @@ Por ejemplo: *recibo*</seg>
 		<tu tuid="task.status.active">
 			<tuv xml:lang="es_ES">
 				<seg>Activo</seg>
-			</tuv>
-		</tu>
-		<tu tuid="task.status.completed">
-			<tuv xml:lang="es_ES">
-				<seg>Resuelto</seg>
 			</tuv>
 		</tu>
 		<tu tuid="task.worker_id">
@@ -4993,16 +4943,6 @@ Por ejemplo: *recibo*</seg>
 				<seg>Actividad</seg>
 			</tuv>
 		</tu>
-		<tu tuid="timetracking_entry.id">
-			<tuv xml:lang="es_ES">
-				<seg>ID</seg>
-			</tuv>
-		</tu>
-		<tu tuid="timetracking_entry.is_closed">
-			<tuv xml:lang="es_ES">
-				<seg/>
-			</tuv>
-		</tu>
 		<tu tuid="timetracking_entry.log_date">
 			<tuv xml:lang="es_ES">
 				<seg>Fecha de Registro</seg>
@@ -5218,11 +5158,6 @@ Por ejemplo: *recibo*</seg>
 				<seg/>
 			</tuv>
 		</tu>
-		<tu tuid="whos_online.heading">
-			<tuv xml:lang="es_ES">
-				<seg>%s Usuario(s) Identificado:</seg>
-			</tuv>
-		</tu>
 		<tu tuid="worker.at_mention_name">
 			<tuv xml:lang="es_ES">
 				<seg/>
@@ -5236,16 +5171,6 @@ Por ejemplo: *recibo*</seg>
 		<tu tuid="worker.is_superuser">
 			<tuv xml:lang="es_ES">
 				<seg>Administrador</seg>
-			</tuv>
-		</tu>
-		<tu tuid="worker.last_activity">
-			<tuv xml:lang="es_ES">
-				<seg>Última Actividad</seg>
-			</tuv>
-		</tu>
-		<tu tuid="worker.last_activity_date">
-			<tuv xml:lang="es_ES">
-				<seg>Fecha Última Actividad</seg>
 			</tuv>
 		</tu>
 		<tu tuid="worker.title">

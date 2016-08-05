@@ -2,17 +2,17 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
 | The latest version of this license can be found here:
-| http://cerberusweb.com/license
+| http://cerb.io/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://www.cerbweb.com	    http://www.webgroupmedia.com/
+|	http://cerb.io	    http://webgroup.media
 ***********************************************************************/
 
 class PageSection_SetupMailFailed extends Extension_PageSection {
@@ -80,15 +80,11 @@ class PageSection_SetupMailFailed extends Extension_PageSection {
 			// If the extension isn't .msg, abort.
 			if(false == ($pathinfo = pathinfo($file)) || !isset($pathinfo['extension']) && $pathinfo['extension'] != 'msg')
 				throw new Exception("File not valid.");
-			
-			if(null != ($mime = mailparse_msg_parse_file($full_path))) {
-				$struct = mailparse_msg_get_structure($mime);
-				$msginfo = mailparse_msg_get_part_data($mime);
-		
-				$message_encoding = strtolower($msginfo['charset']);
 
+			// Display the raw message using the envelope encoding
+			if(false !== ($mime = new MimeMessage('file', $full_path)) && isset($mime->data['charset'])) {
+				$message_encoding = $mime->data['charset'];
 				header('Content-Type: text/plain; charset=' . $message_encoding);
-
 				echo file_get_contents($full_path);
 			}
 			
@@ -215,11 +211,32 @@ class PageSection_SetupMailFailed extends Extension_PageSection {
 	}
 };
 
-class SearchFields_MailParseFail {
+class SearchFields_MailParseFail extends DevblocksSearchFields {
 	const NAME = 'mf_name';
 	const SIZE = 'mf_size';
 	const CTIME = 'mf_ctime';
 	const MTIME = 'mf_mtime';
+	
+	static function getPrimaryKey() {
+		return '';
+	}
+	
+	static function getCustomFieldContextKeys() {
+		return array(
+		);
+	}
+	
+	static function getWhereSQL(DevblocksSearchCriteria $param) {
+		switch($param->field) {
+			default:
+				if('cf_' == substr($param->field, 0, 3)) {
+					return self::_getWhereSQLFromCustomFields($param);
+				} else {
+					return $param->getWhereSQL(self::getFields(), self::getPrimaryKey());
+				}
+				break;
+		}
+	}
 	
 	/**
 	 * @return DevblocksSearchField[]
@@ -407,7 +424,7 @@ class View_MailParseFail extends C4_AbstractView implements IAbstractView_QuickS
 		$search_fields = SearchFields_MailParseFail::getFields();
 		
 		$fields = array(
-			'_fulltext' => 
+			'text' => 
 				array(
 					'type' => DevblocksSearchCriteria::TYPE_TEXT,
 					'options' => array('param_key' => SearchFields_MailParseFail::NAME, 'match' => DevblocksSearchCriteria::OPTION_TEXT_PARTIAL),
@@ -443,23 +460,19 @@ class View_MailParseFail extends C4_AbstractView implements IAbstractView_QuickS
 		ksort($fields);
 		
 		return $fields;
-	}	
-	
-	function getParamsFromQuickSearchFields($fields) {
-		$search_fields = $this->getQuickSearchFields();
-		$params = DevblocksSearchCriteria::getParamsFromQueryFields($fields, $search_fields);
-
-		// Handle virtual fields and overrides
-		if(is_array($fields))
-		foreach($fields as $k => $v) {
-			switch($k) {
-				// ...
-			}
-		}
-		
-		return $params;
 	}
 	
+	function getParamFromQuickSearchFieldTokens($field, $tokens) {
+		switch($field) {
+			default:
+				$search_fields = $this->getQuickSearchFields();
+				return DevblocksSearchCriteria::getParamFromQueryFieldTokens($field, $tokens, $search_fields);
+				break;
+		}
+		
+		return false;
+	}
+
 	function render() {
 		$this->_sanitize();
 		
@@ -564,99 +577,4 @@ class View_MailParseFail extends C4_AbstractView implements IAbstractView_QuickS
 			$this->renderPage = 0;
 		}
 	}
-	
-	/*
-	function doBulkUpdate($filter, $do, $ids=array()) {
-		@set_time_limit(600); // 10m
-		
-		$change_fields = array();
-		$custom_fields = array();
-
-		// Make sure we have actions
-		if(empty($do))
-			return;
-
-		// Make sure we have checked items if we want a checked list
-		if(0 == strcasecmp($filter,"checks") && empty($ids))
-			return;
-			
-		if(is_array($do))
-		foreach($do as $k => $v) {
-			switch($k) {
-				case 'is_closed':
-					if(!empty($v)) { // completed
-						$change_fields[DAO_CallEntry::IS_CLOSED] = 1;
-					} else { // active
-						$change_fields[DAO_CallEntry::IS_CLOSED] = 0;
-					}
-					break;
-				default:
-					// Custom fields
-					if(substr($k,0,3)=="cf_") {
-						$custom_fields[substr($k,3)] = $v;
-					}
-			}
-		}
-		
-		$pg = 0;
-
-		if(empty($ids))
-		do {
-			list($objects,$null) = DAO_CallEntry::search(
-				array(),
-				$this->getParams(),
-				100,
-				$pg++,
-				SearchFields_MailParseFail::ID,
-				true,
-				false
-			);
-			 
-			$ids = array_merge($ids, array_keys($objects));
-			 
-		} while(!empty($objects));
-
-		$batch_total = count($ids);
-		for($x=0;$x<=$batch_total;$x+=100) {
-			$batch_ids = array_slice($ids,$x,100);
-			DAO_CallEntry::update($batch_ids, $change_fields);
-			
-			// Custom Fields
-			self::_doBulkSetCustomFields(CerberusContexts::CONTEXT_CALL, $custom_fields, $batch_ids);
-			
-			// Scheduled behavior
-			if(isset($do['behavior']) && is_array($do['behavior'])) {
-				$behavior_id = $do['behavior']['id'];
-				@$behavior_when = strtotime($do['behavior']['when']) or time();
-				@$behavior_params = isset($do['behavior']['params']) ? $do['behavior']['params'] : array();
-				
-				if(!empty($batch_ids) && !empty($behavior_id))
-				foreach($batch_ids as $batch_id) {
-					DAO_ContextScheduledBehavior::create(array(
-						DAO_ContextScheduledBehavior::BEHAVIOR_ID => $behavior_id,
-						DAO_ContextScheduledBehavior::CONTEXT => CerberusContexts::CONTEXT_CALL,
-						DAO_ContextScheduledBehavior::CONTEXT_ID => $batch_id,
-						DAO_ContextScheduledBehavior::RUN_DATE => $behavior_when,
-						DAO_ContextScheduledBehavior::VARIABLES_JSON => json_encode($behavior_params),
-					));
-				}
-			}
-			
-			// Watchers
-			if(isset($do['watchers']) && is_array($do['watchers'])) {
-				$watcher_params = $do['watchers'];
-				foreach($batch_ids as $batch_id) {
-					if(isset($watcher_params['add']) && is_array($watcher_params['add']))
-						CerberusContexts::addWatchers(CerberusContexts::CONTEXT_CALL, $batch_id, $watcher_params['add']);
-					if(isset($watcher_params['remove']) && is_array($watcher_params['remove']))
-						CerberusContexts::removeWatchers(CerberusContexts::CONTEXT_CALL, $batch_id, $watcher_params['remove']);
-				}
-			}
-			
-			unset($batch_ids);
-		}
-
-		unset($ids);
-	}
-	*/
 };

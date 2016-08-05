@@ -2,17 +2,17 @@
 /***********************************************************************
  | Cerb(tm) developed by Webgroup Media, LLC.
  |-----------------------------------------------------------------------
- | All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
+ | All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
  |   unless specifically noted otherwise.
  |
  | This source code is released under the Devblocks Public License.
  | The latest version of this license can be found here:
- | http://cerberusweb.com/license
+ | http://cerb.io/license
  |
  | By using this software, you acknowledge having read this license
  | and agree to be bound thereby.
  | ______________________________________________________________________
- |	http://www.cerbweb.com	    http://www.webgroupmedia.com/
+ |	http://cerb.io	    http://webgroup.media
  ***********************************************************************/
 
 class DAO_KbArticle extends Cerb_ORMHelper {
@@ -77,6 +77,9 @@ class DAO_KbArticle extends Cerb_ORMHelper {
 	static private function _createObjectsFromResultSet($rs=null) {
 		$objects = array();
 		
+		if(!($rs instanceof mysqli_result))
+			return false;
+		
 		while($row = mysqli_fetch_assoc($rs)) {
 			$object = new Model_KbArticle();
 			$object->id = intval($row['id']);
@@ -130,6 +133,53 @@ class DAO_KbArticle extends Cerb_ORMHelper {
 				DevblocksPlatform::markContextChanged(CerberusContexts::CONTEXT_KB_ARTICLE, $batch_ids);
 			}
 		}
+	}
+	
+	/**
+	 * @param Model_ContextBulkUpdate $update
+	 * @return boolean
+	 */
+	static function bulkUpdate(Model_ContextBulkUpdate $update) {
+		$do = $update->actions;
+		$ids = $update->context_ids;
+
+		// Make sure we have actions
+		if(empty($ids) || empty($do))
+			return false;
+		
+		$update->markInProgress();
+		
+		$change_fields = array();
+		$custom_fields = array();
+
+		if(is_array($do))
+		foreach($do as $k => $v) {
+			switch($k) {
+				default:
+					// Custom fields
+					if(substr($k,0,3)=="cf_") {
+						$custom_fields[substr($k,3)] = $v;
+					}
+					break;
+			}
+		}
+
+		if(!empty($change_fields))
+			DAO_KbArticle::update($ids, $change_fields);
+		
+		// Category deltas
+		if(isset($do['category_delta']))
+			DAO_KbArticle::setCategories($ids, $do['category_delta'], false);
+		
+		// Custom Fields
+		C4_AbstractView::_doBulkSetCustomFields(CerberusContexts::CONTEXT_KB_ARTICLE, $custom_fields, $ids);
+		
+		// Scheduled behavior
+		if(isset($do['behavior']))
+			C4_AbstractView::_doBulkScheduleBehavior(CerberusContexts::CONTEXT_KB_ARTICLE, $do['behavior'], $ids);
+		
+		$update->markCompleted();
+		return true;
 	}
 	
 	static function delete($ids) {
@@ -193,6 +243,9 @@ class DAO_KbArticle extends Cerb_ORMHelper {
 			"WHERE kb_article_id = %d",
 			$article_id
 		));
+		
+		if(!($rs instanceof mysqli_result))
+			return false;
 		
 		while($row = mysqli_fetch_assoc($rs)) {
 			$cat_id = intval($row['kb_category_id']);
@@ -299,7 +352,7 @@ class DAO_KbArticle extends Cerb_ORMHelper {
 	public static function getSearchQueryComponents($columns, $params, $sortBy=null, $sortAsc=null) {
 		$fields = SearchFields_KbArticle::getFields();
 		
-		list($tables,$wheres) = parent::_parseSearchParams($params, $columns, $fields, $sortBy);
+		list($tables,$wheres) = parent::_parseSearchParams($params, $columns, 'SearchFields_KbArticle', $sortBy);
 		
 		$select_sql = sprintf("SELECT ".
 			"kb.id as %s, ".
@@ -330,19 +383,10 @@ class DAO_KbArticle extends Cerb_ORMHelper {
 		if(isset($tables['context_link']))
 			$join_sql .= "INNER JOIN context_link ON (context_link.to_context = 'cerberusweb.contexts.kb_article' AND context_link.to_context_id = kb.id) ";
 		
-		// Custom field joins
-		list($select_sql, $join_sql, $has_multiple_values) = self::_appendSelectJoinSqlForCustomFieldTables(
-			$tables,
-			$params,
-			'kb.id',
-			$select_sql,
-			$join_sql
-		);
-		
 		$where_sql = "".
 			(!empty($wheres) ? sprintf("WHERE %s ",implode(' AND ',$wheres)) : "WHERE 1 ");
 			
-		$sort_sql = self::_buildSortClause($sortBy, $sortAsc, $fields);
+		$sort_sql = self::_buildSortClause($sortBy, $sortAsc, $fields, $select_sql, 'SearchFields_KbArticle');
 
 		// Translate virtual fields
 		
@@ -382,33 +426,6 @@ class DAO_KbArticle extends Cerb_ORMHelper {
 		settype($param_key, 'string');
 		
 		switch($param_key) {
-			case SearchFields_KbArticle::FULLTEXT_ARTICLE_CONTENT:
-				$search = Extension_DevblocksSearchSchema::get(Search_KbArticle::ID);
-				$query = $search->getQueryFromParam($param);
-				
-				if(false === ($ids = $search->query($query, array()))) {
-					$args['where_sql'] .= 'AND 0 ';
-				
-				} elseif(is_array($ids)) {
-					if(empty($ids))
-						$ids = array(-1);
-					
-					$args['where_sql'] .= sprintf('AND %s IN (%s) ',
-						$from_index,
-						implode(', ', $ids)
-					);
-					
-				} elseif(is_string($ids)) {
-					$db = DevblocksPlatform::getDatabaseService();
-					
-					$args['join_sql'] .= sprintf("INNER JOIN %s ON (%s.id=kb.id) ",
-						$ids,
-						$ids
-					);
-				}
-				
-				break;
-			
 			case SearchFields_KbArticle::VIRTUAL_CONTEXT_LINK:
 				$args['has_multiple_values'] = true;
 				self::_searchComponentsVirtualContextLinks($param, $from_context, $from_index, $args['join_sql'], $args['where_sql']);
@@ -416,11 +433,6 @@ class DAO_KbArticle extends Cerb_ORMHelper {
 			
 			case SearchFields_KbArticle::VIRTUAL_HAS_FIELDSET:
 				self::_searchComponentsVirtualHasFieldset($param, $from_context, $from_index, $args['join_sql'], $args['where_sql']);
-				break;
-				
-			case SearchFields_KbArticle::VIRTUAL_WATCHERS:
-				$args['has_multiple_values'] = true;
-				self::_searchComponentsVirtualWatchers($param, $from_context, $from_index, $args['join_sql'], $args['where_sql'], $args['tables']);
 				break;
 		}
 	}
@@ -444,9 +456,13 @@ class DAO_KbArticle extends Cerb_ORMHelper {
 			($has_multiple_values ? 'GROUP BY kb.id ' : '').
 			$sort_sql;
 		
-		$rs = $db->SelectLimit($sql,$limit,$page*$limit) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
+		if(false == ($rs = $db->SelectLimit($sql,$limit,$page*$limit)))
+			return false;
 		
 		$results = array();
+		
+		if(!($rs instanceof mysqli_result))
+			return false;
 		
 		while($row = mysqli_fetch_assoc($rs)) {
 			$id = intval($row[SearchFields_KbArticle::ID]);
@@ -472,7 +488,7 @@ class DAO_KbArticle extends Cerb_ORMHelper {
 	}
 };
 
-class SearchFields_KbArticle implements IDevblocksSearchFields {
+class SearchFields_KbArticle extends DevblocksSearchFields {
 	// Table
 	const ID = 'kb_id';
 	const TITLE = 'kb_title';
@@ -493,10 +509,53 @@ class SearchFields_KbArticle implements IDevblocksSearchFields {
 	const CONTEXT_LINK = 'cl_context_from';
 	const CONTEXT_LINK_ID = 'cl_context_from_id';
 	
+	static private $_fields = null;
+	
+	static function getPrimaryKey() {
+		return 'kb.id';
+	}
+	
+	static function getCustomFieldContextKeys() {
+		return array(
+			CerberusContexts::CONTEXT_KB_ARTICLE => new DevblocksSearchFieldContextKeys('kb.id', self::ID),
+			CerberusContexts::CONTEXT_KB_CATEGORY => new DevblocksSearchFieldContextKeys('katc.kb_category_id', self::CATEGORY_ID),
+		);
+	}
+	
+	static function getWhereSQL(DevblocksSearchCriteria $param) {
+		switch($param->field) {
+			case self::FULLTEXT_ARTICLE_CONTENT:
+				return self::_getWhereSQLFromFulltextField($param, Search_KbArticle::ID, self::getPrimaryKey());
+				break;
+				
+			case self::VIRTUAL_WATCHERS:
+				return self::_getWhereSQLFromWatchersField($param, CerberusContexts::CONTEXT_KB_ARTICLE, self::getPrimaryKey());
+				break;
+			
+			default:
+				if('cf_' == substr($param->field, 0, 3)) {
+					return self::_getWhereSQLFromCustomFields($param);
+				} else {
+					return $param->getWhereSQL(self::getFields(), self::getPrimaryKey());
+				}
+				break;
+		}
+	}
+	
 	/**
 	 * @return DevblocksSearchField[]
 	 */
 	static function getFields() {
+		if(is_null(self::$_fields))
+			self::$_fields = self::_getFields();
+		
+		return self::$_fields;
+	}
+	
+	/**
+	 * @return DevblocksSearchField[]
+	 */
+	static function _getFields() {
 		$translate = DevblocksPlatform::getTranslationService();
 		
 		$columns = array(
@@ -526,10 +585,7 @@ class SearchFields_KbArticle implements IDevblocksSearchFields {
 
 		// Custom fields with fieldsets
 		
-		$custom_columns = DevblocksSearchField::getCustomSearchFieldsByContexts(array(
-			CerberusContexts::CONTEXT_KB_ARTICLE,
-			CerberusContexts::CONTEXT_KB_CATEGORY,
-		));
+		$custom_columns = DevblocksSearchField::getCustomSearchFieldsByContexts(array_keys(self::getCustomFieldContextKeys()));
 		
 		if(is_array($custom_columns))
 			$columns = array_merge($columns, $custom_columns);
@@ -550,6 +606,12 @@ class Search_KbArticle extends Extension_DevblocksSearchSchema {
 	
 	public function getAttributes() {
 		return array();
+	}
+	
+	public function getFields() {
+		return array(
+			'content',
+		);
 	}
 	
 	public function reindex() {
@@ -580,7 +642,7 @@ class Search_KbArticle extends Extension_DevblocksSearchSchema {
 		}
 	}
 	
-	public function query($query, $attributes=array(), $limit=500) {
+	public function query($query, $attributes=array(), $limit=null) {
 		if(false == ($engine = $this->getEngine()))
 			return false;
 
@@ -630,8 +692,10 @@ class Search_KbArticle extends Extension_DevblocksSearchSchema {
 				));
 				
 				$doc = array(
-					'title' => $article->title,
-					'content' => strip_tags($article->content),
+					'content' => implode("\n", array(
+						$article->title,
+						strip_tags($article->content)
+					)),
 				);
 				
 				if(false === ($engine->index($this, $id, $doc)))
@@ -826,7 +890,6 @@ class Context_KbArticle extends Extension_DevblocksContext implements IDevblocks
 		return $labels;
 	}
 	
-	// [TODO] Interface
 	function getDefaultProperties() {
 		return array(
 			'views',
@@ -973,9 +1036,7 @@ class Context_KbArticle extends Extension_DevblocksContext implements IDevblocks
 		$defaults->is_ephemeral = true;
 
 		$view = C4_AbstractViewLoader::getView($view_id, $defaults);
-		$view->addParams(array(
-			//SearchFields_KbArticle::IS_CLOSED => new DevblocksSearchCriteria(SearchFields_KbArticle::IS_CLOSED,'=',0),
-		), true);
+		$view->addParams(array(), true);
 		$view->renderSortBy = SearchFields_KbArticle::UPDATED;
 		$view->renderSortAsc = false;
 		$view->renderLimit = 10;
@@ -1064,6 +1125,9 @@ class View_KbArticle extends C4_AbstractView implements IAbstractView_Subtotals,
 			$this->renderSortAsc,
 			$this->renderTotal
 		);
+		
+		$this->_lazyLoadCustomFieldsIntoObjects($objects, 'SearchFields_KbArticle');
+		
 		return $objects;
 	}
 	
@@ -1114,6 +1178,7 @@ class View_KbArticle extends C4_AbstractView implements IAbstractView_Subtotals,
 	function getSubtotalCounts($column) {
 		$counts = array();
 		$fields = $this->getFields();
+		$context = CerberusContexts::CONTEXT_KB_ARTICLE;
 
 		if(!isset($fields[$column]))
 			return array();
@@ -1127,7 +1192,7 @@ class View_KbArticle extends C4_AbstractView implements IAbstractView_Subtotals,
 						continue;
 					$label_map[$topic_id] = $topic->name;
 				}
-				$counts = $this->_getSubtotalCountForStringColumn('DAO_KbArticle', $column, $label_map, 'in', 'options[]');
+				$counts = $this->_getSubtotalCountForStringColumn($context, $column, $label_map, 'in', 'options[]');
 				break;
 				
 			case SearchFields_KbArticle::FORMAT:
@@ -1136,25 +1201,25 @@ class View_KbArticle extends C4_AbstractView implements IAbstractView_Subtotals,
 					'1' => 'HTML',
 					'2' => 'Markdown',
 				);
-				$counts = $this->_getSubtotalCountForStringColumn('DAO_KbArticle', $column, $label_map, '=', 'value');
+				$counts = $this->_getSubtotalCountForStringColumn($context, $column, $label_map, '=', 'value');
 				break;
 
 			case SearchFields_KbArticle::VIRTUAL_CONTEXT_LINK:
-				$counts = $this->_getSubtotalCountForContextLinkColumn('DAO_KbArticle', CerberusContexts::CONTEXT_KB_ARTICLE, $column);
+				$counts = $this->_getSubtotalCountForContextLinkColumn($context, $column);
 				break;
 				
 			case SearchFields_KbArticle::VIRTUAL_HAS_FIELDSET:
-				$counts = $this->_getSubtotalCountForHasFieldsetColumn('DAO_KbArticle', CerberusContexts::CONTEXT_KB_ARTICLE, $column);
+				$counts = $this->_getSubtotalCountForHasFieldsetColumn($context, $column);
 				break;
 				
 			case SearchFields_KbArticle::VIRTUAL_WATCHERS:
-				$counts = $this->_getSubtotalCountForWatcherColumn('DAO_KbArticle', $column);
+				$counts = $this->_getSubtotalCountForWatcherColumn($context, $column);
 				break;
 			
 			default:
 				// Custom fields
 				if('cf_' == substr($column,0,3)) {
-					$counts = $this->_getSubtotalCountForCustomColumn('DAO_KbArticle', $column, 'kb.id');
+					$counts = $this->_getSubtotalCountForCustomColumn($context, $column);
 				}
 				
 				break;
@@ -1170,7 +1235,7 @@ class View_KbArticle extends C4_AbstractView implements IAbstractView_Subtotals,
 		$search_fields = SearchFields_KbArticle::getFields();
 		
 		$fields = array(
-			'_fulltext' => 
+			'text' => 
 				array(
 					'type' => DevblocksSearchCriteria::TYPE_FULLTEXT,
 					'options' => array('param_key' => SearchFields_KbArticle::FULLTEXT_ARTICLE_CONTENT),
@@ -1217,7 +1282,7 @@ class View_KbArticle extends C4_AbstractView implements IAbstractView_Subtotals,
 		}
 		
 		if(!empty($ft_examples)) {
-			$fields['_fulltext']['examples'] = $ft_examples;
+			$fields['text']['examples'] = $ft_examples;
 			$fields['content']['examples'] = $ft_examples;
 		}
 		
@@ -1230,21 +1295,17 @@ class View_KbArticle extends C4_AbstractView implements IAbstractView_Subtotals,
 		ksort($fields);
 		
 		return $fields;
-	}	
+	}
 	
-	function getParamsFromQuickSearchFields($fields) {
-		$search_fields = $this->getQuickSearchFields();
-		$params = DevblocksSearchCriteria::getParamsFromQueryFields($fields, $search_fields);
-
-		// Handle virtual fields and overrides
-		if(is_array($fields))
-		foreach($fields as $k => $v) {
-			switch($k) {
-				// ...
-			}
+	function getParamFromQuickSearchFieldTokens($field, $tokens) {
+		switch($field) {
+			default:
+				$search_fields = $this->getQuickSearchFields();
+				return DevblocksSearchCriteria::getParamFromQueryFieldTokens($field, $tokens, $search_fields);
+				break;
 		}
 		
-		return $params;
+		return false;
 	}
 	
 	function render() {
@@ -1461,92 +1522,4 @@ class View_KbArticle extends C4_AbstractView implements IAbstractView_Subtotals,
 			$this->renderPage = 0;
 		}
 	}
-	
-	function doBulkUpdate($filter, $do, $ids=array()) {
-		@set_time_limit(600); // 10m
-		
-		$change_fields = array();
-		$custom_fields = array();
-
-		// Make sure we have actions
-		if(empty($do))
-			return;
-
-		// Make sure we have checked items if we want a checked list
-		if(0 == strcasecmp($filter,"checks") && empty($ids))
-			return;
-			
-		if(is_array($do))
-		foreach($do as $k => $v) {
-			switch($k) {
-//				case 'x':
-//					break;
-				default:
-					// Custom fields
-					if(substr($k,0,3)=="cf_") {
-						$custom_fields[substr($k,3)] = $v;
-					}
-					break;
-			}
-		}
-		
-		$pg = 0;
-
-		if(empty($ids))
-		do {
-			list($objects,$null) = DAO_KbArticle::search(
-				array(
-					SearchFields_KbArticle::ID
-				),
-				$this->getParams(),
-				100,
-				$pg++,
-				SearchFields_KbArticle::ID,
-				true,
-				false
-			);
-			 
-			$ids = array_merge($ids, array_keys($objects));
-			 
-		} while(!empty($objects));
-
-		$batch_total = count($ids);
-		for($x=0;$x<=$batch_total;$x+=100) {
-			$batch_ids = array_slice($ids,$x,100);
-			
-			if(!empty($change_fields))
-				DAO_KbArticle::update($batch_ids, $change_fields);
-			
-			// Category deltas
-			if(isset($do['category_delta'])) {
-				DAO_KbArticle::setCategories($batch_ids, $do['category_delta'], false);
-			}
-			
-			// Custom Fields
-			self::_doBulkSetCustomFields(CerberusContexts::CONTEXT_KB_ARTICLE, $custom_fields, $batch_ids);
-			
-			// Scheduled behavior
-			if(isset($do['behavior']) && is_array($do['behavior'])) {
-				$behavior_id = $do['behavior']['id'];
-				@$behavior_when = strtotime($do['behavior']['when']) or time();
-				@$behavior_params = isset($do['behavior']['params']) ? $do['behavior']['params'] : array();
-				
-				if(!empty($batch_ids) && !empty($behavior_id))
-				foreach($batch_ids as $batch_id) {
-					DAO_ContextScheduledBehavior::create(array(
-						DAO_ContextScheduledBehavior::BEHAVIOR_ID => $behavior_id,
-						DAO_ContextScheduledBehavior::CONTEXT => CerberusContexts::CONTEXT_KB_ARTICLE,
-						DAO_ContextScheduledBehavior::CONTEXT_ID => $batch_id,
-						DAO_ContextScheduledBehavior::RUN_DATE => $behavior_when,
-						DAO_ContextScheduledBehavior::VARIABLES_JSON => json_encode($behavior_params),
-					));
-				}
-			}
-			
-			unset($batch_ids);
-		}
-
-		unset($ids);
-	}
-		
 };

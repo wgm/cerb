@@ -2,17 +2,17 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
 | The latest version of this license can be found here:
-| http://cerberusweb.com/license
+| http://cerb.io/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://www.cerbweb.com	    http://www.webgroupmedia.com/
+|	http://cerb.io	    http://webgroup.media
 ***********************************************************************/
 
 class DAO_ViewFiltersPreset extends Cerb_ORMHelper {
@@ -94,6 +94,9 @@ class DAO_ViewFiltersPreset extends Cerb_ORMHelper {
 	static private function _getObjectsFromResult($rs) {
 		$objects = array();
 		
+		if(!($rs instanceof mysqli_result))
+			return false;
+		
 		while($row = mysqli_fetch_assoc($rs)) {
 			$object = new Model_ViewFiltersPreset();
 			$object->id = $row['id'];
@@ -136,7 +139,7 @@ class DAO_ViewFiltersPreset extends Cerb_ORMHelper {
 	public static function getSearchQueryComponents($columns, $params, $sortBy=null, $sortAsc=null) {
 		$fields = SearchFields_ViewFiltersPreset::getFields();
 		
-		list($tables,$wheres) = parent::_parseSearchParams($params, $columns, $fields, $sortBy);
+		list($tables,$wheres) = parent::_parseSearchParams($params, $columns, 'SearchFields_ViewFiltersPreset', $sortBy);
 		
 		$select_sql = sprintf("SELECT ".
 			"view_filters_preset.id as %s, ".
@@ -151,19 +154,10 @@ class DAO_ViewFiltersPreset extends Cerb_ORMHelper {
 			
 		$join_sql = "FROM view_filters_preset ";
 		
-		// Custom field joins
-		//list($select_sql, $join_sql, $has_multiple_values) = self::_appendSelectJoinSqlForCustomFieldTables(
-		//	$tables,
-		//	$params,
-		//	'view_filters_preset.id',
-		//	$select_sql,
-		//	$join_sql
-		//);
-				
 		$where_sql = "".
 			(!empty($wheres) ? sprintf("WHERE %s ",implode(' AND ',$wheres)) : "WHERE 1 ");
 			
-		$sort_sql = self::_buildSortClause($sortBy, $sortAsc, $fields);
+		$sort_sql = self::_buildSortClause($sortBy, $sortAsc, $fields, $select, 'SearchFields_ViewFiltersPreset');
 		
 		$result = array(
 			'primary_table' => 'view_filters_preset',
@@ -210,13 +204,18 @@ class DAO_ViewFiltersPreset extends Cerb_ORMHelper {
 			
 		// [TODO] Could push the select logic down a level too
 		if($limit > 0) {
-			$rs = $db->SelectLimit($sql,$limit,$page*$limit) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs mysqli_result */
+			if(false == ($rs = $db->SelectLimit($sql,$limit,$page*$limit)))
+				return false;
 		} else {
-			$rs = $db->ExecuteSlave($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs mysqli_result */
+			if(false == ($rs = $db->ExecuteSlave($sql)))
+				return false;
 			$total = mysqli_num_rows($rs);
 		}
 		
 		$results = array();
+		
+		if(!($rs instanceof mysqli_result))
+			return false;
 		
 		while($row = mysqli_fetch_assoc($rs)) {
 			$object_id = intval($row[SearchFields_ViewFiltersPreset::ID]);
@@ -253,16 +252,47 @@ class Model_ViewFiltersPreset {
 	public $sort_asc;
 };
 
-class SearchFields_ViewFiltersPreset implements IDevblocksSearchFields {
+class SearchFields_ViewFiltersPreset extends DevblocksSearchFields {
 	const ID = 'v_id';
 	const NAME = 'v_name';
 	const VIEW_CLASS = 'v_view_class';
 	const WORKER_ID = 'v_worker_id';
 	
+	static private $_fields = null;
+	
+	static function getPrimaryKey() {
+		return 'view_filters_preset.id';
+	}
+	
+	static function getCustomFieldContextKeys() {
+		return array(
+			'' => new DevblocksSearchFieldContextKeys('view_filters_preset.id', self::ID),
+			CerberusContexts::CONTEXT_WORKER => new DevblocksSearchFieldContextKeys('view_filters_preset.worker_id', self::WORKER_ID),
+		);
+	}
+	
+	static function getWhereSQL(DevblocksSearchCriteria $param) {
+		if('cf_' == substr($param->field, 0, 3)) {
+			return self::_getWhereSQLFromCustomFields($param);
+		} else {
+			return $param->getWhereSQL(self::getFields(), self::getPrimaryKey());
+		}
+	}
+	
 	/**
 	 * @return DevblocksSearchField[]
 	 */
 	static function getFields() {
+		if(is_null(self::$_fields))
+			self::$_fields = self::_getFields();
+		
+		return self::$_fields;
+	}
+	
+	/**
+	 * @return DevblocksSearchField[]
+	 */
+	static function _getFields() {
 		$translate = DevblocksPlatform::getTranslationService();
 		
 		$columns = array(

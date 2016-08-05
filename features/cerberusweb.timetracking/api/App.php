@@ -2,29 +2,29 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
 | The latest version of this license can be found here:
-| http://cerberusweb.com/license
+| http://cerb.io/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://www.cerbweb.com	    http://www.webgroupmedia.com/
+|	http://cerb.io	    http://webgroup.media
 ***********************************************************************/
 /*
- * IMPORTANT LICENSING NOTE from your friends on the Cerb Development Team
+ * IMPORTANT LICENSING NOTE from your friends at Cerb
  *
- * Sure, it would be so easy to just cheat and edit this file to use the
- * software without paying for it.  But we trust you anyway.  In fact, we're
- * writing this software for you!
+ * Sure, it would be really easy to just cheat and edit this file to use
+ * Cerb without paying for a license.  We trust you anyway.
  *
- * Quality software backed by a dedicated team takes money to develop.  We
- * don't want to be out of the office bagging groceries when you call up
- * needing a helping hand.  We'd rather spend our free time coding your
- * feature requests than mowing the neighbors' lawns for rent money.
+ * It takes a significant amount of time and money to develop, maintain,
+ * and support high-quality enterprise software with a dedicated team.
+ * For Cerb's entire history we've avoided taking money from outside
+ * investors, and instead we've relied on actual sales from satisfied
+ * customers to keep the project running.
  *
  * We've never believed in hiding our source code out of paranoia over not
  * getting paid.  We want you to have the full source code and be able to
@@ -32,19 +32,12 @@
  * having less of everything than you might need (time, people, money,
  * energy).  We shouldn't be your bottleneck.
  *
- * We've been building our expertise with this project since January 2002.  We
- * promise spending a couple bucks [Euro, Yuan, Rupees, Galactic Credits] to
- * let us take over your shared e-mail headache is a worthwhile investment.
- * It will give you a sense of control over your inbox that you probably
- * haven't had since spammers found you in a game of 'E-mail Battleship'.
- * Miss. Miss. You sunk my inbox!
+ * As a legitimate license owner, your feedback will help steer the project.
+ * We'll also prioritize your issues, and work closely with you to make sure
+ * your teams' needs are being met.
  *
- * A legitimate license entitles you to support from the developers,
- * and the warm fuzzy feeling of feeding a couple of obsessed developers
- * who want to help you get more done.
- *
- \* - Jeff Standen, Darren Sugita, Dan Hildebrandt
- *	 Webgroup Media LLC - Developers of Cerb
+ * - Jeff Standen and Dan Hildebrandt
+ *	 Founders at Webgroup Media LLC; Developers of Cerb
  */
 
 if (class_exists('Extension_AppPreBodyRenderer',true)):
@@ -114,13 +107,6 @@ class ChTimeTrackingPage extends CerberusPageExtension {
 	}
 	
 	function render() {
-	}
-	
-	/**
-	 * @return Model_Activity
-	 */
-	public function getActivity() {
-		return new Model_Activity('activity.default');
 	}
 	
 	private function _startTimer() {
@@ -464,116 +450,6 @@ class ChTimeTrackingPage extends CerberusPageExtension {
 	function clearEntryAction() {
 		$this->_destroyTimer();
 	}
-	
-	function showBulkPanelAction() {
-		@$id_csv = DevblocksPlatform::importGPC($_REQUEST['ids']);
-		@$view_id = DevblocksPlatform::importGPC($_REQUEST['view_id']);
-
-		$active_worker = CerberusApplication::getActiveWorker();
-		
-		$tpl = DevblocksPlatform::getTemplateService();
-		$tpl->assign('view_id', $view_id);
-
-		if(!empty($id_csv)) {
-			$ids = DevblocksPlatform::parseCsvString($id_csv);
-			$tpl->assign('ids', implode(',', $ids));
-		}
-		
-		// Activities
-		$activities = DAO_TimeTrackingActivity::getWhere();
-		$tpl->assign('activities', $activities);
-		
-		// Custom Fields
-		$custom_fields = DAO_CustomField::getByContext(CerberusContexts::CONTEXT_TIMETRACKING, false);
-		$tpl->assign('custom_fields', $custom_fields);
-		
-		// Macros
-		
-		$macros = DAO_TriggerEvent::getReadableByActor(
-			$active_worker,
-			'event.macro.timetracking'
-		);
-		$tpl->assign('macros', $macros);
-		
-		$tpl->display('devblocks:cerberusweb.timetracking::timetracking/bulk.tpl');
-	}
-	
-	function doBulkUpdateAction() {
-		@set_time_limit(600); // 10m
-		
-		// Filter: whole list or check
-		@$filter = DevblocksPlatform::importGPC($_REQUEST['filter'],'string','');
-		$ids = array();
-		
-		// View
-		@$view_id = DevblocksPlatform::importGPC($_REQUEST['view_id'],'string');
-		$view = C4_AbstractViewLoader::getView($view_id);
-		$view->setAutoPersist(false);
-		
-		// Time Tracking fields
-		@$activity = DevblocksPlatform::importGPC($_POST['activity_id'],'string','');
-		@$is_closed = DevblocksPlatform::importGPC($_POST['is_closed'],'string','');
-
-		// Scheduled behavior
-		@$behavior_id = DevblocksPlatform::importGPC($_POST['behavior_id'],'string','');
-		@$behavior_when = DevblocksPlatform::importGPC($_POST['behavior_when'],'string','');
-		@$behavior_params = DevblocksPlatform::importGPC($_POST['behavior_params'],'array',array());
-		
-		$do = array();
-		
-		// Do: ...
-		if(0 != strlen($is_closed))
-			$do['is_closed'] = !empty($is_closed) ? 1 : 0;
-
-		// Do: Scheduled Behavior
-		if(0 != strlen($behavior_id)) {
-			$do['behavior'] = array(
-				'id' => $behavior_id,
-				'when' => $behavior_when,
-				'params' => $behavior_params,
-			);
-		}
-		
-		if(strlen($activity) > 0)
-			$do['activity_id'] = $activity;
-		
-		// Watchers
-		$watcher_params = array();
-		
-		@$watcher_add_ids = DevblocksPlatform::importGPC($_REQUEST['do_watcher_add_ids'],'array',array());
-		if(!empty($watcher_add_ids))
-			$watcher_params['add'] = $watcher_add_ids;
-			
-		@$watcher_remove_ids = DevblocksPlatform::importGPC($_REQUEST['do_watcher_remove_ids'],'array',array());
-		if(!empty($watcher_remove_ids))
-			$watcher_params['remove'] = $watcher_remove_ids;
-		
-		if(!empty($watcher_params))
-			$do['watchers'] = $watcher_params;
-		
-		// Do: Custom fields
-		$do = DAO_CustomFieldValue::handleBulkPost($do);
-
-		switch($filter) {
-			// Checked rows
-			case 'checks':
-				@$ids_str = DevblocksPlatform::importGPC($_REQUEST['ids'],'string');
-				$ids = DevblocksPlatform::parseCsvString($ids_str);
-				break;
-			case 'sample':
-				@$sample_size = min(DevblocksPlatform::importGPC($_REQUEST['filter_sample_size'],'integer',0),9999);
-				$filter = 'checks';
-				$ids = $view->getDataSample($sample_size);
-				break;
-			default:
-				break;
-		}
-		
-		$view->doBulkUpdate($filter, $do, $ids);
-		$view->render();
-		return;
-	}
-	
 };
 
 if(class_exists('Extension_PageSection')):

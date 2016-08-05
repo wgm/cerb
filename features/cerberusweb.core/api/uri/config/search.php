@@ -2,21 +2,24 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
 | The latest version of this license can be found here:
-| http://cerberusweb.com/license
+| http://cerb.io/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://www.cerbweb.com	    http://www.webgroupmedia.com/
+|	http://cerb.io	    http://webgroup.media
 ***********************************************************************/
 
 class PageSection_SetupSearch extends Extension_PageSection {
 	function render() {
+		if(DEVBLOCKS_SEARCH_ENGINE_PREVENT_CHANGE)
+			return;
+		
 		$tpl = DevblocksPlatform::getTemplateService();
 		$visit = CerberusApplication::getVisit();
 		
@@ -31,6 +34,9 @@ class PageSection_SetupSearch extends Extension_PageSection {
 	}
 	
 	function showSearchSchemaPeekAction() {
+		if(DEVBLOCKS_SEARCH_ENGINE_PREVENT_CHANGE)
+			return;
+		
 		@$ext_id = DevblocksPlatform::importGPC($_REQUEST['ext_id'],'string','');
 		
 		$tpl = DevblocksPlatform::getTemplateService();
@@ -46,6 +52,9 @@ class PageSection_SetupSearch extends Extension_PageSection {
 	}
 	
 	function saveSearchSchemaPeekAction() {
+		if(DEVBLOCKS_SEARCH_ENGINE_PREVENT_CHANGE)
+			return;
+		
 		@$schema_extension_id = DevblocksPlatform::importGPC($_REQUEST['schema_extension_id'],'string','');
 		@$engine_extension_id = DevblocksPlatform::importGPC($_REQUEST['engine_extension_id'],'string','');
 		@$params = DevblocksPlatform::importGPC($_REQUEST['params'],'array',array());

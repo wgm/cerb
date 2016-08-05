@@ -47,7 +47,7 @@
 		<tr>
 			<td width="0%" nowrap="nowrap" valign="top" align="right">{'common.organization'|devblocks_translate|capitalize}:&nbsp;</td>
 			<td width="100%">
-				<input type="text" name="org_name" value="{$draft->params.org_name}" style="border:1px solid rgb(180,180,180);padding:2px;width:98%;" placeholder="(optional) Link this ticket to an organization for suggested recipients">
+				<input type="text" name="org_name" value="{if !empty($org)}{$org}{else}{$draft->params.org_name}{/if}" style="border:1px solid rgb(180,180,180);padding:2px;width:98%;" placeholder="(optional) Link this ticket to an organization for suggested recipients">
 			</td>
 		</tr>
 		<tr>
@@ -98,7 +98,7 @@
 							Insert: 
 							<input type="text" size="25" class="context-snippet autocomplete" {if $pref_keyboard_shortcuts}placeholder="(Ctrl+Shift+I)"{/if}>
 							<button type="button" onclick="ajax.chooserSnippet('snippets',$('#divComposeContent{$random}'), { '{CerberusContexts::CONTEXT_WORKER}':'{$active_worker->id}' });"><span class="glyphicons glyphicons-search"></span></button>
-							<button type="button" onclick="genericAjaxPopup('add_snippet','c=internal&a=showSnippetsPeek&id=0&owner_context={CerberusContexts::CONTEXT_WORKER}&owner_context_id={$active_worker->id}&context=',null,false,'550');"><span class="glyphicons glyphicons-circle-plus"></span></button>
+							<button type="button" onclick="var txt = encodeURIComponent($('#divComposeContent{$random}').selection('get')); genericAjaxPopup('add_snippet','c=internal&a=showSnippetsPeek&id=0&owner_context={CerberusContexts::CONTEXT_WORKER}&owner_context_id={$active_worker->id}&context=&text=' + txt,null,false,'50%');"><span class="glyphicons glyphicons-circle-plus"></span></button>
 						</div>
 					</fieldset>
 				</div>
@@ -127,11 +127,11 @@
 	</div>
 	
 	<div style="margin-top:10px;">
-		<label {if $pref_keyboard_shortcuts}title="(Ctrl+Shift+O)"{/if}><input type="radio" name="closed" value="0" class="status_open" {if (empty($draft) && 'open'==$defaults.status) || (!empty($draft) && $draft->params.closed==0)}checked="checked"{/if} onclick="toggleDiv('divComposeClosed{$random}','none');"> {'status.open'|devblocks_translate}</label>
-		<label {if $pref_keyboard_shortcuts}title="(Ctrl+Shift+W)"{/if}><input type="radio" name="closed" value="2" class="status_waiting" {if (empty($draft) && 'waiting'==$defaults.status) || (!empty($draft) && $draft->params.closed==2)}checked="checked"{/if} onclick="toggleDiv('divComposeClosed{$random}','block');"> {'status.waiting'|devblocks_translate}</label>
-		{if $active_worker->hasPriv('core.ticket.actions.close')}<label {if $pref_keyboard_shortcuts}title="(Ctrl+Shift+C)"{/if}><input type="radio" name="closed" value="1" class="status_closed" {if (empty($draft) && 'closed'==$defaults.status) || (!empty($draft) && $draft->params.closed==1)}checked="checked"{/if} onclick="toggleDiv('divComposeClosed{$random}','block');"> {'status.closed'|devblocks_translate}</label>{/if}
+		<label {if $pref_keyboard_shortcuts}title="(Ctrl+Shift+O)"{/if}><input type="radio" name="status_id" value="{Model_Ticket::STATUS_OPEN}" class="status_open" {if (empty($draft) && 'open'==$defaults.status) || (!empty($draft) && $draft->params.status_id==Model_Ticket::STATUS_OPEN)}checked="checked"{/if} onclick="toggleDiv('divComposeClosed{$random}','none');"> {'status.open'|devblocks_translate}</label>
+		<label {if $pref_keyboard_shortcuts}title="(Ctrl+Shift+W)"{/if}><input type="radio" name="status_id" value="{Model_Ticket::STATUS_WAITING}" class="status_waiting" {if (empty($draft) && 'waiting'==$defaults.status) || (!empty($draft) && $draft->params.status_id==Model_Ticket::STATUS_WAITING)}checked="checked"{/if} onclick="toggleDiv('divComposeClosed{$random}','block');"> {'status.waiting'|devblocks_translate}</label>
+		{if $active_worker->hasPriv('core.ticket.actions.close')}<label {if $pref_keyboard_shortcuts}title="(Ctrl+Shift+C)"{/if}><input type="radio" name="status_id" value="{Model_Ticket::STATUS_CLOSED}" class="status_closed" {if (empty($draft) && 'closed'==$defaults.status) || (!empty($draft) && $draft->params.status_id==Model_Ticket::STATUS_CLOSED)}checked="checked"{/if} onclick="toggleDiv('divComposeClosed{$random}','block');"> {'status.closed'|devblocks_translate}</label>{/if}
 		
-		<div id="divComposeClosed{$random}" style="display:{if (empty($draft) && 'open'==$defaults.status) || (!empty($draft) && $draft->params.closed==0)}none{else}block{/if};margin-top:5px;margin-left:10px;">
+		<div id="divComposeClosed{$random}" style="display:{if (empty($draft) && 'open'==$defaults.status) || (!empty($draft) && $draft->params.status_id==Model_Ticket::STATUS_OPEN)}none{else}block{/if};margin-top:5px;margin-left:10px;">
 			<b>{'display.reply.next.resume'|devblocks_translate}</b><br>
 			{'display.reply.next.resume_eg'|devblocks_translate}<br> 
 			<input type="text" name="ticket_reopen" size="64" class="input_date" value="{$draft->params.ticket_reopen}"><br>
@@ -534,7 +534,7 @@
 			genericAjaxPost(
 				'frmComposePeek{$random}',
 				null,
-				'c=mail&a=handleSectionAction&section=drafts&action=saveDraft&type=compose',
+				'c=profiles&a=handleSectionAction&section=draft&action=saveDraft&type=compose',
 				function(json) { 
 					var obj = $.parseJSON(json);
 					
@@ -560,6 +560,7 @@
 		// Snippet chooser shortcut
 		
 		$frm.find('input:text.context-snippet').autocomplete({
+			delay: 300,
 			source: DevblocksAppPath+'ajax.php?c=internal&a=autocomplete&context=cerberusweb.contexts.snippet&contexts[]=cerberusweb.contexts.worker&_csrf_token=' + $('meta[name="_csrf_token"]').attr('content'),
 			minLength: 1,
 			focus:function(event, ui) {
@@ -634,7 +635,7 @@
 					try {
 						event.preventDefault();
 						
-						var $radio = $frm.find('input:radio[name=closed]');
+						var $radio = $frm.find('input:radio[name=status_id]');
 						
 						switch(event.which) {
 							case 67: // closed
@@ -787,5 +788,10 @@
 				genericAjaxPopupPostCloseReloadView(null,'frmComposePeek{$random}','{$view_id}',false,'compose_save');
 			}
 		});
+		
+		{if $org}
+		$frm.find('input:text[name=org_name]').trigger('autocompletechange');
+		{/if}
+
 	});
 </script>

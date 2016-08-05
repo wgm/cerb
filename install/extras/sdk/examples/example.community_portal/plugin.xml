@@ -11,7 +11,7 @@
  	<!-- Requirements -->
 
 	<requires>
-		<app_version min="7.1" max="7.1.99" />
+		<app_version min="7.2" max="7.2.99" />
 		<!--<php_extension name="curl" />-->
 	</requires>
  
@@ -42,14 +42,6 @@
 		</file>
 		-->
 	</class_loader>
-
-	<!-- Templates -->
-	
-	<!--
-	<templates set="example.template.namespace">
-		<template path="path/to/template.tpl" />
-	</templates>
-	-->	
 
 	<!-- Extensions -->
  

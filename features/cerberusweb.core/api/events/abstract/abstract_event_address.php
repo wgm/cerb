@@ -2,17 +2,17 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
 | The latest version of this license can be found here:
-| http://cerberusweb.com/license
+| http://cerb.io/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://www.cerbweb.com	    http://www.webgroupmedia.com/
+|	http://cerb.io	    http://webgroup.media
 ***********************************************************************/
 
 abstract class AbstractEvent_Address extends Extension_DevblocksEvent {
@@ -29,9 +29,7 @@ abstract class AbstractEvent_Address extends Extension_DevblocksEvent {
 			// Pull the latest record
 			list($results) = DAO_Address::search(
 				array(),
-				array(
-					//new DevblocksSearchCriteria(SearchFields_Task::IS_CLOSED,'=',0),
-				),
+				array(),
 				10,
 				0,
 				SearchFields_Address::ID,

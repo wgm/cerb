@@ -38,6 +38,7 @@ abstract class DevblocksEngine {
 	static protected $start_memory = 0;
 	static protected $start_peak_memory = 0;
 
+	static protected $timezone = '';
 	static protected $locale = 'en_US';
 	static protected $dateTimeFormat = 'D, d M Y h:i a';
 
@@ -238,15 +239,6 @@ abstract class DevblocksEngine {
 			}
 		}
 
-		// Routing
-		if(isset($plugin->uri_routing->uri)) {
-			foreach($plugin->uri_routing->uri as $eUri) {
-				@$sUriName = (string) $eUri['name'];
-				@$sController = (string) $eUri['controller'];
-				$manifest->uri_routing[$sUriName] = $sController;
-			}
-		}
-
 		// ACL
 		if(isset($plugin->acl->priv)) {
 			foreach($plugin->acl->priv as $ePriv) {
@@ -411,19 +403,6 @@ abstract class DevblocksEngine {
 			));
 		}
 
-		// URI routing cache
-		$db->ExecuteMaster(sprintf("DELETE FROM %suri_routing WHERE plugin_id = %s",$prefix,$db->qstr($plugin->id)));
-		if(is_array($manifest->uri_routing))
-		foreach($manifest->uri_routing as $uri => $controller_id) {
-			$db->ExecuteMaster(sprintf(
-				"REPLACE INTO ${prefix}uri_routing (uri,plugin_id,controller_id) ".
-				"VALUES (%s,%s,%s)",
-				$db->qstr($uri),
-				$db->qstr($manifest->id),
-				$db->qstr($controller_id)
-			));
-		}
-
 		// ACL caching
 		$db->ExecuteMaster(sprintf("DELETE FROM %sacl WHERE plugin_id = %s",$prefix,$db->qstr($plugin->id)));
 		if(is_array($manifest->acl_privs))
@@ -453,6 +432,20 @@ abstract class DevblocksEngine {
 		return $manifest;
 	}
 
+	static function getClientIp() {
+		if(null == ($ip = @$_SERVER['REMOTE_ADDR']))
+			return null;
+		
+		/*
+		 * It's possible to have multiple REMOTE_ADDR listed when an upstream sets 
+		 * it based on X-Forwarded-For, etc.
+		 */
+		if(false != ($ips = DevblocksPlatform::parseCsvString($ip)) && is_array($ips) && count($ips) > 1)
+			$ip = array_shift($ips);
+		
+		return $ip;
+	}
+	
 	static function getWebPath() {
 		$location = "";
 
@@ -528,11 +521,11 @@ abstract class DevblocksEngine {
 
 				$file = implode(DIRECTORY_SEPARATOR, $path); // combine path
 				$dir = $plugin->getStoragePath() . '/' . 'resources';
-				if(!is_dir($dir)) die(""); // basedir Security
+				if(!is_dir($dir)) DevblocksPlatform::dieWithHttpError(null, 403); // basedir security
 				$resource = $dir . '/' . $file;
-				if(0 != strstr($dir,$resource)) die("");
+				if(0 != strstr($dir,$resource)) DevblocksPlatform::dieWithHttpError(null, 403);
 				$ext = @array_pop(explode('.', $resource));
-				if(!is_file($resource) || 'php' == $ext) die(""); // extension security
+				if(!is_file($resource) || 'php' == $ext) DevblocksPlatform::dieWithHttpError(null, 403); // extension security
 
 				// Caching
 				switch($ext) {
@@ -627,12 +620,11 @@ abstract class DevblocksEngine {
 			
 				// ...and the CSRF token is invalid for this session, freak out
 				if(!isset($_SESSION['csrf_token']) || $_SESSION['csrf_token'] != $request->csrf_token) {
-					header("Status: 403");
 					@$referer = $_SERVER['HTTP_REFERER'];
-					@$remote_addr = $_SERVER['REMOTE_ADDR'];
+					@$remote_addr = DevblocksPlatform::getClientIp();
 					
-					error_log(sprintf("[Cerb/Security] Possible CSRF attack from IP %s using referrer %s", $remote_addr, $referer), E_USER_WARNING);
-					die("Access denied");
+					//error_log(sprintf("[Cerb/Security] Possible CSRF attack from IP %s using referrer %s", $remote_addr, $referer), E_USER_WARNING);
+					DevblocksPlatform::dieWithHttpError("Access denied", 403);
 				}
 			}
 		}
@@ -653,7 +645,7 @@ abstract class DevblocksEngine {
 				}
 
 				if(empty($controllers))
-					die("No controllers are available!");
+					DevblocksPlatform::dieWithHttpError("No controllers are available!", 500);
 
 				// Set our controller based on the results
 				$controller_mft = (isset($routing[$controller_uri]))
@@ -680,8 +672,7 @@ abstract class DevblocksEngine {
 					}
 
 				} else {
-					header("Status: 404");
-					die();
+					DevblocksPlatform::dieWithHttpError(null, 404);
 				}
 
 				break;

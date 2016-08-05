@@ -17,7 +17,9 @@ class _DevblocksStorageManager {
 		
 		if(null !== ($engine = DevblocksPlatform::getExtension($extension_id, true, true))) {
 			/* @var $engine Extension_DevblocksStorageEngine */
-			$engine->setOptions($options);
+			if(!$engine->setOptions($options))
+				return false;
+			
 			self::$_connections[$hash] = $engine;
 			return self::$_connections[$hash];
 		}
@@ -35,6 +37,8 @@ class DevblocksStorageEngineDisk extends Extension_DevblocksStorageEngine {
 		// Default
 		if(!isset($this->_options['storage_path']))
 			$this->_options['storage_path'] = APP_STORAGE_PATH . '/';
+		
+		return true;
 	}
 	
 	function testConfig(Model_DevblocksStorageProfile $profile) {
@@ -135,6 +139,9 @@ class DevblocksStorageEngineDisk extends Extension_DevblocksStorageEngine {
 		
 		if(!file_exists($path))
 			return false;
+		
+		//if(extension_loaded('zlib'))
+		//$path = 'compress.zlib://' . $path;
 		
 		// Read into file handle
 		if($fp && is_resource($fp)) {
@@ -480,6 +487,9 @@ class DevblocksStorageEngineS3 extends Extension_DevblocksStorageEngine {
 	public function setOptions($options=array()) {
 		parent::setOptions($options);
 		
+		if(!isset($this->_options['host']))
+			$this->_options['host'] = null;
+		
 		// Fail, this info is required.
 		if(!isset($this->_options['access_key']))
 			return false;
@@ -495,6 +505,8 @@ class DevblocksStorageEngineS3 extends Extension_DevblocksStorageEngine {
 				return false;
 			}
 		}
+		
+		return true;
 	}
 	
 	function testConfig(Model_DevblocksStorageProfile $profile) {
@@ -606,8 +618,11 @@ class DevblocksStorageEngineS3 extends Extension_DevblocksStorageEngine {
 		
 		if(is_resource($data)) {
 			// Write the content from stream
-			$stat = fstat($data);
-			if(false === $this->_s3->putObject($this->_s3->inputResource($data, $stat['size']), $bucket, $path, S3::ACL_PRIVATE)) {
+			if(false === ($object = $this->_s3->inputResource($data))) {
+				return false;
+			}
+			
+			if(false === $this->_s3->putObject($object, $bucket, $path, S3::ACL_PRIVATE)) {
 				return false;
 			}
 			
@@ -652,6 +667,7 @@ class DevblocksStorageEngineS3 extends Extension_DevblocksStorageEngine {
 	
 	public function batchDelete($namespace, $keys) {
 		@$bucket = $this->_options['bucket'];
+		$errors = array();
 		
 		$ns = $this->escapeNamespace($namespace);
 		$path_prefix = $this->_options['path_prefix'];
@@ -660,21 +676,16 @@ class DevblocksStorageEngineS3 extends Extension_DevblocksStorageEngine {
 			return $path_prefix . $ns . '/'. $e;
 		}, $keys);
 		
-		
-		if(false === ($xml = $this->_s3->deleteObjects($bucket, $paths)))
-			return false;
-
 		// Handle the case where some objects fail to delete (e.g. AccessDenied)
 		
-		$errors = array();
-		
-		if(isset($xml->Error))
-		foreach($xml->Error as $error) {
-			$errors[] = str_replace($path_prefix . $ns . '/', '', $error->Key);
+		foreach($paths as $path) {
+			if(false === ($xml = $this->_s3->deleteObject($bucket, $path))) {
+				$errors[] = str_replace($path_prefix . $ns . '/', '', $path);
+			}
 		}
 		
 		// Return the keys that were actually deleted, ignoring any errors
-		if(is_array($errors))
+		if(!empty($errors))
 			return array_diff($keys, $errors);
 		
 		return $keys;

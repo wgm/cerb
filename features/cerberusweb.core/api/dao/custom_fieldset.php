@@ -111,7 +111,7 @@ class DAO_CustomFieldset extends Cerb_ORMHelper {
 		;
 
 		if($options & Cerb_ORMHelper::OPT_GET_MASTER_ONLY) {
-			$rs = $db->ExecuteMaster($sql);
+			$rs = $db->ExecuteMaster($sql, _DevblocksDatabaseManager::OPT_NO_READ_AFTER_WRITE);
 		} else {
 			$rs = $db->ExecuteSlave($sql);
 		}
@@ -146,6 +146,10 @@ class DAO_CustomFieldset extends Cerb_ORMHelper {
 				null,
 				Cerb_ORMHelper::OPT_GET_MASTER_ONLY
 			);
+			
+			if(!is_array($objects))
+				return false;
+			
 			$cache->save($objects, self::CACHE_ALL);
 		}
 		
@@ -208,6 +212,9 @@ class DAO_CustomFieldset extends Cerb_ORMHelper {
 	 */
 	static private function _getObjectsFromResult($rs) {
 		$objects = array();
+		
+		if(!($rs instanceof mysqli_result))
+			return false;
 		
 		while($row = mysqli_fetch_assoc($rs)) {
 			$object = new Model_CustomFieldset();
@@ -282,7 +289,7 @@ class DAO_CustomFieldset extends Cerb_ORMHelper {
 	public static function getSearchQueryComponents($columns, $params, $sortBy=null, $sortAsc=null) {
 		$fields = SearchFields_CustomFieldset::getFields();
 		
-		list($tables,$wheres) = parent::_parseSearchParams($params, $columns, $fields, $sortBy);
+		list($tables,$wheres) = parent::_parseSearchParams($params, $columns, 'SearchFields_CustomFieldset', $sortBy);
 		
 		$select_sql = sprintf("SELECT ".
 			"custom_fieldset.id as %s, ".
@@ -306,7 +313,7 @@ class DAO_CustomFieldset extends Cerb_ORMHelper {
 		$where_sql = "".
 			(!empty($wheres) ? sprintf("WHERE %s ",implode(' AND ',$wheres)) : "WHERE 1 ");
 			
-		$sort_sql = self::_buildSortClause($sortBy, $sortAsc, $fields);
+		$sort_sql = self::_buildSortClause($sortBy, $sortAsc, $fields, $select_sql, 'SearchFields_CustomFieldset');
 	
 		// Virtuals
 		
@@ -414,13 +421,18 @@ class DAO_CustomFieldset extends Cerb_ORMHelper {
 			$sort_sql;
 			
 		if($limit > 0) {
-			$rs = $db->SelectLimit($sql,$limit,$page*$limit) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs mysqli_result */
+			if(false == ($rs = $db->SelectLimit($sql,$limit,$page*$limit)))
+				return false;
 		} else {
-			$rs = $db->ExecuteSlave($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs mysqli_result */
+			if(false == ($rs = $db->ExecuteSlave($sql)))
+				return false;
 			$total = mysqli_num_rows($rs);
 		}
 		
 		$results = array();
+		
+		if(!($rs instanceof mysqli_result))
+			return false;
 		
 		while($row = mysqli_fetch_assoc($rs)) {
 			$object_id = intval($row[SearchFields_CustomFieldset::ID]);
@@ -453,7 +465,7 @@ class DAO_CustomFieldset extends Cerb_ORMHelper {
 
 };
 
-class SearchFields_CustomFieldset implements IDevblocksSearchFields {
+class SearchFields_CustomFieldset extends DevblocksSearchFields {
 	const ID = 'c_id';
 	const NAME = 'c_name';
 	const CONTEXT = 'c_context';
@@ -466,10 +478,40 @@ class SearchFields_CustomFieldset implements IDevblocksSearchFields {
 	const VIRTUAL_CONTEXT_LINK = '*_context_link';
 	const VIRTUAL_OWNER = '*_owner';
 	
+	static private $_fields = null;
+	
+	static function getPrimaryKey() {
+		return 'custom_fieldset.id';
+	}
+	
+	static function getCustomFieldContextKeys() {
+		return array(
+			CerberusContexts::CONTEXT_CUSTOM_FIELDSET => new DevblocksSearchFieldContextKeys('custom_fieldset.id', self::ID),
+		);
+	}
+	
+	static function getWhereSQL(DevblocksSearchCriteria $param) {
+		if('cf_' == substr($param->field, 0, 3)) {
+			return self::_getWhereSQLFromCustomFields($param);
+		} else {
+			return $param->getWhereSQL(self::getFields(), self::getPrimaryKey());
+		}
+	}
+	
 	/**
 	 * @return DevblocksSearchField[]
 	 */
 	static function getFields() {
+		if(is_null(self::$_fields))
+			self::$_fields = self::_getFields();
+		
+		return self::$_fields;
+	}
+	
+	/**
+	 * @return DevblocksSearchField[]
+	 */
+	static function _getFields() {
 		$translate = DevblocksPlatform::getTranslationService();
 		
 		$columns = array(
@@ -653,6 +695,9 @@ class View_CustomFieldset extends C4_AbstractView implements IAbstractView_Subto
 			$this->renderSortAsc,
 			$this->renderTotal
 		);
+		
+		$this->_lazyLoadCustomFieldsIntoObjects($objects, 'SearchFields_CustomFieldset');
+		
 		return $objects;
 	}
 	
@@ -702,13 +747,14 @@ class View_CustomFieldset extends C4_AbstractView implements IAbstractView_Subto
 	function getSubtotalCounts($column) {
 		$counts = array();
 		$fields = $this->getFields();
+		$context = CerberusContexts::CONTEXT_CUSTOM_FIELDSET;
 
 		if(!isset($fields[$column]))
 			return array();
 		
 		switch($column) {
 			case SearchFields_CustomFieldset::VIRTUAL_CONTEXT_LINK:
-				$counts = $this->_getSubtotalCountForContextLinkColumn('DAO_CustomFieldset', CerberusContexts::CONTEXT_CUSTOM_FIELDSET, $column);
+				$counts = $this->_getSubtotalCountForContextLinkColumn($context, $column);
 				break;
 			
 			case SearchFields_CustomFieldset::CONTEXT:
@@ -719,11 +765,11 @@ class View_CustomFieldset extends C4_AbstractView implements IAbstractView_Subto
 					$label_map[$k] = $mft->name;
 				}
 				
-				$counts = $this->_getSubtotalCountForStringColumn('DAO_CustomFieldset', $column, $label_map, 'in', 'contexts[]');
+				$counts = $this->_getSubtotalCountForStringColumn($context, $column, $label_map, 'in', 'contexts[]');
 				break;
 			
 			case SearchFields_CustomFieldset::VIRTUAL_OWNER:
-				$counts = $this->_getSubtotalCountForContextAndIdColumns('DAO_CustomFieldset', CerberusContexts::CONTEXT_CUSTOM_FIELDSET, $column, DAO_CustomFieldset::OWNER_CONTEXT, DAO_CustomFieldset::OWNER_CONTEXT_ID, 'owner_context[]');
+				$counts = $this->_getSubtotalCountForContextAndIdColumns($context, $column, DAO_CustomFieldset::OWNER_CONTEXT, DAO_CustomFieldset::OWNER_CONTEXT_ID, 'owner_context[]');
 				break;
 			
 			default:
@@ -737,7 +783,7 @@ class View_CustomFieldset extends C4_AbstractView implements IAbstractView_Subto
 		$search_fields = SearchFields_CustomFieldset::getFields();
 		
 		$fields = array(
-			'_fulltext' => 
+			'text' => 
 				array(
 					'type' => DevblocksSearchCriteria::TYPE_TEXT,
 					'options' => array('param_key' => SearchFields_CustomFieldset::NAME, 'match' => DevblocksSearchCriteria::OPTION_TEXT_PARTIAL),
@@ -765,19 +811,15 @@ class View_CustomFieldset extends C4_AbstractView implements IAbstractView_Subto
 		return $fields;
 	}	
 	
-	function getParamsFromQuickSearchFields($fields) {
-		$search_fields = $this->getQuickSearchFields();
-		$params = DevblocksSearchCriteria::getParamsFromQueryFields($fields, $search_fields);
-
-		// Handle virtual fields and overrides
-		if(is_array($fields))
-		foreach($fields as $k => $v) {
-			switch($k) {
-				// ...
-			}
+	function getParamFromQuickSearchFieldTokens($field, $tokens) {
+		switch($field) {
+			default:
+				$search_fields = $this->getQuickSearchFields();
+				return DevblocksSearchCriteria::getParamFromQueryFieldTokens($field, $tokens, $search_fields);
+				break;
 		}
 		
-		return $params;
+		return false;
 	}
 	
 	function render() {
@@ -934,72 +976,6 @@ class View_CustomFieldset extends C4_AbstractView implements IAbstractView_Subto
 			$this->renderPage = 0;
 		}
 	}
-		
-	function doBulkUpdate($filter, $do, $ids=array()) {
-		@set_time_limit(600); // 10m
-	
-		$change_fields = array();
-		$custom_fields = array();
-
-		// Make sure we have actions
-		if(empty($do))
-			return;
-
-		// Make sure we have checked items if we want a checked list
-		if(0 == strcasecmp($filter,"checks") && empty($ids))
-			return;
-			
-		if(is_array($do))
-		foreach($do as $k => $v) {
-			switch($k) {
-				// [TODO] Implement actions
-				case 'example':
-					//$change_fields[DAO_CustomFieldset::EXAMPLE] = 'some value';
-					break;
-				/*
-				default:
-					// Custom fields
-					if(substr($k,0,3)=="cf_") {
-						$custom_fields[substr($k,3)] = $v;
-					}
-					break;
-				*/
-			}
-		}
-
-		$pg = 0;
-
-		if(empty($ids))
-		do {
-			list($objects,$null) = DAO_CustomFieldset::search(
-				array(),
-				$this->getParams(),
-				100,
-				$pg++,
-				SearchFields_CustomFieldset::ID,
-				true,
-				false
-			);
-			$ids = array_merge($ids, array_keys($objects));
-			 
-		} while(!empty($objects));
-
-		$batch_total = count($ids);
-		for($x=0;$x<=$batch_total;$x+=100) {
-			$batch_ids = array_slice($ids,$x,100);
-			
-			if(!empty($change_fields)) {
-				DAO_CustomFieldset::update($batch_ids, $change_fields);
-			}
-
-			// Custom Fields
-			//self::_doBulkSetCustomFields(ChCustomFieldSource_CustomFieldset::ID, $custom_fields, $batch_ids);
-			
-			unset($batch_ids);
-		}
-
-		unset($ids);
-	}
 };
 
 class Context_CustomFieldset extends Extension_DevblocksContext {
@@ -1008,7 +984,9 @@ class Context_CustomFieldset extends Extension_DevblocksContext {
 	}
 	
 	function getMeta($context_id) {
-		$cfieldset = DAO_CustomFieldset::get($context_id);
+		if(false == ($cfieldset = DAO_CustomFieldset::get($context_id)))
+			return null;
+			
 		$url_writer = DevblocksPlatform::getUrlService();
 		
 		return array(
@@ -1041,7 +1019,6 @@ class Context_CustomFieldset extends Extension_DevblocksContext {
 		return $labels;
 	}
 	
-	// [TODO] Interface
 	function getDefaultProperties() {
 		return array(
 			'name',

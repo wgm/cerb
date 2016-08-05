@@ -2,17 +2,17 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
 | The latest version of this license can be found here:
-| http://cerberusweb.com/license
+| http://cerb.io/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://www.cerbweb.com	    http://www.webgroupmedia.com/
+|	http://cerb.io	    http://webgroup.media
 ***********************************************************************/
 
 class DAO_AddressToWorker extends Cerb_ORMHelper {
@@ -181,21 +181,19 @@ class DAO_AddressToWorker extends Cerb_ORMHelper {
 		$cache = DevblocksPlatform::getCacheService();
 		
 		if($nocache || null === ($results = $cache->load(self::_CACHE_ALL))) {
-			$addresses = self::getWhere(
+			$results = self::getWhere(
 				null,
 				null,
 				null,
 				null,
 				Cerb_ORMHelper::OPT_GET_MASTER_ONLY
 			);
-			$results = array();
 			
-			if(is_array($addresses))
-			foreach($addresses as $address) {
-				$results[$address->address_id] = $address;
-			}
+			if(!is_array($results))
+				return false;
 			
-			$cache->save($results, self::_CACHE_ALL);
+			if(!empty($results))
+				$cache->save($results, self::_CACHE_ALL);
 		}
 		
 		if(!$with_disabled) {
@@ -224,7 +222,7 @@ class DAO_AddressToWorker extends Cerb_ORMHelper {
 		;
 		
 		if($options & Cerb_ORMHelper::OPT_GET_MASTER_ONLY) {
-			$rs = $db->ExecuteMaster($sql);
+			$rs = $db->ExecuteMaster($sql, _DevblocksDatabaseManager::OPT_NO_READ_AFTER_WRITE);
 		} else {
 			$rs = $db->ExecuteSlave($sql);
 		}
@@ -240,6 +238,9 @@ class DAO_AddressToWorker extends Cerb_ORMHelper {
 	 */
 	private static function _getObjectsFromResult($rs) {
 		$objects = array();
+		
+		if(!($rs instanceof mysqli_result))
+			return false;
 		
 		while($row = mysqli_fetch_assoc($rs)) {
 			$object = new Model_AddressToWorker();

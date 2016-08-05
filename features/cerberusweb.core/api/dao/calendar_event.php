@@ -2,17 +2,17 @@
 /***********************************************************************
  | Cerb(tm) developed by Webgroup Media, LLC.
  |-----------------------------------------------------------------------
- | All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
+ | All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
  |   unless specifically noted otherwise.
  |
  | This source code is released under the Devblocks Public License.
  | The latest version of this license can be found here:
- | http://cerberusweb.com/license
+ | http://cerb.io/license
  |
  | By using this software, you acknowledge having read this license
  | and agree to be bound thereby.
  | ______________________________________________________________________
- |	http://www.cerbweb.com	    http://www.webgroupmedia.com/
+ |	http://cerb.io	    http://webgroup.media
  ***********************************************************************/
 
 class DAO_CalendarEvent extends Cerb_ORMHelper {
@@ -150,6 +150,9 @@ class DAO_CalendarEvent extends Cerb_ORMHelper {
 	static private function _getObjectsFromResult($rs) {
 		$objects = array();
 		
+		if(!($rs instanceof mysqli_result))
+			return false;
+		
 		while($row = mysqli_fetch_assoc($rs)) {
 			$object = new Model_CalendarEvent();
 			$object->id = $row['id'];
@@ -213,7 +216,7 @@ class DAO_CalendarEvent extends Cerb_ORMHelper {
 	public static function getSearchQueryComponents($columns, $params, $sortBy=null, $sortAsc=null) {
 		$fields = SearchFields_CalendarEvent::getFields();
 		
-		list($tables,$wheres) = parent::_parseSearchParams($params, $columns, $fields, $sortBy);
+		list($tables,$wheres) = parent::_parseSearchParams($params, $columns, 'SearchFields_CalendarEvent', $sortBy);
 		
 		$select_sql = sprintf("SELECT ".
 			"calendar_event.id as %s, ".
@@ -234,19 +237,10 @@ class DAO_CalendarEvent extends Cerb_ORMHelper {
 			(isset($tables['context_link']) ? "INNER JOIN context_link ON (context_link.to_context = 'cerberusweb.contexts.calendar_event' AND context_link.to_context_id = calendar_event.id) " : " ")
 			;
 		
-		// Custom field joins
-		list($select_sql, $join_sql, $has_multiple_values) = self::_appendSelectJoinSqlForCustomFieldTables(
-			$tables,
-			$params,
-			'calendar_event.id',
-			$select_sql,
-			$join_sql
-		);
-				
 		$where_sql = "".
 			(!empty($wheres) ? sprintf("WHERE %s ",implode(' AND ',$wheres)) : "WHERE 1 ");
 			
-		$sort_sql = self::_buildSortClause($sortBy, $sortAsc, $fields);
+		$sort_sql = self::_buildSortClause($sortBy, $sortAsc, $fields, $select_sql, 'SearchFields_CalendarEvent');
 	
 		$args = array(
 			'join_sql' => &$join_sql,
@@ -321,13 +315,20 @@ class DAO_CalendarEvent extends Cerb_ORMHelper {
 			$sort_sql;
 			
 		if($limit > 0) {
-			$rs = $db->SelectLimit($sql,$limit,$page*$limit) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs mysqli_result */
+			if(false == ($rs = $db->SelectLimit($sql,$limit,$page*$limit)))
+				return false;
+			
 		} else {
-			$rs = $db->ExecuteSlave($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs mysqli_result */
+			if(false == ($rs = $db->ExecuteSlave($sql)))
+				return false;
+			
 			$total = mysqli_num_rows($rs);
 		}
 		
 		$results = array();
+		
+		if(!($rs instanceof mysqli_result))
+			return false;
 		
 		while($row = mysqli_fetch_assoc($rs)) {
 			$object_id = intval($row[SearchFields_CalendarEvent::ID]);
@@ -353,7 +354,7 @@ class DAO_CalendarEvent extends Cerb_ORMHelper {
 	}
 };
 
-class SearchFields_CalendarEvent implements IDevblocksSearchFields {
+class SearchFields_CalendarEvent extends DevblocksSearchFields {
 	const ID = 'c_id';
 	const NAME = 'c_name';
 	const CALENDAR_ID = 'c_calendar_id';
@@ -368,10 +369,41 @@ class SearchFields_CalendarEvent implements IDevblocksSearchFields {
 	const CONTEXT_LINK = 'cl_context_from';
 	const CONTEXT_LINK_ID = 'cl_context_from_id';
 	
+	static private $_fields = null;
+	
+	static function getPrimaryKey() {
+		return 'calendar_event.id';
+	}
+	
+	static function getCustomFieldContextKeys() {
+		return array(
+			CerberusContexts::CONTEXT_CALENDAR_EVENT => new DevblocksSearchFieldContextKeys('calendar_event.id', self::ID),
+			CerberusContexts::CONTEXT_CALENDAR => new DevblocksSearchFieldContextKeys('calendar_event.calendar_id', self::CALENDAR_ID),
+		);
+	}
+	
+	static function getWhereSQL(DevblocksSearchCriteria $param) {
+		if('cf_' == substr($param->field, 0, 3)) {
+			return self::_getWhereSQLFromCustomFields($param);
+		} else {
+			return $param->getWhereSQL(self::getFields(), self::getPrimaryKey());
+		}
+	}
+	
 	/**
 	 * @return DevblocksSearchField[]
 	 */
 	static function getFields() {
+		if(is_null(self::$_fields))
+			self::$_fields = self::_getFields();
+		
+		return self::$_fields;
+	}
+	
+	/**
+	 * @return DevblocksSearchField[]
+	 */
+	static function _getFields() {
 		$translate = DevblocksPlatform::getTranslationService();
 		
 		$columns = array(
@@ -390,9 +422,7 @@ class SearchFields_CalendarEvent implements IDevblocksSearchFields {
 		
 		// Custom fields with fieldsets
 		
-		$custom_columns = DevblocksSearchField::getCustomSearchFieldsByContexts(array(
-			CerberusContexts::CONTEXT_CALENDAR_EVENT,
-		));
+		$custom_columns = DevblocksSearchField::getCustomSearchFieldsByContexts(array_keys(self::getCustomFieldContextKeys()));
 		
 		if(is_array($custom_columns))
 			$columns = array_merge($columns, $custom_columns);
@@ -458,6 +488,9 @@ class View_CalendarEvent extends C4_AbstractView implements IAbstractView_Subtot
 			$this->renderSortAsc,
 			$this->renderTotal
 		);
+		
+		$this->_lazyLoadCustomFieldsIntoObjects($objects, 'SearchFields_CalendarEvent');
+		
 		return $objects;
 	}
 	
@@ -507,6 +540,7 @@ class View_CalendarEvent extends C4_AbstractView implements IAbstractView_Subtot
 	function getSubtotalCounts($column) {
 		$counts = array();
 		$fields = $this->getFields();
+		$context = CerberusContexts::CONTEXT_CALENDAR_EVENT;
 
 		if(!isset($fields[$column]))
 			return array();
@@ -521,21 +555,21 @@ class View_CalendarEvent extends C4_AbstractView implements IAbstractView_Subtot
 					$label_map[$calendar_id] = $calendar->name;
 				}
 				
-				$counts = $this->_getSubtotalCountForStringColumn('DAO_CalendarEvent', $column, $label_map, DevblocksSearchCriteria::OPER_IN, 'context_id[]');
+				$counts = $this->_getSubtotalCountForStringColumn($context, $column, $label_map, DevblocksSearchCriteria::OPER_IN, 'context_id[]');
 				break;
 				
 			case SearchFields_CalendarEvent::IS_AVAILABLE:
-				$counts = $this->_getSubtotalCountForBooleanColumn('DAO_CalendarEvent', $column);
+				$counts = $this->_getSubtotalCountForBooleanColumn($context, $column);
 				break;
 				
 			case SearchFields_CalendarEvent::VIRTUAL_CONTEXT_LINK:
-				$counts = $this->_getSubtotalCountForContextLinkColumn('DAO_CalendarEvent', CerberusContexts::CONTEXT_CALENDAR_EVENT, $column);
+				$counts = $this->_getSubtotalCountForContextLinkColumn($context, $column);
 				break;
 				
 			default:
 				// Custom fields
 				if('cf_' == substr($column,0,3)) {
-					$counts = $this->_getSubtotalCountForCustomColumn('DAO_CalendarEvent', $column, 'calendar_event.id');
+					$counts = $this->_getSubtotalCountForCustomColumn($context, $column);
 				}
 				
 				break;
@@ -548,7 +582,7 @@ class View_CalendarEvent extends C4_AbstractView implements IAbstractView_Subtot
 		$search_fields = SearchFields_CalendarEvent::getFields();
 		
 		$fields = array(
-			'_fulltext' => 
+			'text' => 
 				array(
 					'type' => DevblocksSearchCriteria::TYPE_TEXT,
 					'options' => array('param_key' => SearchFields_CalendarEvent::NAME, 'match' => DevblocksSearchCriteria::OPTION_TEXT_PARTIAL),
@@ -599,63 +633,70 @@ class View_CalendarEvent extends C4_AbstractView implements IAbstractView_Subtot
 		return $fields;
 	}
 	
-	function getParamsFromQuickSearchFields($fields) {
-		$search_fields = $this->getQuickSearchFields();
-		$params = DevblocksSearchCriteria::getParamsFromQueryFields($fields, $search_fields);
-
-		// Handle virtual fields and overrides
-		if(is_array($fields))
-		foreach($fields as $k => $v) {
-			switch($k) {
-				case 'status':
-					$field_key = SearchFields_CalendarEvent::IS_AVAILABLE;
-					$oper = DevblocksSearchCriteria::OPER_EQ;
-					$value = 0;
-					
-					// Normalize status labels
-					switch(substr(strtolower($v), 0, 1)) {
-						case 'a':
-						case 'y':
-							$value = 1;
-							break;
-					}
-					
-					$params[$field_key] = new DevblocksSearchCriteria(
-						$field_key,
-						$oper,
-						$value
-					);
-					break;
+	function getParamFromQuickSearchFieldTokens($field, $tokens) {
+		switch($field) {
+			case 'calendar':
+				$field_key = SearchFields_CalendarEvent::CALENDAR_ID;
+				$oper = null;
+				$terms = array();
 				
-				case 'calendar':
-					$field_key = SearchFields_CalendarEvent::CALENDAR_ID;
-					$oper = DevblocksSearchCriteria::OPER_IN;
-					
-					$calendars = DAO_Calendar::getAll();
-					$patterns = DevblocksPlatform::parseCsvString($v);
-					$values = array();
-					
-					if(is_array($values))
-					foreach($patterns as $pattern) {
-						foreach($calendars as $calendar_id => $calendar) {
-							if(false !== stripos($calendar->name, $pattern))
-								$values[$calendar_id] = true;
-						}
+				if(false == CerbQuickSearchLexer::getOperArrayFromTokens($tokens, $oper, $terms, false))
+					return false;
+				
+				if(empty($terms))
+					return false;
+				
+				$calendars = DAO_Calendar::getAll();
+				$value = array();;
+				
+				if(is_array($terms))
+				foreach($terms as $term) {
+					foreach($calendars as $calendar_id => $calendar) {
+						if(false !== stripos($calendar->name, $term))
+							$values[$calendar_id] = true;
 					}
-					
-					if(!empty($values)) {
-						$params[$field_key] = new DevblocksSearchCriteria(
-							$field_key,
-							$oper,
-							array_keys($values)
-						);
-					}
-					break;
-			}
+				}
+				
+				return new DevblocksSearchCriteria(
+					$field_key,
+					$oper,
+					array_keys($values)
+				);
+				break;
+				
+			case 'status':
+				$field_key = SearchFields_CalendarEvent::IS_AVAILABLE;
+				$oper = null;
+				$term = null;
+				$value = 0;
+				
+				if(false == CerbQuickSearchLexer::getOperStringFromTokens($tokens, $oper, $term, false))
+					return false;
+				
+				// Normalize status labels
+				switch(substr(strtolower($term), 0, 1)) {
+					case 'a':
+					case 'y':
+					case '1':
+						$value = 1;
+						break;
+				}
+				
+				return new DevblocksSearchCriteria(
+					$field_key,
+					$oper,
+					$value
+				);
+				break;
+				
+			default:
+				$search_fields = $this->getQuickSearchFields();
+				return DevblocksSearchCriteria::getParamFromQueryFieldTokens($field, $tokens, $search_fields);
+				break;
 		}
 		
-		return $params;
-	}	
+		return false;
+	}
 	
 	function render() {
 		$this->_sanitize();
@@ -812,71 +853,6 @@ class View_CalendarEvent extends C4_AbstractView implements IAbstractView_Subtot
 			$this->renderPage = 0;
 		}
 	}
-		
-	function doBulkUpdate($filter, $do, $ids=array()) {
-		@set_time_limit(600); // 10m
-	
-		$change_fields = array();
-		$custom_fields = array();
-
-		// Make sure we have actions
-		if(empty($do))
-			return;
-
-		// Make sure we have checked items if we want a checked list
-		if(0 == strcasecmp($filter,"checks") && empty($ids))
-			return;
-			
-		if(is_array($do))
-		foreach($do as $k => $v) {
-			switch($k) {
-				// [TODO] Implement actions
-				case 'example':
-					//$change_fields[DAO_CalendarEvent::EXAMPLE] = 'some value';
-					break;
-					
-				default:
-					// Custom fields
-					if(substr($k,0,3)=="cf_") {
-						$custom_fields[substr($k,3)] = $v;
-					}
-					break;
-			}
-		}
-
-		$pg = 0;
-
-		if(empty($ids))
-		do {
-			list($objects,$null) = DAO_CalendarEvent::search(
-				array(),
-				$this->getParams(),
-				100,
-				$pg++,
-				SearchFields_CalendarEvent::ID,
-				true,
-				false
-			);
-			$ids = array_merge($ids, array_keys($objects));
-			 
-		} while(!empty($objects));
-
-		$batch_total = count($ids);
-		for($x=0;$x<=$batch_total;$x+=100) {
-			$batch_ids = array_slice($ids,$x,100);
-			
-			if(!empty($change_fields)) {
-				DAO_CalendarEvent::update($batch_ids, $change_fields);
-			}
-
-			// Custom Fields
-			self::_doBulkSetCustomFields(ChCustomFieldSource_CalendarEvent::ID, $custom_fields, $batch_ids);
-			
-			unset($batch_ids);
-		}
-
-		unset($ids);
-	}
 };
 
 class Context_CalendarEvent extends Extension_DevblocksContext implements IDevblocksContextPeek, IDevblocksContextProfile {
@@ -933,7 +909,6 @@ class Context_CalendarEvent extends Extension_DevblocksContext implements IDevbl
 		return $labels;
 	}
 	
-	// [TODO] Interface
 	function getDefaultProperties() {
 		return array(
 			'calendar__label',

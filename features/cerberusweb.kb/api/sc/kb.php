@@ -2,17 +2,17 @@
 /***********************************************************************
  | Cerb(tm) developed by Webgroup Media, LLC.
  |-----------------------------------------------------------------------
- | All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
+ | All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
  |   unless specifically noted otherwise.
  |
  | This source code is released under the Devblocks Public License.
  | The latest version of this license can be found here:
- | http://cerberusweb.com/license
+ | http://cerb.io/license
  |
  | By using this software, you acknowledge having read this license
  | and agree to be bound thereby.
  | ______________________________________________________________________
- |	http://www.cerbweb.com	    http://www.webgroupmedia.com/
+ |	http://cerb.io	    http://webgroup.media
  ***********************************************************************/
 
 class UmScKbController extends Extension_UmScController {
@@ -30,7 +30,7 @@ class UmScKbController extends Extension_UmScController {
 	}
 	
 	function renderSidebar(DevblocksHttpResponse $response) {
-		$tpl = DevblocksPlatform::getTemplateService();
+		$tpl = DevblocksPlatform::getTemplateSandboxService();
 		
 		@$q = DevblocksPlatform::importGPC($_POST['q'],'string','');
 		$tpl->assign('q', $q);
@@ -39,7 +39,7 @@ class UmScKbController extends Extension_UmScController {
 	}
 	
 	function writeResponse(DevblocksHttpResponse $response) {
-		$tpl = DevblocksPlatform::getTemplateService();
+		$tpl = DevblocksPlatform::getTemplateSandboxService();
 		
 		$umsession = ChPortalHelper::getSession();
 		
@@ -307,7 +307,7 @@ class UmScKbController extends Extension_UmScController {
 	}
 	
 	function configure(Model_CommunityTool $instance) {
-		$tpl = DevblocksPlatform::getTemplateService();
+		$tpl = DevblocksPlatform::getTemplateSandboxService();
 
 		// Knowledgebase
 		
@@ -412,16 +412,28 @@ class UmSc_KbArticleView extends C4_AbstractView {
 			$this->renderSortAsc,
 			$this->renderTotal
 		);
+		
+		$this->_lazyLoadCustomFieldsIntoObjects($objects, 'SearchFields_KbArticle');
+		
 		return $objects;
 	}
 
 	function render() {
 		//$this->_sanitize();
 		
-		$tpl = DevblocksPlatform::getTemplateService();
+		$tpl = DevblocksPlatform::getTemplateSandboxService();
 		$tpl->assign('id', $this->id);
 		$tpl->assign('view', $this);
 
+		$categories = DAO_KbCategory::getAll();
+		$tpl->assign('categories', $categories);
+		
+		$custom_fields = DAO_CustomField::getAll();
+		$tpl->assign('custom_fields', $custom_fields);
+		
+		$workers = DAO_Worker::getAll();
+		$tpl->assign('workers', $workers);
+		
 		$tpl->display("devblocks:cerberusweb.kb:portal_".ChPortalHelper::getCode() . ":support_center/kb/view.tpl");
 	}
 

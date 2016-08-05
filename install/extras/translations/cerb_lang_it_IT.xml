@@ -203,11 +203,6 @@
 				<seg/>
 			</tuv>
 		</tu>
-		<tu tuid="acl.core.ticket.view.actions.pile_sort">
-			<tuv xml:lang="it_IT">
-				<seg/>
-			</tuv>
-		</tu>
 		<tu tuid="acl.core.watchers.assign">
 			<tuv xml:lang="it_IT">
 				<seg/>
@@ -483,56 +478,6 @@
 				<seg/>
 			</tuv>
 		</tu>
-		<tu tuid="activity.activity">
-			<tuv xml:lang="it_IT">
-				<seg/>
-			</tuv>
-		</tu>
-		<tu tuid="activity.address_book">
-			<tuv xml:lang="it_IT">
-				<seg/>
-			</tuv>
-		</tu>
-		<tu tuid="activity.config">
-			<tuv xml:lang="it_IT">
-				<seg>%s sta configurando l'helpdesk</seg>
-			</tuv>
-		</tu>
-		<tu tuid="activity.default">
-			<tuv xml:lang="it_IT">
-				<seg>%s sta navigando l'helpdesk</seg>
-			</tuv>
-		</tu>
-		<tu tuid="activity.display_ticket">
-			<tuv xml:lang="it_IT">
-				<seg>%s sta visualizzando %s </seg>
-			</tuv>
-		</tu>
-		<tu tuid="activity.kb">
-			<tuv xml:lang="it_IT">
-				<seg/>
-			</tuv>
-		</tu>
-		<tu tuid="activity.mail.search">
-			<tuv xml:lang="it_IT">
-				<seg/>
-			</tuv>
-		</tu>
-		<tu tuid="activity.mail.workspaces">
-			<tuv xml:lang="it_IT">
-				<seg/>
-			</tuv>
-		</tu>
-		<tu tuid="activity.simulator">
-			<tuv xml:lang="it_IT">
-				<seg>%s is generating simulated tickets </seg>
-			</tuv>
-		</tu>
-		<tu tuid="activity.tickets">
-			<tuv xml:lang="it_IT">
-				<seg>%s sta navigando %s tickets</seg>
-			</tuv>
-		</tu>
 		<tu tuid="address.address">
 			<tuv xml:lang="it_IT">
 				<seg/>
@@ -693,11 +638,6 @@
 				<seg/>
 			</tuv>
 		</tu>
-		<tu tuid="call_entry.model.is_closed">
-			<tuv xml:lang="it_IT">
-				<seg/>
-			</tuv>
-		</tu>
 		<tu tuid="call_entry.model.is_outgoing">
 			<tuv xml:lang="it_IT">
 				<seg/>
@@ -771,6 +711,11 @@
 		<tu tuid="common.access_denied">
 			<tuv xml:lang="it_IT">
 				<seg/>
+			</tuv>
+		</tu>
+		<tu tuid="common.actions">
+			<tuv xml:lang="it_IT">
+				<seg>Azioni</seg>
 			</tuv>
 		</tu>
 		<tu tuid="common.active">
@@ -1219,6 +1164,16 @@
 			</tuv>
 		</tu>
 		<tu tuid="common.languages">
+			<tuv xml:lang="it_IT">
+				<seg/>
+			</tuv>
+		</tu>
+		<tu tuid="common.last_activity">
+			<tuv xml:lang="it_IT">
+				<seg/>
+			</tuv>
+		</tu>
+		<tu tuid="common.last_activity_date">
 			<tuv xml:lang="it_IT">
 				<seg/>
 			</tuv>
@@ -2506,11 +2461,6 @@
 		<tu tuid="dashboard">
 			<tuv xml:lang="it_IT">
 				<seg>Dashboard</seg>
-			</tuv>
-		</tu>
-		<tu tuid="dashboard.actions">
-			<tuv xml:lang="it_IT">
-				<seg>Azioni</seg>
 			</tuv>
 		</tu>
 		<tu tuid="dashboard.active_dashboard">
@@ -4553,6 +4503,11 @@
 				<seg>Chiuso</seg>
 			</tuv>
 		</tu>
+		<tu tuid="status.completed">
+			<tuv xml:lang="it_IT">
+				<seg/>
+			</tuv>
+		</tu>
 		<tu tuid="status.deleted">
 			<tuv xml:lang="it_IT">
 				<seg>Cancellato</seg>
@@ -4584,11 +4539,6 @@
 			</tuv>
 		</tu>
 		<tu tuid="task.status.active">
-			<tuv xml:lang="it_IT">
-				<seg/>
-			</tuv>
-		</tu>
-		<tu tuid="task.status.completed">
 			<tuv xml:lang="it_IT">
 				<seg/>
 			</tuv>
@@ -4963,16 +4913,6 @@
 				<seg>Attività</seg>
 			</tuv>
 		</tu>
-		<tu tuid="timetracking_entry.id">
-			<tuv xml:lang="it_IT">
-				<seg>ID</seg>
-			</tuv>
-		</tu>
-		<tu tuid="timetracking_entry.is_closed">
-			<tuv xml:lang="it_IT">
-				<seg/>
-			</tuv>
-		</tu>
 		<tu tuid="timetracking_entry.log_date">
 			<tuv xml:lang="it_IT">
 				<seg>Logga Data</seg>
@@ -5188,11 +5128,6 @@
 				<seg/>
 			</tuv>
 		</tu>
-		<tu tuid="whos_online.heading">
-			<tuv xml:lang="it_IT">
-				<seg>%s Utenti Loggati:</seg>
-			</tuv>
-		</tu>
 		<tu tuid="worker.at_mention_name">
 			<tuv xml:lang="it_IT">
 				<seg/>
@@ -5204,16 +5139,6 @@
 			</tuv>
 		</tu>
 		<tu tuid="worker.is_superuser">
-			<tuv xml:lang="it_IT">
-				<seg/>
-			</tuv>
-		</tu>
-		<tu tuid="worker.last_activity">
-			<tuv xml:lang="it_IT">
-				<seg/>
-			</tuv>
-		</tu>
-		<tu tuid="worker.last_activity_date">
 			<tuv xml:lang="it_IT">
 				<seg/>
 			</tuv>

@@ -2,17 +2,17 @@
 /***********************************************************************
  | Cerb(tm) developed by Webgroup Media, LLC.
  |-----------------------------------------------------------------------
- | All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
+ | All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
  |   unless specifically noted otherwise.
  |
  | This source code is released under the Devblocks Public License.
  | The latest version of this license can be found here:
- | http://cerberusweb.com/license
+ | http://cerb.io/license
  |
  | By using this software, you acknowledge having read this license
  | and agree to be bound thereby.
  | ______________________________________________________________________
- |	http://www.cerbweb.com	    http://www.webgroupmedia.com/
+ |	http://cerb.io	    http://webgroup.media
  ***********************************************************************/
 
 class ChReportGroupReplies extends Extension_Report {
@@ -36,6 +36,9 @@ class ChReportGroupReplies extends Extension_Report {
 		$years = array();
 		$sql = "SELECT date_format(from_unixtime(created_date),'%Y') as year FROM message WHERE created_date > 0 AND is_outgoing = 1 GROUP BY year having year <= date_format(now(),'%Y') ORDER BY year desc limit 0,10";
 		$rs = $db->ExecuteSlave($sql);
+		
+		if(!($rs instanceof mysqli_result))
+			return false;
 		
 		while($row = mysqli_fetch_assoc($rs)) {
 			$years[] = intval($row['year']);
@@ -185,6 +188,9 @@ class ChReportGroupReplies extends Extension_Report {
 		);
 		
 		$rs = $db->ExecuteSlave($sql);
+		
+		if(!($rs instanceof mysqli_result))
+			return false;
 		
 		$data = array();
 		while($row = mysqli_fetch_assoc($rs)) {

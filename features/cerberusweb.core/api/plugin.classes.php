@@ -2,17 +2,17 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
 | The latest version of this license can be found here:
-| http://cerberusweb.com/license
+| http://cerb.io/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://www.cerbweb.com	    http://www.webgroupmedia.com/
+|	http://cerb.io	    http://webgroup.media
 ***********************************************************************/
 
 class ChPageController extends DevblocksControllerExtension {
@@ -50,8 +50,7 @@ class ChPageController extends DevblocksControllerExtension {
 		if(empty($page)) {
 			switch($controller) {
 				case "portal":
-					header("Status: 404");
-					die(); // 404
+					DevblocksPlatform::dieWithHttpError(null, 404);
 					break;
 					
 				default:
@@ -76,7 +75,7 @@ class ChPageController extends DevblocksControllerExtension {
 					}
 				} else {
 					// if Ajax [TODO] percolate isAjax from platform to handleRequest
-					// die("Access denied.  Session expired?");
+					// DevblocksPlatform::dieWithHttpError("Access denied.  Session expired?", 403);
 				}
 
 				break;
@@ -137,14 +136,13 @@ class ChPageController extends DevblocksControllerExtension {
 		}
 		
 		if(empty($page)) {
-			//header("HTTP/1.1 404 Not Found");
-			//header("Status: 404 Not Found");
-			//DevblocksPlatform::redirect(new DevblocksHttpResponse(''));
 			$tpl->assign('settings', $settings);
 			$tpl->assign('session', $_SESSION);
 			$tpl->assign('translate', $translate);
 			$tpl->assign('visit', $visit);
-			$tpl->display('devblocks:cerberusweb.core::404.tpl');
+			$message = $tpl->fetch('devblocks:cerberusweb.core::404.tpl');
+			
+			DevblocksPlatform::dieWithHttpError($message, 404);
 			return;
 		}
 		
@@ -205,8 +203,6 @@ class ChPageController extends DevblocksControllerExtension {
 		$tpl->display('devblocks:cerberusweb.core::border.tpl');
 		
 		if(!empty($active_worker)) {
-			DAO_Worker::logActivity($page->getActivity());
-			
 			$unread_notifications = DAO_Notification::getUnreadCountByWorker($active_worker->id);
 			$tpl->assign('active_worker_notify_count', $unread_notifications);
 			$tpl->display('devblocks:cerberusweb.core::badge_notifications_script.tpl');
@@ -303,9 +299,7 @@ class VaAction_HttpRequest extends Extension_DevblocksEventAction {
 		if(!empty($params) && is_array($params))
 			$url .= '?' . http_build_query($params);
 		
-		$ch = curl_init($url);
-		
-		curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+		$ch = DevblocksPlatform::curlInit($url);
 		
 		if(isset($options['ignore_ssl_validation']) && $options['ignore_ssl_validation']) {
 			curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
@@ -335,7 +329,9 @@ class VaAction_HttpRequest extends Extension_DevblocksEventAction {
 		if(!empty($headers))
 			curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
 		
-		$out = curl_exec($ch);
+		// [TODO] User-level option to follow redirects
+		
+		$out = DevblocksPlatform::curlExec($ch, true);
 		
 		$info = curl_getinfo($ch);
 		

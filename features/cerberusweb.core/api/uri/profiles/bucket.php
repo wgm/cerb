@@ -7,12 +7,12 @@
 |
 | This source code is released under the Devblocks Public License.
 | The latest version of this license can be found here:
-| http://cerberusweb.com/license
+| http://cerb.io/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://www.cerbweb.com	    http://www.webgroupmedia.com/
+|	http://cerb.io	    http://webgroup.media
 ***********************************************************************/
 
 class PageSection_ProfilesBucket extends Extension_PageSection {
@@ -133,7 +133,7 @@ class PageSection_ProfilesBucket extends Extension_PageSection {
 				throw new Exception_DevblocksAjaxValidationError("The specified bucket record doesn't exist.");
 			
 			// ACL
-			if(!$active_worker->is_superuser && !$active_worker->isGroupManager($bucket->group_id))
+			if($id && !$active_worker->is_superuser && !$active_worker->isGroupManager($bucket->group_id))
 				throw new Exception_DevblocksAjaxValidationError("You do not have permission to delete this bucket.");
 			
 			if($id && !empty($do_delete)) { // Delete

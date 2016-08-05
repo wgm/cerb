@@ -3,9 +3,9 @@
 {if !empty($params)}
 {foreach from=$params item=param key=param_key name=params}
 	{if !$nested && !$readonly}<label><input type="checkbox" name="field_deletes[]" value="{$param_key}"> {/if}
-	{if !$nested && $readonly}<li class="bubble-blue" style="position:relative;">{/if}
+	{if !$nested && $readonly}<li class="bubble-blue" style="position:relative;{if is_array($param)}white-space:normal;{/if}">{/if}
 		
-	{if '*_' == substr($param_key,0,2)}
+	{if '*_' == substr($param->field,0,2)}
 		{$view->renderVirtualCriteria($param)}
 	{elseif is_array($param)}
 		{foreach from=$param item=p name=p}
@@ -14,13 +14,58 @@
 				{if is_array($p)}
 					{include file="devblocks:cerberusweb.core::internal/views/criteria_list_params.tpl" params=$p nested=true}
 				{else}
-					{assign var=field value=$p->field} 
-					{$view_filters.$field->db_label|capitalize} 
-					{$p->operator}
-					<b>{$view->renderCriteriaParam($p)}</b>
+					{if '*_' == substr($p->field,0,2)}
+						{$view->renderVirtualCriteria($p)}
+					{else}
+						{$view_filters.{$p->field}->db_label|capitalize} 
+						{if $p->operator=='='}
+							is 
+							<b>{$view->renderCriteriaParam($p)}</b>
+						{elseif $p->operator=='equals or null'}
+							is 
+							<b>{$view->renderCriteriaParam($p)}</b>
+						{elseif $p->operator=='!='}
+							is not 
+							<b>{$view->renderCriteriaParam($p)}</b>
+						{elseif $p->operator=='like'}
+							is 
+							<b>{$view->renderCriteriaParam($p)}</b>
+						{elseif $p->operator=='not like'}
+							is not 
+							<b>{$view->renderCriteriaParam($p)}</b>
+						{elseif $p->operator=='in'}
+							is 
+							<b>{$view->renderCriteriaParam($p)}</b>
+						{elseif $p->operator=='in or null'}
+							is blank{if !empty($p->value)} or{/if} 
+							<b>{$view->renderCriteriaParam($p)}</b>
+						{elseif $p->operator=='not in'}
+							is not 
+							<b>{$view->renderCriteriaParam($p)}</b>
+						{elseif $p->operator=='not in or null'}
+							is blank{if !empty($p->value)} or not{/if} 
+							<b>{$view->renderCriteriaParam($p)}</b>
+						{elseif $p->operator=='is null'}
+							is <b>null</b>
+						{elseif $p->operator=='is not null'}
+							is <b>not null</b>
+						{elseif $param->operator=='between'}
+							is between 
+							<b>{$view->renderCriteriaParam($p)}</b>
+						{elseif $param->operator=='not between'}
+							is not between 
+							<b>{$view->renderCriteriaParam($p)}</b>
+						{elseif $p->operator=='fulltext'}
+							search 
+							<b>{$view->renderCriteriaParam($p)}</b>
+						{else} 
+							{$p->operator} 
+							<b>{$view->renderCriteriaParam($p)}</b>
+						{/if}
+					{/if}
 				{/if}
 				
-				{if !$smarty.foreach.p.last} <i>{$param.0}</i> {/if}
+				{if !$smarty.foreach.p.last} <tt style="color:black;font-weight:bold;padding:0px 5px;">{$param.0}</tt> {/if}
 			{/if}
 		{/foreach}
 	{else}
@@ -28,31 +73,53 @@
 		{$view_filters.$field->db_label|capitalize}
 		{* [TODO] Add operator labels to platform *}
 		{if $param->operator=='='}
-			is
+			is 
+			<b>{$view->renderCriteriaParam($param)}</b>
+		{elseif $param->operator=='equals or null'}
+			is 
+			<b>{$view->renderCriteriaParam($param)}</b>
 		{elseif $param->operator=='!='}
 			is not 
+			<b>{$view->renderCriteriaParam($param)}</b>
+		{elseif $param->operator=='like'}
+			is 
+			<b>{$view->renderCriteriaParam($param)}</b>
+		{elseif $param->operator=='not like'}
+			is not 
+			<b>{$view->renderCriteriaParam($param)}</b>
 		{elseif $param->operator=='in'}
-			is    
+			is 
+			<b>{$view->renderCriteriaParam($param)}</b>
 		{elseif $param->operator=='in or null'}
-			is blank{if !empty($param->value)} or{/if} 
+			is null{if !empty($param->value)} or{/if} 
+			<b>{$view->renderCriteriaParam($param)}</b>
 		{elseif $param->operator=='not in'}
-			is not
+			is not 
+			<b>{$view->renderCriteriaParam($param)}</b>
 		{elseif $param->operator=='not in or null'}
-			is blank{if !empty($param->value)} or not{/if}  
+			is null{if !empty($param->value)} or not{/if} 
+			<b>{$view->renderCriteriaParam($param)}</b>
 		{elseif $param->operator=='is null'}
-			is {if empty($param->value)}blank{/if}
+			is <b>null</b>
 		{elseif $param->operator=='is not null'}
-			is not {if empty($param->value)}blank{/if}
+			is <b>not null</b>
+		{elseif $param->operator=='between'}
+			is between 
+			<b>{$view->renderCriteriaParam($param)}</b>
+		{elseif $param->operator=='not between'}
+			is not between 
+			<b>{$view->renderCriteriaParam($param)}</b>
 		{elseif $param->operator=='fulltext'}
-			search
+			search 
+			<b>{$view->renderCriteriaParam($param)}</b>
 		{else} 
-			{$param->operator}
+			{$param->operator} 
+			<b>{$view->renderCriteriaParam($param)}</b>
 		{/if}
-		<b>{$view->renderCriteriaParam($param)}</b>
 		
-		{if $nested}{if $smarty.foreach.params.first}({/if}
-			{if !$smarty.foreach.params.first && !$smarty.foreach.params.last}<i>{$params.0}</i>{/if}
-			{if $smarty.foreach.params.last}){/if} 
+		{if $nested}{if $smarty.foreach.params.first}<tt style="color:black;font-weight:bold;padding:0px 2px 0px 0px;">(</tt>{/if}
+			{if !$smarty.foreach.params.first && !$smarty.foreach.params.last}<tt style="color:black;font-weight:bold;padding:0px 5px;">{$params.0}</tt>{/if}
+			{if $smarty.foreach.params.last}<tt style="color:black;font-weight:bold;padding:0px 0px 0px 2px;">)</tt>{/if} 
 		{/if}
 	{/if}
 		

@@ -1,14 +1,14 @@
 {$view_fields = $view->getColumnsAvailable()}
-{assign var=results value=$view->getData()}
-{assign var=total value=$results[1]}
-{assign var=data value=$results[0]}
+{$results = $view->getData()}
+{$total = $results[1]}
+{$data = $results[0]}
 <table cellpadding="0" cellspacing="0" border="0" width="100%" class="worklist">
 	<tr>
 		<td nowrap="nowrap"><span class="title">{$view->name}</span></td>
 		<td nowrap="nowrap" align="right" class="title-toolbar">
 			<a href="javascript:;" title="{'common.search'|devblocks_translate|capitalize}" class="minimal" onclick="genericAjaxPopup('search','c=internal&a=viewShowQuickSearchPopup&view_id={$view->id}',null,false,'400');"><span class="glyphicons glyphicons-search"></span></a>
 			<a href="javascript:;" title="{'common.customize'|devblocks_translate|capitalize}" class="minimal" onclick="genericAjaxGet('customize{$view->id}','c=internal&a=viewCustomize&id={$view->id}');toggleDiv('customize{$view->id}','block');"><span class="glyphicons glyphicons-cogwheel"></span></a>
-			<a href="javascript:;" title="{'common.subtotals'|devblocks_translate|capitalize}" class="subtotals minimal"><span class="glyphicons glyphicons-signal"></span></a>
+			{*<a href="javascript:;" title="{'common.subtotals'|devblocks_translate|capitalize}" class="subtotals minimal"><span class="glyphicons glyphicons-signal"></span></a>*}
 			<a href="javascript:;" title="{'common.refresh'|devblocks_translate|capitalize}" class="minimal" onclick="genericAjaxGet('view{$view->id}','c=internal&a=viewRefresh&id={$view->id}');"><span class="glyphicons glyphicons-refresh"></span></a>
 			<input type="checkbox" class="select-all">
 		</td>
@@ -20,7 +20,9 @@
 <form id="viewForm{$view->id}" name="viewForm{$view->id}" action="#">
 <input type="hidden" name="view_id" value="{$view->id}">
 <input type="hidden" name="c" value="config">
-<input type="hidden" name="a" value="">
+<input type="hidden" name="a" value="handleSectionAction">
+<input type="hidden" name="section" value="sessions">
+<input type="hidden" name="action" value="viewDelete">
 <input type="hidden" name="_csrf_token" value="{$session.csrf_token}">
 
 <table cellpadding="3" cellspacing="0" border="0" width="100%" class="worklistBody">
@@ -51,29 +53,29 @@
 	{foreach from=$data item=result key=idx name=results}
 
 	{if $smarty.foreach.results.iteration % 2}
-		{assign var=tableRowClass value="even"}
+		{$tableRowClass = "even"}
 	{else}
-		{assign var=tableRowClass value="odd"}
+		{$tableRowClass = "odd"}
 	{/if}
 	<tbody style="cursor:pointer;">
 		<tr class="{$tableRowClass}">
-			<td align="center" rowspan="2" nowrap="nowrap" style="padding:5px;"><input type="checkbox" name="row_id[]" value="{$result.d_session_key}" style="display:none;"></td>
-			<td colspan="{$smarty.foreach.headers.total}">
+			<td data-column="*_watchers" align="center" rowspan="2" nowrap="nowrap" style="padding:5px;"><input type="checkbox" name="row_id[]" value="{$result.d_session_key}" style="display:none;"></td>
+			<td data-column="label" colspan="{$smarty.foreach.headers.total}">
 			</td>
 		</tr>
 		<tr class="{$tableRowClass}">
 		{foreach from=$view->view_columns item=column name=columns}
 			{if $column=="d_user_id"}
-			<td>
+			<td data-column="{$column}">
 				{if isset($workers.{$result.$column})}
 				{$worker = $workers.{$result.$column}}
 				{$worker->getName()}
 				{/if}
 			</td>
 			{elseif $column=="d_created" || $column=="d_updated"}
-			<td title="{$result.$column|devblocks_date}">{$result.$column|devblocks_prettytime}&nbsp;</td>
+			<td data-column="{$column}" title="{$result.$column|devblocks_date}">{$result.$column|devblocks_prettytime}&nbsp;</td>
 			{else}
-			<td>{$result.$column}</td>
+			<td data-column="{$column}">{$result.$column}</td>
 			{/if}
 		{/foreach}
 		</tr>
@@ -106,9 +108,7 @@
 	
 	{if $total}
 	<div style="float:left;" id="{$view->id}_actions">
-		{if $active_worker && $active_worker->is_superuser}
-			<button type="button" class="action-always-show action-bulkupdate" onclick="genericAjaxPopup('peek','c=config&a=handleSectionAction&section=sessions&action=showSessionsBulkPanel&view_id={$view->id}&ids=' + Devblocks.getFormEnabledCheckboxValues('viewForm{$view->id}','row_id[]'),null,false,'500');"><span class="glyphicons glyphicons-folder-closed"></span></a> bulk update</button>
-		{/if}
+		<button type="button" class="action-delete"><span class="glyphicons glyphicons-remove"></span> {'common.delete'|devblocks_translate|lower}</button>
 	</div>
 	{/if}
 </div>
@@ -120,35 +120,31 @@
 {include file="devblocks:cerberusweb.core::internal/views/view_common_jquery_ui.tpl"}
 
 <script type="text/javascript">
-$frm = $('#viewForm{$view->id}');
-
-{if $pref_keyboard_shortcuts}
-$frm.bind('keyboard_shortcut',function(event) {
-	//console.log("{$view->id} received " + (indirect ? 'indirect' : 'direct') + " keyboard event for: " + event.keypress_event.which);
+$(function() {
+	var $frm = $('#viewForm{$view->id}');
+	var $view_actions = $('#{$view->id}_actions');
 	
-	$view_actions = $('#{$view->id}_actions');
+	$view_actions.find('.action-delete').click(function() {
+		genericAjaxPost($frm, '', '', function() {
+			genericAjaxGet('view{$view->id}','c=internal&a=viewRefresh&id={$view->id}');
+		});
+	})
 	
-	hotkey_activated = true;
-
-	switch(event.keypress_event.which) {
-		case 98: // (b) bulk update
-			$btn = $view_actions.find('button.action-bulkupdate');
+	{if $pref_keyboard_shortcuts}
+	$frm.bind('keyboard_shortcut',function(event) {
+		//console.log("{$view->id} received " + (indirect ? 'indirect' : 'direct') + " keyboard event for: " + event.keypress_event.which);
 		
-			if(event.indirect) {
-				$btn.select().focus();
-				
-			} else {
-				$btn.click();
-			}
-			break;
-		
-		default:
-			hotkey_activated = false;
-			break;
-	}
-
-	if(hotkey_activated)
-		event.preventDefault();
+		var hotkey_activated = true;
+	
+		switch(event.keypress_event.which) {
+			default:
+				hotkey_activated = false;
+				break;
+		}
+	
+		if(hotkey_activated)
+			event.preventDefault();
+	});
+	{/if}
 });
-{/if}
 </script>

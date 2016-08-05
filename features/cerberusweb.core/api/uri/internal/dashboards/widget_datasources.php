@@ -96,12 +96,6 @@ class WorkspaceWidgetDatasource_Worklist extends Extension_WorkspaceWidgetDataso
 		@$metric_func = $params['metric_func'];
 		@$metric_field = $fields[$params['metric_field']];
 
-		// If we're subtotalling on a custom field, make sure it's joined
-		
-		if(!$view->hasParam($metric_field->token, $view->getParams())) {
-			$view->addParam(new DevblocksSearchCriteria($metric_field->token, DevblocksSearchCriteria::OPER_TRUE), $metric_field->token);
-		}
-
 		// Build the query
 		
 		$query_parts = $dao_class::getSearchQueryComponents(
@@ -594,12 +588,10 @@ class WorkspaceWidgetDatasource_URL extends Extension_WorkspaceWidgetDatasource 
 		$cache_key = sprintf("widget%d_datasource", $widget->id);
 		
 		if(true || null === ($data = $cache->load($cache_key))) {
-			$ch = curl_init($url);
+			$ch = DevblocksPlatform::curlInit($url);
 			curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
 			curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-			curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-			curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-			$raw_data = curl_exec($ch);
+			$raw_data = DevblocksPlatform::curlExec($ch);
 			$info = curl_getinfo($ch);
 			
 			//@$status = $info['http_code'];
@@ -612,7 +604,7 @@ class WorkspaceWidgetDatasource_URL extends Extension_WorkspaceWidgetDatasource 
 			
 			DAO_WorkspaceWidget::update($widget->id, array(
 				DAO_WorkspaceWidget::UPDATED_AT => time(),
-			));
+			), DevblocksORMHelper::OPT_UPDATE_NO_READ_AFTER_WRITE);
 			
 			$cache->save($data, $cache_key, array(), $cache_mins*60);
 		}

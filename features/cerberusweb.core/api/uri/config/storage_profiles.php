@@ -2,21 +2,24 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
 | The latest version of this license can be found here:
-| http://cerberusweb.com/license
+| http://cerb.io/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://www.cerbweb.com	    http://www.webgroupmedia.com/
+|	http://cerb.io	    http://webgroup.media
 ***********************************************************************/
 
 class PageSection_SetupStorageProfiles extends Extension_PageSection {
 	function render() {
+		if(DEVBLOCKS_STORAGE_ENGINE_PREVENT_CHANGE)
+			return;
+		
 		$tpl = DevblocksPlatform::getTemplateService();
 		$visit = CerberusApplication::getVisit();
 		
@@ -32,6 +35,9 @@ class PageSection_SetupStorageProfiles extends Extension_PageSection {
 	}
 	
 	function showStorageProfilePeekAction() {
+		if(DEVBLOCKS_STORAGE_ENGINE_PREVENT_CHANGE)
+			return;
+		
 		@$id = DevblocksPlatform::importGPC($_REQUEST['id'],'integer',0);
 		@$view_id = DevblocksPlatform::importGPC($_REQUEST['view_id'],'string','');
 		
@@ -74,6 +80,9 @@ class PageSection_SetupStorageProfiles extends Extension_PageSection {
 	}
 	
 	function showStorageProfileConfigAction() {
+		if(DEVBLOCKS_STORAGE_ENGINE_PREVENT_CHANGE)
+			return;
+		
 		@$ext_id = DevblocksPlatform::importGPC($_REQUEST['ext_id'],'string','');
 		@$id = DevblocksPlatform::importGPC($_REQUEST['id'],'integer',0);
 		
@@ -118,6 +127,9 @@ class PageSection_SetupStorageProfiles extends Extension_PageSection {
 	}
 	
 	function saveStorageProfilePeekAction() {
+		if(DEVBLOCKS_STORAGE_ENGINE_PREVENT_CHANGE)
+			return;
+		
 		$translate = DevblocksPlatform::getTranslationService();
 		$active_worker = CerberusApplication::getActiveWorker();
 

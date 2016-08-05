@@ -2,29 +2,29 @@
 /***********************************************************************
  | Cerb(tm) developed by Webgroup Media, LLC.
  |-----------------------------------------------------------------------
- | All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
+ | All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
  |   unless specifically noted otherwise.
  |
  | This source code is released under the Devblocks Public License.
  | The latest version of this license can be found here:
- | http://cerberusweb.com/license
+ | http://cerb.io/license
  |
  | By using this software, you acknowledge having read this license
  | and agree to be bound thereby.
  | ______________________________________________________________________
- |	http://www.cerbweb.com	    http://www.webgroupmedia.com/
+ |	http://cerb.io	    http://webgroup.media
  ***********************************************************************/
 /*
- * IMPORTANT LICENSING NOTE from your friends on the Cerb Development Team
+ * IMPORTANT LICENSING NOTE from your friends at Cerb
  *
- * Sure, it would be so easy to just cheat and edit this file to use the
- * software without paying for it.  But we trust you anyway.  In fact, we're
- * writing this software for you!
+ * Sure, it would be really easy to just cheat and edit this file to use
+ * Cerb without paying for a license.  We trust you anyway.
  *
- * Quality software backed by a dedicated team takes money to develop.  We
- * don't want to be out of the office bagging groceries when you call up
- * needing a helping hand.  We'd rather spend our free time coding your
- * feature requests than mowing the neighbors' lawns for rent money.
+ * It takes a significant amount of time and money to develop, maintain,
+ * and support high-quality enterprise software with a dedicated team.
+ * For Cerb's entire history we've avoided taking money from outside
+ * investors, and instead we've relied on actual sales from satisfied
+ * customers to keep the project running.
  *
  * We've never believed in hiding our source code out of paranoia over not
  * getting paid.  We want you to have the full source code and be able to
@@ -32,20 +32,413 @@
  * having less of everything than you might need (time, people, money,
  * energy).  We shouldn't be your bottleneck.
  *
- * We've been building our expertise with this project since January 2002.  We
- * promise spending a couple bucks [Euro, Yuan, Rupees, Galactic Credits] to
- * let us take over your shared e-mail headache is a worthwhile investment.
- * It will give you a sense of control over your inbox that you probably
- * haven't had since spammers found you in a game of 'E-mail Battleship'.
- * Miss. Miss. You sunk my inbox!
+ * As a legitimate license owner, your feedback will help steer the project.
+ * We'll also prioritize your issues, and work closely with you to make sure
+ * your teams' needs are being met.
  *
- * A legitimate license entitles you to support from the developers,
- * and the warm fuzzy feeling of feeding a couple of obsessed developers
- * who want to help you get more done.
- *
- \* - Jeff Standen, Darren Sugita, Dan Hildebrandt
- *	 Webgroup Media LLC - Developers of Cerb
+ * - Jeff Standen and Dan Hildebrandt
+ *	 Founders at Webgroup Media LLC; Developers of Cerb
  */
+
+class DAO_DevblocksTemplate extends DevblocksORMHelper {
+	const ID = 'id';
+	const PLUGIN_ID = 'plugin_id';
+	const PATH = 'path';
+	const TAG = 'tag';
+	const LAST_UPDATED = 'last_updated';
+	const CONTENT = 'content';
+
+	static function create($fields) {
+		$db = DevblocksPlatform::getDatabaseService();
+		
+		$sql = sprintf("INSERT INTO devblocks_template () ".
+			"VALUES ()"
+		);
+		$db->ExecuteMaster($sql);
+		$id = $db->LastInsertId();
+		
+		self::update($id, $fields);
+		
+		return $id;
+	}
+	
+	static function update($ids, $fields) {
+		parent::_update($ids, 'devblocks_template', $fields);
+	}
+	
+	static function updateWhere($fields, $where) {
+		parent::_updateWhere('devblocks_template', $fields, $where);
+	}
+	
+	/**
+	 * @param Model_ContextBulkUpdate $update
+	 * @return boolean
+	 */
+	static function bulkUpdate(Model_ContextBulkUpdate $update) {
+		$do = $update->actions;
+		$ids = $update->context_ids;
+
+		// Make sure we have actions
+		if(empty($ids) || empty($do))
+			return false;
+		
+		$update->markInProgress();
+		
+		$change_fields = array();
+		$custom_fields = array();
+		$deleted = false;
+
+		if(is_array($do))
+		foreach($do as $k => $v) {
+			switch($k) {
+				case 'deleted':
+					$deleted = true;
+					break;
+				default:
+					// Custom fields
+					if(substr($k,0,3)=="cf_") {
+						$custom_fields[substr($k,3)] = $v;
+					}
+					break;
+			}
+		}
+
+		if(!$deleted)
+			if(!empty($change_fields))
+				DAO_DevblocksTemplate::update($ids, $change_fields);
+		else
+			DAO_DevblocksTemplate::delete($ids);
+			
+		$update->markCompleted();
+		return true;
+	}
+	
+	/**
+	 * @param string $where
+	 * @return Model_DevblocksTemplate[]
+	 */
+	static function getWhere($where=null) {
+		$db = DevblocksPlatform::getDatabaseService();
+		
+		$sql = "SELECT id, plugin_id, path, tag, last_updated, content ".
+			"FROM devblocks_template ".
+			(!empty($where) ? sprintf("WHERE %s ",$where) : "").
+			"ORDER BY id asc";
+		$rs = $db->ExecuteSlave($sql);
+		
+		return self::_getObjectsFromResult($rs);
+	}
+
+	/**
+	 * @param integer $id
+	 * @return Model_DevblocksTemplate	 */
+	static function get($id) {
+		if(empty($id))
+			return null;
+		
+		$objects = self::getWhere(sprintf("%s = %d",
+			self::ID,
+			$id
+		));
+		
+		if(isset($objects[$id]))
+			return $objects[$id];
+		
+		return null;
+	}
+	
+	/**
+	 * 
+	 * @param array $ids
+	 * @return Model_DevblocksTemplate
+	 */
+	static function getIds($ids) {
+		if(!is_array($ids))
+			return false;
+		
+		$ids = DevblocksPlatform::sanitizeArray($ids, 'int');
+		
+		if(empty($ids))
+			return array();
+		
+		$objects = self::getWhere(sprintf("id IN (%s)",
+			implode(',', $ids)
+		));
+		
+		return $objects;
+	}
+	
+	/**
+	 * @param resource $rs
+	 * @return Model_DevblocksTemplate[]
+	 */
+	static private function _getObjectsFromResult($rs) {
+		$objects = array();
+		
+		if(!($rs instanceof mysqli_result))
+			return false;
+		
+		while($row = mysqli_fetch_assoc($rs)) {
+			$object = new Model_DevblocksTemplate();
+			$object->id = $row['id'];
+			$object->plugin_id = $row['plugin_id'];
+			$object->path = $row['path'];
+			$object->tag = $row['tag'];
+			$object->last_updated = $row['last_updated'];
+			$object->content = $row['content'];
+			$objects[$object->id] = $object;
+		}
+		
+		return $objects;
+	}
+	
+	static function delete($ids) {
+		if(!is_array($ids))
+			$ids = array($ids);
+		
+		$db = DevblocksPlatform::getDatabaseService();
+		$tpl = DevblocksPlatform::getTemplateService();
+		
+		if(empty($ids))
+			return;
+		
+		// Load the template models before deleting them
+		$templates = DAO_DevblocksTemplate::getIds($ids);
+
+		// Delete from database
+		$ids_list = implode(',', $ids);
+		$db->ExecuteMaster(sprintf("DELETE FROM devblocks_template WHERE id IN (%s)", $ids_list));
+		
+		// Clear templates_c compile cache with the models
+		foreach($templates as $template) { /* @var $template Model_DevblocksTemplate */
+			$tpl->clearCompiledTemplate(sprintf("devblocks:%s:%s:%s", $template->plugin_id, $template->tag, $template->path));
+		}
+		
+		return true;
+	}
+	
+	public static function getSearchQueryComponents($columns, $params, $sortBy=null, $sortAsc=null) {
+		$fields = SearchFields_DevblocksTemplate::getFields();
+		
+		list($tables,$wheres) = parent::_parseSearchParams($params, $columns, 'SearchFields_DevblocksTemplate', $sortBy);
+		
+		$select_sql = sprintf("SELECT ".
+			"devblocks_template.id as %s, ".
+			"devblocks_template.plugin_id as %s, ".
+			"devblocks_template.path as %s, ".
+			"devblocks_template.tag as %s, ".
+			"devblocks_template.last_updated as %s ",
+//			"devblocks_template.content as %s ",
+				SearchFields_DevblocksTemplate::ID,
+				SearchFields_DevblocksTemplate::PLUGIN_ID,
+				SearchFields_DevblocksTemplate::PATH,
+				SearchFields_DevblocksTemplate::TAG,
+				SearchFields_DevblocksTemplate::LAST_UPDATED
+//				SearchFields_DevblocksTemplate::CONTENT
+			);
+			
+		$join_sql = "FROM devblocks_template ";
+		
+		$where_sql = "".
+			(!empty($wheres) ? sprintf("WHERE %s ",implode(' AND ',$wheres)) : "WHERE 1 ");
+			
+		$sort_sql = self::_buildSortClause($sortBy, $sortAsc, $fields, $select_sql, 'SearchFields_DevblocksTemplate');
+		
+		$result = array(
+			'primary_table' => 'devblocks_template',
+			'select' => $select_sql,
+			'join' => $join_sql,
+			'where' => $where_sql,
+			'has_multiple_values' => false,
+			'sort' => $sort_sql,
+		);
+		
+		return $result;
+	}
+	
+	/**
+	 * Enter description here...
+	 *
+	 * @param array $columns
+	 * @param DevblocksSearchCriteria[] $params
+	 * @param integer $limit
+	 * @param integer $page
+	 * @param string $sortBy
+	 * @param boolean $sortAsc
+	 * @param boolean $withCounts
+	 * @return array
+	 */
+	static function search($columns, $params, $limit=10, $page=0, $sortBy=null, $sortAsc=null, $withCounts=true) {
+		$db = DevblocksPlatform::getDatabaseService();
+		
+		// Build search queries
+		$query_parts = self::getSearchQueryComponents($columns,$params,$sortBy,$sortAsc);
+
+		$select_sql = $query_parts['select'];
+		$join_sql = $query_parts['join'];
+		$where_sql = $query_parts['where'];
+		$has_multiple_values = $query_parts['has_multiple_values'];
+		$sort_sql = $query_parts['sort'];
+		
+		$sql =
+			$select_sql.
+			$join_sql.
+			$where_sql.
+			($has_multiple_values ? 'GROUP BY devblocks_template.id ' : '').
+			$sort_sql;
+			
+		if($limit > 0) {
+			if(false == ($rs = $db->SelectLimit($sql,$limit,$page*$limit)))
+				return false;
+		} else {
+			if(false == ($rs = $db->ExecuteSlave($sql)))
+				return false;
+			$total = mysqli_num_rows($rs);
+		}
+		
+		$results = array();
+		
+		if(!($rs instanceof mysqli_result))
+			return false;
+		
+		while($row = mysqli_fetch_assoc($rs)) {
+			$object_id = intval($row[SearchFields_DevblocksTemplate::ID]);
+			$results[$object_id] = $row;
+		}
+
+		$total = count($results);
+		
+		if($withCounts) {
+			// We can skip counting if we have a less-than-full single page
+			if(!(0 == $page && $total < $limit)) {
+				$count_sql =
+					($has_multiple_values ? "SELECT COUNT(DISTINCT devblocks_template.id) " : "SELECT COUNT(devblocks_template.id) ").
+					$join_sql.
+					$where_sql;
+				$total = $db->GetOneSlave($count_sql);
+			}
+		}
+		
+		return array($results,$total);
+	}
+	
+	static function importXmlFile($filename, $tag) {
+		$db = DevblocksPlatform::getDatabaseService();
+		$tpl = DevblocksPlatform::getTemplateService();
+
+		if(!file_exists($filename) && empty($tag))
+			return;
+		
+		if(false == (@$xml = simplexml_load_file($filename))) /* @var $xml SimpleXMLElement */
+			return;
+
+		// Loop through all the template elements and insert/update for this tag
+		foreach($xml->templates->template as $eTemplate) { /* @var $eTemplate SimpleXMLElement */
+			$plugin_id = (string) $eTemplate['plugin_id'];
+			$path = (string) $eTemplate['path'];
+			$content = (string) $eTemplate[0];
+
+			// Pull the template if it exists already
+			@$template = array_shift(self::getWhere(sprintf("%s = %s AND %s = %s AND %s = %s",
+				self::PLUGIN_ID,
+				$db->qstr($plugin_id),
+				self::PATH,
+				$db->qstr($path),
+				self::TAG,
+				$db->qstr($tag)
+			)));
+
+			// Common fields
+			$fields = array(
+				self::CONTENT => $content,
+				self::LAST_UPDATED => time(),
+			);
+			
+			// Create or update
+			if(empty($template)) { // new
+				$fields[self::PLUGIN_ID] = $plugin_id;
+				$fields[self::PATH] = $path;
+				$fields[self::TAG] = $tag;
+				self::create($fields);
+				
+			} else { // update
+				self::update($template->id, $fields);
+				
+			}
+			
+			$tpl->clearCompiledTemplate(sprintf("devblocks:%s:%s:%s", $plugin_id, $tag, $path));
+		}
+		
+		unset($xml);
+	}
+};
+
+class Model_DevblocksTemplate {
+	public $id;
+	public $plugin_id;
+	public $path;
+	public $tag;
+	public $last_updated;
+	public $content;
+};
+
+class SearchFields_DevblocksTemplate extends DevblocksSearchFields {
+	const ID = 'd_id';
+	const PLUGIN_ID = 'd_plugin_id';
+	const PATH = 'd_path';
+	const TAG = 'd_tag';
+	const LAST_UPDATED = 'd_last_updated';
+	
+	static private $_fields = null;
+	
+	static function getPrimaryKey() {
+		return 'devblocks_template.id';
+	}
+	
+	static function getCustomFieldContextKeys() {
+		return array(
+			'' => new DevblocksSearchFieldContextKeys('devblocks_template.id', self::ID),
+		);
+	}
+	
+	static function getWhereSQL(DevblocksSearchCriteria $param) {
+		if('cf_' == substr($param->field, 0, 3)) {
+			return self::_getWhereSQLFromCustomFields($param);
+		} else {
+			return $param->getWhereSQL(self::getFields(), self::getPrimaryKey());
+		}
+	}
+	
+	/**
+	 * @return DevblocksSearchField[]
+	 */
+	static function getFields() {
+		if(is_null(self::$_fields))
+			self::$_fields = self::_getFields();
+		
+		return self::$_fields;
+	}
+	
+	/**
+	 * @return DevblocksSearchField[]
+	 */
+	static function _getFields() {
+		$translate = DevblocksPlatform::getTranslationService();
+		
+		$columns = array(
+			self::ID => new DevblocksSearchField(self::ID, 'devblocks_template', 'id', $translate->_('common.id'), null, true),
+			self::PLUGIN_ID => new DevblocksSearchField(self::PLUGIN_ID, 'devblocks_template', 'plugin_id', $translate->_('Plugin'), null, true),
+			self::PATH => new DevblocksSearchField(self::PATH, 'devblocks_template', 'path', $translate->_('path'), null, true),
+			self::TAG => new DevblocksSearchField(self::TAG, 'devblocks_template', 'tag', $translate->_('tag'), null, true),
+			self::LAST_UPDATED => new DevblocksSearchField(self::LAST_UPDATED, 'devblocks_template', 'last_updated', $translate->_('common.updated'), null, true),
+		);
+		
+		// Sort by label (translation-conscious)
+		DevblocksPlatform::sortObjects($columns, 'db_label');
+
+		return $columns;
+	}
+};
 
 if(class_exists('C4_AbstractView')):
 class View_DevblocksTemplate extends C4_AbstractView implements IAbstractView_QuickSearch {
@@ -68,7 +461,7 @@ class View_DevblocksTemplate extends C4_AbstractView implements IAbstractView_Qu
 	}
 
 	function getData() {
-		return DAO_DevblocksTemplate::search(
+		$objects = DAO_DevblocksTemplate::search(
 			$this->view_columns,
 			$this->getParams(),
 			$this->renderLimit,
@@ -77,13 +470,17 @@ class View_DevblocksTemplate extends C4_AbstractView implements IAbstractView_Qu
 			$this->renderSortAsc,
 			$this->renderTotal
 		);
+		
+		$this->_lazyLoadCustomFieldsIntoObjects($objects, 'SearchFields_DevblocksTemplate');
+		
+		return $objects;
 	}
 	
 	function getQuickSearchFields() {
 		$search_fields = SearchFields_DevblocksTemplate::getFields();
 		
 		$fields = array(
-			'_fulltext' => 
+			'text' => 
 				array(
 					'type' => DevblocksSearchCriteria::TYPE_TEXT,
 					'options' => array('param_key' => SearchFields_DevblocksTemplate::PATH, 'match' => DevblocksSearchCriteria::OPTION_TEXT_PARTIAL),
@@ -114,65 +511,19 @@ class View_DevblocksTemplate extends C4_AbstractView implements IAbstractView_Qu
 		ksort($fields);
 		
 		return $fields;
-	}	
+	}
 	
-	function getParamsFromQuickSearchFields($fields) {
-		$params = array();
-
-		if(is_array($fields))
-		foreach($fields as $k => $v) {
-			
-			switch($k) {
-				// Texts (fuzzy)
-				
-				case '_fulltext':
-				case 'path':
-				case 'plugin':
-				case 'tag':
-					$field_keys = array(
-						'_fulltext' => SearchFields_DevblocksTemplate::PATH,
-						'path' => SearchFields_DevblocksTemplate::PATH,
-						'plugin' => SearchFields_DevblocksTemplate::PLUGIN_ID,
-						'tag' => SearchFields_DevblocksTemplate::TAG,
-					);
-					
-					@$field_key = $field_keys[$k];
-					
-					if($field_key && false != ($param = DevblocksSearchCriteria::getTextParamFromQuery($field_key, $v, DevblocksSearchCriteria::OPTION_TEXT_PARTIAL)))
-						$params[$field_key] = $param;
-					break;
-					
-				// Dates
-				
-				case 'updated':
-					$field_keys = array(
-						'updated' => SearchFields_DevblocksTemplate::LAST_UPDATED,
-					);
-					
-					@$field_key = $field_keys[$k];
-					
-					if($field_key && false != ($param = DevblocksSearchCriteria::getDateParamFromQuery($field_key, $v)))
-						$params[$field_key] = $param;
-					break;
-					
-				// Numbers
-				
-				case 'id':
-					$field_keys = array(
-						'id' => SearchFields_DevblocksTemplate::ID,
-					);
-					
-					@$field_key = $field_keys[$k];
-					
-					if($field_key && false != ($param = DevblocksSearchCriteria::getNumberParamFromQuery($field_key, $v)))
-						$params[$field_key] = $param;
-					break;
-			}
+	function getParamFromQuickSearchFieldTokens($field, $tokens) {
+		switch($field) {
+			default:
+				$search_fields = $this->getQuickSearchFields();
+				return DevblocksSearchCriteria::getParamFromQueryFieldTokens($field, $tokens, $search_fields);
+				break;
 		}
 		
-		return $params;
+		return false;
 	}
-
+	
 	function render() {
 		$this->_sanitize();
 		
@@ -246,79 +597,6 @@ class View_DevblocksTemplate extends C4_AbstractView implements IAbstractView_Qu
 			$this->addParam($criteria);
 			$this->renderPage = 0;
 		}
-	}
-
-	function doBulkUpdate($filter, $do, $ids=array()) {
-		@set_time_limit(600); // 10m
-		
-		$change_fields = array();
-		$deleted = false;
-		$custom_fields = array();
-
-		if(empty($do))
-			return;
-
-		// Make sure we have checked items if we want a checked list
-		if(0 == strcasecmp($filter,"checks") && empty($ids))
-			return;
-
-		if(is_array($do))
-		foreach($do as $k => $v) {
-			switch($k) {
-				case 'deleted':
-					$deleted = true;
-					break;
-				default:
-					// Custom fields
-					if(substr($k,0,3)=="cf_") {
-						$custom_fields[substr($k,3)] = $v;
-					}
-					break;
-
-			}
-		}
-
-		$pg = 0;
-
-		if(empty($ids))
-		do {
-			list($objects,$null) = DAO_DevblocksTemplate::search(
-				array(),
-				$this->getParams(),
-				100,
-				$pg++,
-				DAO_DevblocksTemplate::ID,
-				true,
-				false
-			);
-			 
-			$ids = array_merge($ids, array_keys($objects));
-			 
-		} while(!empty($objects));
-
-		$batch_total = count($ids);
-		for($x=0;$x<=$batch_total;$x+=100) {
-			$batch_ids = array_slice($ids,$x,100);
-			
-			if(!$deleted)
-				DAO_DevblocksTemplate::update($batch_ids, $change_fields);
-			else
-				DAO_DevblocksTemplate::delete($batch_ids);
-			
-			// Custom Fields
-//			self::_doBulkSetCustomFields(CerberusContexts::CONTEXT_WORKER, $custom_fields, $batch_ids);
-			
-			unset($batch_ids);
-		}
-		
-		if($deleted) {
-			// Clear compiled templates
-			$tpl = DevblocksPlatform::getTemplateService();
-			$tpl->clearCompiledTemplate();
-			$tpl->clearAllCache();
-		}
-
-		unset($ids);
 	}
 };
 endif;

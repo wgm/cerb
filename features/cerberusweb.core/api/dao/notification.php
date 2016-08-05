@@ -2,17 +2,17 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Cerberus Public License.
 | The latest version of this license can be found here:
-| http://cerberusweb.com/license
+| http://cerb.io/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://www.cerbweb.com	    http://www.webgroupmedia.com/
+|	http://cerb.io	    http://webgroup.media
 ***********************************************************************/
 
 class DAO_Notification extends Cerb_ORMHelper {
@@ -91,6 +91,55 @@ class DAO_Notification extends Cerb_ORMHelper {
 	
 	static function updateWhere($fields, $where) {
 		parent::_updateWhere('notification', $fields, $where);
+	}
+	
+	/**
+	 * @param Model_ContextBulkUpdate $update
+	 * @return boolean
+	 */
+	static function bulkUpdate(Model_ContextBulkUpdate $update) {
+		$tpl_builder = DevblocksPlatform::getTemplateBuilder();
+
+		$do = $update->actions;
+		$ids = $update->context_ids;
+
+		// Make sure we have actions
+		if(empty($ids) || empty($do))
+			return false;
+		
+		$update->markInProgress();
+		
+		$change_fields = array();
+		$custom_fields = array();
+
+		if(is_array($do))
+		foreach($do as $k => $v) {
+			switch($k) {
+				case 'is_read':
+					$change_fields[DAO_Notification::IS_READ] = (1==intval($v)) ? 1 : 0;
+					break;
+					
+				default:
+					// Custom fields
+					if(substr($k,0,3)=="cf_") {
+						$custom_fields[substr($k,3)] = $v;
+					}
+			}
+		}
+		
+		if(!empty($change_fields))
+			DAO_Notification::update($ids, $change_fields);
+		
+		// Custom Fields
+		if(!empty($custom_fields))
+			C4_AbstractView::_doBulkSetCustomFields(CerberusContexts::CONTEXT_NOTIFICATION, $custom_fields, $ids);
+		
+		if(isset($change_fields[DAO_Notification::IS_READ]))
+			if(null != ($active_worker = CerberusApplication::getActiveWorker()))
+				DAO_Notification::clearCountCache($active_worker->id);
+		
+		$update->markCompleted();
+		return true;
 	}
 	
 	/**
@@ -222,7 +271,9 @@ class DAO_Notification extends Cerb_ORMHelper {
 				$worker_id
 			);
 			
-			$count = intval($db->GetOneSlave($sql));
+			if(false === ($count = intval($db->GetOneSlave($sql))))
+				return false;
+			
 			$cache->save($count, self::CACHE_COUNT_PREFIX.$worker_id);
 		}
 		
@@ -235,23 +286,24 @@ class DAO_Notification extends Cerb_ORMHelper {
 	 */
 	static private function _getObjectsFromResult($rs) {
 		$objects = array();
+		
+		if(!($rs instanceof mysqli_result))
+			return false;
 
-		if($rs instanceof mysqli_result) {
-			while($row = mysqli_fetch_assoc($rs)) {
-				$object = new Model_Notification();
-				$object->id = intval($row['id']);
-				$object->context = $row['context'];
-				$object->context_id = intval($row['context_id']);
-				$object->created_date = intval($row['created_date']);
-				$object->worker_id = intval($row['worker_id']);
-				$object->is_read = intval($row['is_read']);
-				$object->activity_point = $row['activity_point'];
-				$object->entry_json = $row['entry_json'];
-				$objects[$object->id] = $object;
-			}
-			
-			mysqli_free_result($rs);
+		while($row = mysqli_fetch_assoc($rs)) {
+			$object = new Model_Notification();
+			$object->id = intval($row['id']);
+			$object->context = $row['context'];
+			$object->context_id = intval($row['context_id']);
+			$object->created_date = intval($row['created_date']);
+			$object->worker_id = intval($row['worker_id']);
+			$object->is_read = intval($row['is_read']);
+			$object->activity_point = $row['activity_point'];
+			$object->entry_json = $row['entry_json'];
+			$objects[$object->id] = $object;
 		}
+		
+		mysqli_free_result($rs);
 		
 		return $objects;
 	}
@@ -411,7 +463,7 @@ class DAO_Notification extends Cerb_ORMHelper {
 	public static function getSearchQueryComponents($columns, $params, $sortBy=null, $sortAsc=null) {
 		$fields = SearchFields_Notification::getFields();
 		
-		list($tables,$wheres) = parent::_parseSearchParams($params, array(),$fields,$sortBy);
+		list($tables,$wheres) = parent::_parseSearchParams($params, array(), 'SearchFields_Notification', $sortBy);
 		
 		$select_sql = sprintf("SELECT ".
 			"we.id as %s, ".
@@ -437,7 +489,7 @@ class DAO_Notification extends Cerb_ORMHelper {
 		$where_sql = "".
 			(!empty($wheres) ? sprintf("WHERE %s ",implode(' AND ',$wheres)) : "WHERE 1 ");
 		
-		$sort_sql = self::_buildSortClause($sortBy, $sortAsc, $fields);
+		$sort_sql = self::_buildSortClause($sortBy, $sortAsc, $fields, $select_sql, 'SearchFields_Notification');
 
 		$result = array(
 			'primary_table' => 'we',
@@ -483,13 +535,18 @@ class DAO_Notification extends Cerb_ORMHelper {
 		
 		// [TODO] Could push the select logic down a level too
 		if($limit > 0) {
-			$rs = $db->SelectLimit($sql,$limit,$page*$limit) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
+			if(false == ($rs = $db->SelectLimit($sql,$limit,$page*$limit)))
+				return false;
 		} else {
-			$rs = $db->ExecuteSlave($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
+			if(false == ($rs = $db->ExecuteSlave($sql)))
+				return false;
 			$total = mysqli_num_rows($rs);
 		}
 		
 		$results = array();
+		
+		if(!($rs instanceof mysqli_result))
+			return false;
 		
 		while($row = mysqli_fetch_assoc($rs)) {
 			$object_id = intval($row[SearchFields_Notification::ID]);
@@ -516,7 +573,7 @@ class DAO_Notification extends Cerb_ORMHelper {
 	
 };
 
-class SearchFields_Notification implements IDevblocksSearchFields {
+class SearchFields_Notification extends DevblocksSearchFields {
 	// Worker Event
 	const ID = 'we_id';
 	const CONTEXT = 'we_context';
@@ -527,10 +584,41 @@ class SearchFields_Notification implements IDevblocksSearchFields {
 	const ACTIVITY_POINT = 'we_activity_point';
 	const ENTRY_JSON = 'we_entry_json';
 	
+	static private $_fields = null;
+	
+	static function getPrimaryKey() {
+		return 'we.id';
+	}
+	
+	static function getCustomFieldContextKeys() {
+		return array(
+			CerberusContexts::CONTEXT_NOTIFICATION => new DevblocksSearchFieldContextKeys('we.id', self::ID),
+			CerberusContexts::CONTEXT_WORKER => new DevblocksSearchFieldContextKeys('we.worker_id', self::WORKER_ID),
+		);
+	}
+	
+	static function getWhereSQL(DevblocksSearchCriteria $param) {
+		if('cf_' == substr($param->field, 0, 3)) {
+			return self::_getWhereSQLFromCustomFields($param);
+		} else {
+			return $param->getWhereSQL(self::getFields(), self::getPrimaryKey());
+		}
+	}
+	
 	/**
 	 * @return DevblocksSearchField[]
 	 */
 	static function getFields() {
+		if(is_null(self::$_fields))
+			self::$_fields = self::_getFields();
+		
+		return self::$_fields;
+	}
+	
+	/**
+	 * @return DevblocksSearchField[]
+	 */
+	static function _getFields() {
 		$translate = DevblocksPlatform::getTranslationService();
 		
 		$columns = array(
@@ -636,6 +724,9 @@ class View_Notification extends C4_AbstractView implements IAbstractView_Subtota
 			$this->renderSortAsc,
 			$this->renderTotal
 		);
+		
+		$this->_lazyLoadCustomFieldsIntoObjects($objects, 'SearchFields_Notification');
+		
 		return $objects;
 	}
 
@@ -660,6 +751,7 @@ class View_Notification extends C4_AbstractView implements IAbstractView_Subtota
 				// DAO
 				case SearchFields_Notification::ACTIVITY_POINT:
 				case SearchFields_Notification::IS_READ:
+				case SearchFields_Notification::WORKER_ID:
 					$pass = true;
 					break;
 					
@@ -680,6 +772,7 @@ class View_Notification extends C4_AbstractView implements IAbstractView_Subtota
 	function getSubtotalCounts($column) {
 		$counts = array();
 		$fields = $this->getFields();
+		$context = CerberusContexts::CONTEXT_NOTIFICATION;
 
 		if(!isset($fields[$column]))
 			return array();
@@ -697,17 +790,25 @@ class View_Notification extends C4_AbstractView implements IAbstractView_Subtota
 						$label_map[$k] = $translate->_($string_id);
 					}
 				}
-				$counts = $this->_getSubtotalCountForStringColumn('DAO_Notification', $column, $label_map, 'in', 'options[]');
+				$counts = $this->_getSubtotalCountForStringColumn($context, $column, $label_map, 'in', 'options[]');
 				break;
 				
 			case SearchFields_Notification::IS_READ:
-				$counts = $this->_getSubtotalCountForBooleanColumn('DAO_Notification', $column);
+				$counts = $this->_getSubtotalCountForBooleanColumn($context, $column);
+				break;
+				
+			case SearchFields_Notification::WORKER_ID:
+				$workers = DAO_Worker::getAll();
+				$label_map = array();
+				foreach($workers as $worker_id => $worker)
+					$label_map[$worker_id] = $worker->getName();
+				$counts = $this->_getSubtotalCountForNumberColumn($context, $column, $label_map, 'in', 'worker_id[]');
 				break;
 			
 			default:
 				// Custom fields
 				if('cf_' == substr($column,0,3)) {
-					$counts = $this->_getSubtotalCountForCustomColumn('DAO_Notification', $column, 'n.id');
+					$counts = $this->_getSubtotalCountForCustomColumn($context, $column);
 				}
 				
 				break;
@@ -720,7 +821,7 @@ class View_Notification extends C4_AbstractView implements IAbstractView_Subtota
 		$search_fields = SearchFields_Notification::getFields();
 		
 		$fields = array(
-			'_fulltext' => 
+			'text' => 
 				array(
 					'type' => DevblocksSearchCriteria::TYPE_TEXT,
 					'options' => array('param_key' => SearchFields_Notification::ACTIVITY_POINT, 'match' => DevblocksSearchCriteria::OPTION_TEXT_PARTIAL),
@@ -765,21 +866,17 @@ class View_Notification extends C4_AbstractView implements IAbstractView_Subtota
 		ksort($fields);
 		
 		return $fields;
-	}	
+	}
 	
-	function getParamsFromQuickSearchFields($fields) {
-		$search_fields = $this->getQuickSearchFields();
-		$params = DevblocksSearchCriteria::getParamsFromQueryFields($fields, $search_fields);
-
-		// Handle virtual fields and overrides
-		if(is_array($fields))
-		foreach($fields as $k => $v) {
-			switch($k) {
-				// ...
-			}
+	function getParamFromQuickSearchFieldTokens($field, $tokens) {
+		switch($field) {
+			default:
+				$search_fields = $this->getQuickSearchFields();
+				return DevblocksSearchCriteria::getParamFromQueryFieldTokens($field, $tokens, $search_fields);
+				break;
 		}
 		
-		return $params;
+		return false;
 	}
 	
 	function render() {
@@ -910,75 +1007,6 @@ class View_Notification extends C4_AbstractView implements IAbstractView_Subtota
 			$this->renderPage = 0;
 		}
 	}
-	
-	function doBulkUpdate($filter, $do, $ids=array()) {
-		@set_time_limit(600); // 10m
-		
-		$change_fields = array();
-//		$custom_fields = array();
-
-		// Make sure we have actions
-		if(empty($do))
-			return;
-
-		// Make sure we have checked items if we want a checked list
-		if(0 == strcasecmp($filter,"checks") && empty($ids))
-			return;
-			
-		if(is_array($do))
-		foreach($do as $k => $v) {
-			switch($k) {
-				case 'is_read':
-					if(1==intval($v)) {
-						$change_fields[DAO_Notification::IS_READ] = 1;
-					} else { // active
-						$change_fields[DAO_Notification::IS_READ] = 0;
-					}
-					break;
-				default:
-					// Custom fields
-//					if(substr($k,0,3)=="cf_") {
-//						$custom_fields[substr($k,3)] = $v;
-//					}
-			}
-		}
-		
-		$pg = 0;
-
-		if(empty($ids))
-		do {
-			list($objects,$null) = DAO_Notification::search(
-				array(),
-				$this->getParams(),
-				100,
-				$pg++,
-				SearchFields_Notification::ID,
-				true,
-				false
-			);
-			 
-			$ids = array_merge($ids, array_keys($objects));
-			 
-		} while(!empty($objects));
-
-		$batch_total = count($ids);
-		for($x=0;$x<=$batch_total;$x+=100) {
-			$batch_ids = array_slice($ids,$x,100);
-			DAO_Notification::update($batch_ids, $change_fields);
-			
-			// Custom Fields
-			//self::_doBulkSetCustomFields(CerberusContexts::CONTEXT_TASK, $custom_fields, $batch_ids);
-			
-			unset($batch_ids);
-		}
-
-		if(isset($change_fields[DAO_Notification::IS_READ])) {
-			if(null != ($active_worker = CerberusApplication::getActiveWorker()))
-				DAO_Notification::clearCountCache($active_worker->id);
-		}
-		
-		unset($ids);
-	}
 };
 
 class Context_Notification extends Extension_DevblocksContext {
@@ -1044,7 +1072,6 @@ class Context_Notification extends Extension_DevblocksContext {
 		return $labels;
 	}
 	
-	// [TODO] Interface
 	function getDefaultProperties() {
 		return array(
 			'assignee__label',

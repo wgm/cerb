@@ -2,28 +2,34 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
 | The latest version of this license can be found here:
-| http://cerberusweb.com/license
+| http://cerb.io/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://www.cerbweb.com	    http://www.webgroupmedia.com/
+|	http://cerb.io	    http://webgroup.media
 ***********************************************************************/
 
 class PageSection_SetupPluginLibrary extends Extension_PageSection {
 	const VIEW_PLUGIN_LIBRARY = 'plugin_library';
 	
 	function render() {
+		if(!CERB_FEATURES_PLUGIN_LIBRARY)
+			return;
+		
 		$visit = CerberusApplication::getVisit();
 		$visit->set(ChConfigurationPage::ID, 'plugin_library');
 	}
 	
 	function showTabAction() {
+		if(!CERB_FEATURES_PLUGIN_LIBRARY)
+			return;
+		
 		$tpl = DevblocksPlatform::getTemplateService();
 		$visit = CerberusApplication::getVisit();
 		
@@ -46,6 +52,9 @@ class PageSection_SetupPluginLibrary extends Extension_PageSection {
 	}
 	
 	function syncAction() {
+		if(!CERB_FEATURES_PLUGIN_LIBRARY)
+			return;
+		
 		header('Content-Type: application/json');
 
 		if(!extension_loaded("curl") || false == ($results = DAO_PluginLibrary::downloadUpdatedPluginsFromRepository())) {
@@ -77,6 +86,9 @@ class PageSection_SetupPluginLibrary extends Extension_PageSection {
 	}
 	
 	function showDownloadPopupAction() {
+		if(!CERB_FEATURES_PLUGIN_LIBRARY)
+			return;
+		
 		@$plugin_id = DevblocksPlatform::importGPC($_REQUEST['plugin_id'],'string','');
 		@$view_id = DevblocksPlatform::importGPC($_REQUEST['view_id'],'string','');
 		
@@ -98,6 +110,9 @@ class PageSection_SetupPluginLibrary extends Extension_PageSection {
 	}
 	
 	function saveDownloadPopupAction() {
+		if(!CERB_FEATURES_PLUGIN_LIBRARY)
+			return;
+		
 		@$plugin_id = DevblocksPlatform::importGPC($_REQUEST['plugin_id'],'integer',0);
 
 		try {
@@ -108,7 +123,7 @@ class PageSection_SetupPluginLibrary extends Extension_PageSection {
 			$requirements = Model_PluginLibrary::testRequirements($plugin->requirements);
 			
 			// [TODO] This should come from somewhere in Setup
-			$url = sprintf("http://plugins.cerb6.com/plugins/download?plugin=%s&version=%d",
+			$url = sprintf("http://plugins.cerbweb.com/plugins/download?plugin=%s&version=%d",
 				urlencode($plugin->plugin_id),
 				$plugin->latest_version
 			);
@@ -117,13 +132,11 @@ class PageSection_SetupPluginLibrary extends Extension_PageSection {
 				throw new Exception("The cURL PHP extension is not installed");
 			
 			// Connect to portal for download URL
-			$ch = curl_init($url);
+			$ch = DevblocksPlatform::curlInit($url);
 			curl_setopt_array($ch, array(
-				CURLOPT_RETURNTRANSFER => true,
-				CURLOPT_FOLLOWLOCATION => true,
 				CURLOPT_SSL_VERIFYPEER => false,
 			));
-			$json_data = curl_exec($ch);
+			$json_data = DevblocksPlatform::curlExec($ch, true);
 			
 			// [TODO] Check success
 			if(false === ($response = json_decode($json_data, true)))

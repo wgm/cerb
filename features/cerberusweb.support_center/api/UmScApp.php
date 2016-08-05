@@ -2,29 +2,29 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
 | The latest version of this license can be found here:
-| http://cerberusweb.com/license
+| http://cerb.io/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://www.cerbweb.com	    http://www.webgroupmedia.com/
+|	http://cerb.io	    http://webgroup.media
 ***********************************************************************/
 /*
- * IMPORTANT LICENSING NOTE from your friends on the Cerb Development Team
+ * IMPORTANT LICENSING NOTE from your friends at Cerb
  *
- * Sure, it would be so easy to just cheat and edit this file to use the
- * software without paying for it.  But we trust you anyway.  In fact, we're
- * writing this software for you!
+ * Sure, it would be really easy to just cheat and edit this file to use
+ * Cerb without paying for a license.  We trust you anyway.
  *
- * Quality software backed by a dedicated team takes money to develop.  We
- * don't want to be out of the office bagging groceries when you call up
- * needing a helping hand.  We'd rather spend our free time coding your
- * feature requests than mowing the neighbors' lawns for rent money.
+ * It takes a significant amount of time and money to develop, maintain,
+ * and support high-quality enterprise software with a dedicated team.
+ * For Cerb's entire history we've avoided taking money from outside
+ * investors, and instead we've relied on actual sales from satisfied
+ * customers to keep the project running.
  *
  * We've never believed in hiding our source code out of paranoia over not
  * getting paid.  We want you to have the full source code and be able to
@@ -32,19 +32,12 @@
  * having less of everything than you might need (time, people, money,
  * energy).  We shouldn't be your bottleneck.
  *
- * We've been building our expertise with this project since January 2002.  We
- * promise spending a couple bucks [Euro, Yuan, Rupees, Galactic Credits] to
- * let us take over your shared e-mail headache is a worthwhile investment.
- * It will give you a sense of control over your inbox that you probably
- * haven't had since spammers found you in a game of 'E-mail Battleship'.
- * Miss. Miss. You sunk my inbox!
+ * As a legitimate license owner, your feedback will help steer the project.
+ * We'll also prioritize your issues, and work closely with you to make sure
+ * your teams' needs are being met.
  *
- * A legitimate license entitles you to support from the developers,
- * and the warm fuzzy feeling of feeding a couple of obsessed developers
- * who want to help you get more done.
- *
- \* - Jeff Standen, Darren Sugita, Dan Hildebrandt
- *	 Webgroup Media LLC - Developers of Cerb
+ * - Jeff Standen and Dan Hildebrandt
+ *	 Founders at Webgroup Media LLC; Developers of Cerb
  */
 
 class UmScEventListener extends DevblocksEventListenerExtension {
@@ -193,12 +186,11 @@ class UmScApp extends Extension_UsermeetTool {
 			
 				// ...and the CSRF token is invalid for this session, freak out
 				if(!$umsession->csrf_token || $umsession->csrf_token != $request->csrf_token) {
-					header("Status: 403");
 					@$referer = $_SERVER['HTTP_REFERER'];
-					@$remote_addr = $_SERVER['REMOTE_ADDR'];
+					@$remote_addr = DevblocksPlatform::getClientIp();
 					
-					error_log(sprintf("[Cerb/Security] Possible CSRF attack from IP %s using referrer %s", $remote_addr, $referer), E_USER_WARNING);
-					die("Access denied");
+					//error_log(sprintf("[Cerb/Security] Possible CSRF attack from IP %s using referrer %s", $remote_addr, $referer), E_USER_WARNING);
+					DevblocksPlatform::dieWithHttpError("Access denied", 403);
 				}
 			}
 		}
@@ -228,7 +220,7 @@ class UmScApp extends Extension_UsermeetTool {
 	public function writeResponse(DevblocksHttpResponse $response) {
 		$stack = $response->path;
 		
-		$tpl = DevblocksPlatform::getTemplateService();
+		$tpl = DevblocksPlatform::getTemplateSandboxService();
 		
 		$umsession = ChPortalHelper::getSession();
 		$tpl->assign('session', $umsession);
@@ -255,7 +247,7 @@ class UmScApp extends Extension_UsermeetTool {
 		
 		// Usermeet Session
 		if(null == ($fingerprint = ChPortalHelper::getFingerprint())) {
-			die("A problem occurred.");
+			DevblocksPlatform::dieWithHttpError("A problem occurred.", 500);
 		}
 		$tpl->assign('fingerprint', $fingerprint);
 
@@ -286,7 +278,9 @@ class UmScApp extends Extension_UsermeetTool {
 				$phrase = CerberusApplication::generatePassword(4);
 				$umsession->setProperty(UmScApp::SESSION_CAPTCHA, $phrase);
 				
-				$im = @imagecreate(150, 70) or die("Cannot Initialize new GD image stream");
+				if(false == ($im = imagecreate(150, 70)))
+					DevblocksPlatform::dieWithHttpError(null, 500);
+				
 				$background_color = imagecolorallocate($im, $bgcolor[0], $bgcolor[1], $bgcolor[2]);
 				$text_color = imagecolorallocate($im, $color[0], $color[1], $color[2]);
 				$font = DEVBLOCKS_PATH . 'resources/font/Oswald-Bold.ttf';
@@ -444,7 +438,7 @@ class UmScApp extends Extension_UsermeetTool {
 
 class UmScLoginAuthenticator extends Extension_ScLoginAuthenticator {
 	function writeResponse(DevblocksHttpResponse $response) {
-		$tpl = DevblocksPlatform::getTemplateService();
+		$tpl = DevblocksPlatform::getTemplateSandboxService();
 		$umsession = ChPortalHelper::getSession();
 		
 		$stack = $response->path;
@@ -476,7 +470,7 @@ class UmScLoginAuthenticator extends Extension_ScLoginAuthenticator {
 	function doRegisterAction() {
 		@$email = DevblocksPlatform::importGPC($_REQUEST['email'],'string','');
 		
-		$tpl = DevblocksPlatform::getTemplateService();
+		$tpl = DevblocksPlatform::getTemplateSandboxService();
 		$url_writer = DevblocksPlatform::getUrlService();
 		$umsession = ChPortalHelper::getSession();
 		
@@ -531,7 +525,7 @@ class UmScLoginAuthenticator extends Extension_ScLoginAuthenticator {
 		@$password = DevblocksPlatform::importGPC($_REQUEST['password'],'string','');
 		@$password2 = DevblocksPlatform::importGPC($_REQUEST['password2'],'string','');
 		
-		$tpl = DevblocksPlatform::getTemplateService();
+		$tpl = DevblocksPlatform::getTemplateSandboxService();
 		$url_writer = DevblocksPlatform::getUrlService();
 		$umsession = ChPortalHelper::getSession();
 		
@@ -616,7 +610,7 @@ class UmScLoginAuthenticator extends Extension_ScLoginAuthenticator {
 	function doRecoverAction() {
 		@$email = DevblocksPlatform::importGPC($_REQUEST['email'],'string','');
 		
-		$tpl = DevblocksPlatform::getTemplateService();
+		$tpl = DevblocksPlatform::getTemplateSandboxService();
 		$url_writer = DevblocksPlatform::getUrlService();
 		
 		try {
@@ -668,7 +662,7 @@ class UmScLoginAuthenticator extends Extension_ScLoginAuthenticator {
 		
 		$umsession = ChPortalHelper::getSession();
 		$url_writer = DevblocksPlatform::getUrlService();
-		$tpl = DevblocksPlatform::getTemplateService();
+		$tpl = DevblocksPlatform::getTemplateSandboxService();
 		
 		try {
 			// Verify email is a contact
@@ -715,7 +709,7 @@ class UmScLoginAuthenticator extends Extension_ScLoginAuthenticator {
 	 */
 	function authenticateAction() {
 		$umsession = ChPortalHelper::getSession();
-		$tpl = DevblocksPlatform::getTemplateService();
+		$tpl = DevblocksPlatform::getTemplateSandboxService();
 		$url_writer = DevblocksPlatform::getUrlService();
 
 		@$email = DevblocksPlatform::importGPC($_REQUEST['email']);

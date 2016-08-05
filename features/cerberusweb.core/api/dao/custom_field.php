@@ -2,17 +2,17 @@
 /***********************************************************************
  | Cerb(tm) developed by Webgroup Media, LLC.
  |-----------------------------------------------------------------------
- | All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
+ | All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
  |   unless specifically noted otherwise.
  |
  | This source code is released under the Devblocks Public License.
  | The latest version of this license can be found here:
- | http://cerberusweb.com/license
+ | http://cerb.io/license
  |
  | By using this software, you acknowledge having read this license
  | and agree to be bound thereby.
  | ______________________________________________________________________
- |	http://www.cerbweb.com	    http://www.webgroupmedia.com/
+ |	http://cerb.io	    http://webgroup.media
  ***********************************************************************/
 
 class DAO_CustomField extends Cerb_ORMHelper {
@@ -32,7 +32,8 @@ class DAO_CustomField extends Cerb_ORMHelper {
 		$sql = sprintf("INSERT INTO custom_field () ".
 			"VALUES ()"
 		);
-		$rs = $db->ExecuteMaster($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
+		if(false == ($rs = $db->ExecuteMaster($sql)))
+			return false;
 		$id = $db->LastInsertId();
 
 		self::update($id, $fields);
@@ -113,7 +114,9 @@ class DAO_CustomField extends Cerb_ORMHelper {
 				"FROM custom_field ".
 				"ORDER BY custom_fieldset_id ASC, pos ASC "
 			;
-			$rs = $db->ExecuteMaster($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
+			
+			if(false === ($rs = $db->ExecuteMaster($sql, _DevblocksDatabaseManager::OPT_NO_READ_AFTER_WRITE)))
+				return false;
 			
 			$objects = self::_createObjectsFromResultSet($rs);
 			
@@ -124,9 +127,13 @@ class DAO_CustomField extends Cerb_ORMHelper {
 	}
 	
 	private static function _createObjectsFromResultSet($rs) {
-		$db = DevblocksPlatform::getDatabaseService();
+		if(!($rs instanceof mysqli_result))
+			return false;
 		
 		$objects = array();
+		
+		if(!($rs instanceof mysqli_result))
+			return false;
 		
 		while($row = mysqli_fetch_assoc($rs)) {
 			$object = new Model_CustomField();
@@ -169,7 +176,8 @@ class DAO_CustomField extends Cerb_ORMHelper {
 		$id_string = implode(',', $ids);
 		
 		$sql = sprintf("DELETE FROM custom_field WHERE id IN (%s)",$id_string);
-		$db->ExecuteSlave($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
+		if(false == ($db->ExecuteSlave($sql)))
+			return false;
 
 		if(is_array($ids))
 		foreach($ids as $id) {
@@ -866,7 +874,11 @@ class DAO_CustomFieldValue extends Cerb_ORMHelper {
 		 */
 		
 		$sql = implode(' UNION ALL ', $sqls);
-		$rs = $db->ExecuteSlave($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
+		if(false == ($rs = $db->ExecuteSlave($sql)))
+			return false;
+		
+		if(!($rs instanceof mysqli_result))
+			return false;
 		
 		while($row = mysqli_fetch_assoc($rs)) {
 			$context_id = intval($row['context_id']);
@@ -917,7 +929,8 @@ class DAO_CustomFieldValue extends Cerb_ORMHelper {
 				$db->qstr($context),
 				implode(',', $context_ids)
 			);
-			$db->ExecuteMaster($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
+			if(false == ($db->ExecuteMaster($sql)))
+				return false;
 		}
 	}
 	
@@ -931,7 +944,8 @@ class DAO_CustomFieldValue extends Cerb_ORMHelper {
 				$table,
 				$field_id
 			);
-			$db->ExecuteMaster($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
+			if(false == ($db->ExecuteMaster($sql)))
+				return false;
 		}
 	}
 };

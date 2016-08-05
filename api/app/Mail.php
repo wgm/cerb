@@ -2,29 +2,29 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
 | The latest version of this license can be found here:
-| http://cerberusweb.com/license
+| http://cerb.io/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://www.cerbweb.com	    http://www.webgroupmedia.com/
+|	http://cerb.io	    http://webgroup.media
 ***********************************************************************/
 /*
- * IMPORTANT LICENSING NOTE from your friends on the Cerb Development Team
+ * IMPORTANT LICENSING NOTE from your friends at Cerb
  *
- * Sure, it would be so easy to just cheat and edit this file to use the
- * software without paying for it.  But we trust you anyway.  In fact, we're
- * writing this software for you!
+ * Sure, it would be really easy to just cheat and edit this file to use
+ * Cerb without paying for a license.  We trust you anyway.
  *
- * Quality software backed by a dedicated team takes money to develop.  We
- * don't want to be out of the office bagging groceries when you call up
- * needing a helping hand.  We'd rather spend our free time coding your
- * feature requests than mowing the neighbors' lawns for rent money.
+ * It takes a significant amount of time and money to develop, maintain,
+ * and support high-quality enterprise software with a dedicated team.
+ * For Cerb's entire history we've avoided taking money from outside
+ * investors, and instead we've relied on actual sales from satisfied
+ * customers to keep the project running.
  *
  * We've never believed in hiding our source code out of paranoia over not
  * getting paid.  We want you to have the full source code and be able to
@@ -32,19 +32,12 @@
  * having less of everything than you might need (time, people, money,
  * energy).  We shouldn't be your bottleneck.
  *
- * We've been building our expertise with this project since January 2002.  We
- * promise spending a couple bucks [Euro, Yuan, Rupees, Galactic Credits] to
- * let us take over your shared e-mail headache is a worthwhile investment.
- * It will give you a sense of control over your inbox that you probably
- * haven't had since spammers found you in a game of 'E-mail Battleship'.
- * Miss. Miss. You sunk my inbox!
+ * As a legitimate license owner, your feedback will help steer the project.
+ * We'll also prioritize your issues, and work closely with you to make sure
+ * your teams' needs are being met.
  *
- * A legitimate license entitles you to support from the developers,
- * and the warm fuzzy feeling of feeding a couple of obsessed developers
- * who want to help you get more done.
- *
- \* - Jeff Standen, Darren Sugita, Dan Hildebrandt
- *	 Webgroup Media LLC - Developers of Cerb
+ * - Jeff Standen and Dan Hildebrandt
+ *	 Founders at Webgroup Media LLC; Developers of Cerb
  */
 class CerberusMail {
 	private function __construct() {}
@@ -134,7 +127,7 @@ class CerberusMail {
 			
 			if(empty($from_addy) || empty($from_personal)) {
 				if(null == ($replyto_default = DAO_AddressOutgoing::getDefault()))
-					throw new Exception("There is no default reply-to.");
+					throw new Exception("There is no default sender address.");
 				
 				if(empty($from_addy))
 					$from_addy = $replyto_default->email;
@@ -145,12 +138,12 @@ class CerberusMail {
 			$mail->setTo(DevblocksPlatform::parseCsvString($to));
 
 			$custom_headers = self::_parseCustomHeaders($custom_headers);
-
+			
 			// If we have a custom from, override the sender info
 			if(isset($custom_headers['from'])) {
-				if(false != ($custom_froms = mailparse_rfc822_parse_addresses($custom_headers['from']))) {
-					$from_addy = $custom_froms[0]['address'];
-					$from_personal = ($custom_froms[0]['display'] != $custom_froms[0]['address']) ? $custom_froms[0]['display'] : null;
+				if(false !== ($custom_froms = imap_rfc822_parse_adrlist($custom_headers['from'], '')) && !empty($custom_froms)) {
+					$from_addy = $custom_froms[0]->mailbox . '@' . $custom_froms[0]->host;
+					$from_personal = ($custom_froms[0]->personal != $from_addy) ? $custom_froms[0]->personal : null;
 				}
 				
 				unset($custom_headers['from']);
@@ -170,9 +163,6 @@ class CerberusMail {
 			} else {
 				$mail->setSubject($subject);
 			}
-			
-			// Generate a message-id
-			$mail->generateId();
 			
 			$headers = $mail->getHeaders();
 			
@@ -248,7 +238,7 @@ class CerberusMail {
 		 'html_template_id'
 		 'files'
 		 'forward_files'
-		 'closed'
+		 'status_id'
 		 'ticket_reopen'
 		 'dont_send'
 		 'draft_id'
@@ -295,7 +285,7 @@ class CerberusMail {
 		@$embedded_files = array();
 		@$forward_files = $properties['forward_files'];
 		
-		@$closed = $properties['closed'];
+		@$status_id = $properties['status_id'];
 		@$ticket_reopen = $properties['ticket_reopen'];
 		
 		$from_replyto = $group->getReplyTo($bucket->id);
@@ -320,8 +310,6 @@ class CerberusMail {
 		// [JAS]: Replace any semi-colons with commas (people like using either)
 		$toList = CerberusMail::parseRfcAddresses($toStr);
 		
-		$mail_headers = array();
-		$mail_headers['X-CerberusCompose'] = '1';
 		
 		try {
 			$mail_service = DevblocksPlatform::getMailService();
@@ -368,7 +356,6 @@ class CerberusMail {
 			}
 			
 			$email->setSubject($subject_mailed);
-			$email->generateId();
 			
 			$headers = $email->getHeaders();
 			
@@ -425,13 +412,8 @@ class CerberusMail {
 				}
 			}
 			
-			// Headers
-			foreach($email->getHeaders()->getAll() as $hdr) {
-				if(null != ($hdr_val = $hdr->getFieldBody())) {
-					if(!empty($hdr_val))
-						$mail_headers[$hdr->getFieldName()] = CerberusParser::fixQuotePrintableString($hdr_val, LANG_CHARSET_CODE);
-				}
-			}
+			$outgoing_mail_headers = $email->getHeaders()->toString();
+			$outgoing_message_id = $email->getHeaders()->get('message-id')->getFieldBody();
 			
 			if(!empty($toList) && (!isset($properties['dont_send']) || empty($properties['dont_send']))) {
 				if(!$mail_service->send($email)) {
@@ -494,7 +476,6 @@ class CerberusMail {
 			DAO_Ticket::FIRST_WROTE_ID => $fromAddressId,
 			DAO_Ticket::LAST_WROTE_ID => $fromAddressId,
 			DAO_Ticket::ORG_ID => intval($org_id),
-			DAO_Ticket::LAST_ACTION_CODE => CerberusTicketActionCode::TICKET_WORKER_REPLY,
 			DAO_Ticket::IMPORTANCE => 50,
 		);
 		
@@ -524,6 +505,7 @@ class CerberusMail {
 			DAO_Message::WORKER_ID => intval($worker_id),
 			DAO_Message::IS_BROADCAST => $is_broadcast ? 1 : 0,
 			DAO_Message::IS_NOT_SENT => @$properties['dont_send'] ? 1 : 0,
+			DAO_Message::HASH_HEADER_MESSAGE_ID => sha1($outgoing_message_id),
 		);
 		$message_id = DAO_Message::create($fields);
 		
@@ -536,7 +518,8 @@ class CerberusMail {
 		}
 		
 		// Headers
-		DAO_MessageHeader::creates($message_id, $mail_headers);
+		$email->getHeaders()->addTextHeader('X-CerberusCompose', 1);
+		DAO_MessageHeaders::upsert($message_id, $outgoing_mail_headers);
 		
 		// add files to ticket
 		if (is_array($files) && !empty($files)) {
@@ -589,11 +572,10 @@ class CerberusMail {
 			DAO_Ticket::FIRST_MESSAGE_ID => $message_id,
 			DAO_Ticket::LAST_MESSAGE_ID => $message_id,
 		);
-		
-		if(isset($closed) && 1==$closed)
-			$fields[DAO_Ticket::IS_CLOSED] = 1;
-		if(isset($closed) && 2==$closed)
-			$fields[DAO_Ticket::IS_WAITING] = 1;
+
+		// Status
+		if(in_array($status_id, array(Model_Ticket::STATUS_WAITING, Model_Ticket::STATUS_CLOSED)))
+			$fields[DAO_Ticket::STATUS_ID] = $status_id;
 		
 		// Move last, so the event triggers properly
 		$fields[DAO_Ticket::GROUP_ID] = $group->id;
@@ -650,7 +632,7 @@ class CerberusMail {
 		'files'
 		'forward_files'
 		'link_forward_files'
-		'closed'
+		'status_id'
 		'ticket_reopen'
 		'group_id'
 		'bucket_id'
@@ -702,7 +684,7 @@ class CerberusMail {
 			
 			@$is_autoreply = $properties['is_autoreply'];
 			
-			$message_headers = DAO_MessageHeader::getAll($reply_message_id);
+			$message_headers = DAO_MessageHeaders::getAll($reply_message_id);
 
 			$from_replyto = $group->getReplyTo($ticket->bucket_id);
 			$from_personal = $group->getReplyPersonal($ticket->bucket_id, $worker_id);
@@ -724,9 +706,7 @@ class CerberusMail {
 			} else {
 				$mail->setFrom($from_replyto->email);
 			}
-			
-			$mail->generateId();
-			
+
 			$headers = $mail->getHeaders();
 			
 			$headers->addTextHeader('X-Mailer','Cerb ' . APP_VERSION . ' (Build '.APP_BUILD.')');
@@ -897,15 +877,8 @@ class CerberusMail {
 
 			// Send
 			$recipients = $mail->getTo();
-			$send_headers = array();
-			
-			// Save headers before sending
-			foreach($headers->getAll() as $hdr) {
-				if(null != ($hdr_val = $hdr->getFieldBody())) {
-					if(!empty($hdr_val))
-						$send_headers[$hdr->getFieldName()] = CerberusParser::fixQuotePrintableString($hdr_val, LANG_CHARSET_CODE);
-				}
-			}
+			$outgoing_mail_headers = $mail->getHeaders()->toString();
+			$outgoing_message_id = $mail->getHeaders()->get('message-id')->getFieldBody();
 			
 			// If blank recipients or we're not supposed to send
 			if(empty($recipients) || (isset($properties['dont_send']) && $properties['dont_send'])) {
@@ -989,10 +962,6 @@ class CerberusMail {
 			$change_fields[DAO_Ticket::LAST_WROTE_ID] = $fromAddressId;
 			$change_fields[DAO_Ticket::UPDATED_DATE] = time();
 			
-			if(!empty($worker_id)) {
-				$change_fields[DAO_Ticket::LAST_ACTION_CODE] = CerberusTicketActionCode::TICKET_WORKER_REPLY;
-			}
-			
 			// Only change the subject if not forwarding
 			if(!empty($subject) && !$is_forward) {
 				$change_fields[DAO_Ticket::SUBJECT] = $subject;
@@ -1016,6 +985,7 @@ class CerberusMail {
 				DAO_Message::RESPONSE_TIME => $response_time,
 				DAO_Message::IS_BROADCAST => $is_broadcast ? 1 : 0,
 				DAO_Message::IS_NOT_SENT => @$properties['dont_send'] ? 1 : 0,
+				DAO_Message::HASH_HEADER_MESSAGE_ID => sha1($outgoing_message_id),
 			);
 			$message_id = DAO_Message::create($fields);
 			
@@ -1032,7 +1002,7 @@ class CerberusMail {
 			Storage_MessageContent::put($message_id, $content);
 
 			// Save cached headers
-			DAO_MessageHeader::creates($message_id, $send_headers);
+			DAO_MessageHeaders::upsert($message_id, $outgoing_mail_headers);
 			
 			// Attachments
 			if (is_array($files) && !empty($files)) {
@@ -1092,7 +1062,7 @@ class CerberusMail {
 		
 		// Post-Reply Change Properties
 
-		if(isset($properties['closed'])) {
+		if(isset($properties['status_id'])) {
 			$reopen_at = 0;
 			
 			// Handle reopen date
@@ -1102,25 +1072,19 @@ class CerberusMail {
 				}
 			}
 			
-			switch($properties['closed']) {
-				case 0: // open
-					$change_fields[DAO_Ticket::IS_WAITING] = 0;
-					$change_fields[DAO_Ticket::IS_CLOSED] = 0;
-					$change_fields[DAO_Ticket::IS_DELETED] = 0;
+			switch($properties['status_id']) {
+				case Model_Ticket::STATUS_OPEN:
+					$change_fields[DAO_Ticket::STATUS_ID] = Model_Ticket::STATUS_OPEN;
 					$change_fields[DAO_Ticket::REOPEN_AT] = 0;
 					break;
-				case 1: // closed
-					$change_fields[DAO_Ticket::IS_WAITING] = 0;
-					$change_fields[DAO_Ticket::IS_CLOSED] = 1;
-					$change_fields[DAO_Ticket::IS_DELETED] = 0;
+				case Model_Ticket::STATUS_CLOSED:
+					$change_fields[DAO_Ticket::STATUS_ID] = Model_Ticket::STATUS_CLOSED;
 					
 					if(isset($properties['ticket_reopen']))
 						$change_fields[DAO_Ticket::REOPEN_AT] = $reopen_at;
 					break;
-				case 2: // waiting
-					$change_fields[DAO_Ticket::IS_WAITING] = 1;
-					$change_fields[DAO_Ticket::IS_CLOSED] = 0;
-					$change_fields[DAO_Ticket::IS_DELETED] = 0;
+				case Model_Ticket::STATUS_WAITING:
+					$change_fields[DAO_Ticket::STATUS_ID] = Model_Ticket::STATUS_WAITING;
 					
 					if(isset($properties['ticket_reopen']))
 						$change_fields[DAO_Ticket::REOPEN_AT] = $reopen_at;

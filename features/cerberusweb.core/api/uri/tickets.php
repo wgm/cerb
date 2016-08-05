@@ -2,17 +2,17 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
 | The latest version of this license can be found here:
-| http://cerberusweb.com/license
+| http://cerb.io/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://www.cerbweb.com	    http://www.webgroupmedia.com/
+|	http://cerb.io	    http://webgroup.media
 ***********************************************************************/
 
 class ChTicketsPage extends CerberusPageExtension {
@@ -22,12 +22,6 @@ class ChTicketsPage extends CerberusPageExtension {
 			return false;
 		
 		return true;
-	}
-	
-	function getActivity() {
-		return new Model_Activity('activity.tickets',array(
-			""
-		));
 	}
 	
 	function render() {
@@ -184,8 +178,7 @@ class ChTicketsPage extends CerberusPageExtension {
 		if(empty($id)) return;
 
 		$fields = array(
-			DAO_Ticket::IS_CLOSED => 1,
-			DAO_Ticket::IS_DELETED => 1,
+			DAO_Ticket::STATUS_ID => Model_Ticket::STATUS_DELETED,
 		);
 		
 		//====================================
@@ -196,8 +189,7 @@ class ChTicketsPage extends CerberusPageExtension {
 		$last_action->ticket_ids[$id] = array(
 			DAO_Ticket::SPAM_TRAINING => CerberusTicketSpamTraining::BLANK,
 			DAO_Ticket::SPAM_SCORE => 0.5000,
-			DAO_Ticket::IS_CLOSED => 0,
-			DAO_Ticket::IS_DELETED => 0
+			DAO_Ticket::STATUS_ID => Model_Ticket::STATUS_OPEN,
 		);
 
 		$last_action->action_params = $fields;
@@ -211,8 +203,7 @@ class ChTicketsPage extends CerberusPageExtension {
 			return;
 		
 		$fields = array(
-			DAO_Ticket::IS_DELETED => 1,
-			DAO_Ticket::IS_CLOSED => CerberusTicketStatus::CLOSED
+			DAO_Ticket::STATUS_ID => Model_Ticket::STATUS_DELETED,
 		);
 		
 		// Only update fields that changed
@@ -248,7 +239,7 @@ class ChTicketsPage extends CerberusPageExtension {
 		try {
 			@$subject = DevblocksPlatform::importGPC($_REQUEST['subject'],'string','');
 			@$org_id = DevblocksPlatform::importGPC($_REQUEST['org_id'],'integer',0);
-			@$closed = DevblocksPlatform::importGPC($_REQUEST['closed'],'integer',0);
+			@$status_id = DevblocksPlatform::importGPC($_REQUEST['status_id'],'integer',0);
 			@$importance = DevblocksPlatform::importGPC($_REQUEST['importance'],'integer',0);
 			@$owner_id = DevblocksPlatform::importGPC($_REQUEST['owner_id'],'integer',0);
 			@$group_id = DevblocksPlatform::importGPC($_REQUEST['group_id'],'integer',0);
@@ -259,7 +250,7 @@ class ChTicketsPage extends CerberusPageExtension {
 		
 			// Load the existing model so we can detect changes
 			if(false == ($ticket = DAO_Ticket::get($id)))
-				throw new Exception_DevblocksAjaxValidationError("There was an unexpected error when loading this ticket.");
+				throw new Exception_DevblocksAjaxValidationError("There was an unexpected error when loading this record.");
 			
 			// Validation
 			if(empty($subject))
@@ -288,38 +279,28 @@ class ChTicketsPage extends CerberusPageExtension {
 			$fields[DAO_Ticket::OWNER_ID] = $owner_id;
 			
 			// Status
-			if(isset($closed)) {
-				switch($closed) {
-					case 0: // open
-						$fields[DAO_Ticket::IS_WAITING] = 0;
-						$fields[DAO_Ticket::IS_CLOSED] = 0;
-						$fields[DAO_Ticket::IS_DELETED] = 0;
-						$fields[DAO_Ticket::REOPEN_AT] = 0;
-						break;
-					case 1: // closed
-						$fields[DAO_Ticket::IS_WAITING] = 0;
-						$fields[DAO_Ticket::IS_CLOSED] = 1;
-						$fields[DAO_Ticket::IS_DELETED] = 0;
-						break;
-					case 2: // waiting
-						$fields[DAO_Ticket::IS_WAITING] = 1;
-						$fields[DAO_Ticket::IS_CLOSED] = 0;
-						$fields[DAO_Ticket::IS_DELETED] = 0;
-						break;
-					case 3: // deleted
-						$fields[DAO_Ticket::IS_WAITING] = 0;
-						$fields[DAO_Ticket::IS_CLOSED] = 1;
-						$fields[DAO_Ticket::IS_DELETED] = 1;
-						$fields[DAO_Ticket::REOPEN_AT] = 0;
-						break;
-				}
+			switch($status_id) {
+				case Model_Ticket::STATUS_OPEN:
+					$fields[DAO_Ticket::STATUS_ID] = Model_Ticket::STATUS_OPEN;
+					$fields[DAO_Ticket::REOPEN_AT] = 0;
+					break;
+				case Model_Ticket::STATUS_CLOSED:
+					$fields[DAO_Ticket::STATUS_ID] = Model_Ticket::STATUS_CLOSED;
+					break;
+				case Model_Ticket::STATUS_WAITING:
+					$fields[DAO_Ticket::STATUS_ID] = Model_Ticket::STATUS_WAITING;
+					break;
+				case Model_Ticket::STATUS_DELETED:
+					$fields[DAO_Ticket::STATUS_ID] = Model_Ticket::STATUS_DELETED;
+					$fields[DAO_Ticket::REOPEN_AT] = 0;
+					break;
+			}
 				
-				if(1==$closed || 2==$closed) {
-					if(!empty($ticket_reopen) && false !== ($due = strtotime($ticket_reopen))) {
-						$fields[DAO_Ticket::REOPEN_AT] = $due;
-					} else {
-						$fields[DAO_Ticket::REOPEN_AT] = 0;
-					}
+			if(in_array($status_id, array(Model_Ticket::STATUS_WAITING, Model_Ticket::STATUS_CLOSED))) {
+				if(!empty($ticket_reopen) && false !== ($due = strtotime($ticket_reopen))) {
+					$fields[DAO_Ticket::REOPEN_AT] = $due;
+				} else {
+					$fields[DAO_Ticket::REOPEN_AT] = 0;
 				}
 			}
 			
@@ -407,9 +388,8 @@ class ChTicketsPage extends CerberusPageExtension {
 		@$view_id = DevblocksPlatform::importGPC($_POST['view_id'],'string');
 
 		if(!empty($draft_id)) {
-			// [TODO] This could probably be done better
-			$drafts_ext = DevblocksPlatform::getExtension('core.page.mail.drafts', true, true);
-			/* @var $drafts_ext PageSection_MailDrafts */
+			$drafts_ext = DevblocksPlatform::getExtension('core.page.profiles.draft', true, true);
+			/* @var $drafts_ext PageSection_ProfilesDraft */
 			if(false === $drafts_ext->saveDraft()) {
 				DAO_MailQueue::delete($draft_id);
 				$draft_id = null;
@@ -434,7 +414,7 @@ class ChTicketsPage extends CerberusPageExtension {
 
 		// Properties
 		
-		@$closed = DevblocksPlatform::importGPC($_POST['closed'],'integer',0);
+		@$status_id = DevblocksPlatform::importGPC($_POST['status_id'],'integer',0);
 		@$ticket_reopen = DevblocksPlatform::importGPC($_POST['ticket_reopen'],'string','');
 		@$owner_id = DevblocksPlatform::importGPC($_POST['owner_id'],'integer',0);
 		
@@ -476,7 +456,7 @@ class ChTicketsPage extends CerberusPageExtension {
 			'content_format' => $content_format,
 			'html_template_id' => $html_template_id,
 			'forward_files' => $file_ids,
-			'closed' => $closed,
+			'status_id' => $status_id,
 			'ticket_reopen' => $ticket_reopen,
 			'link_forward_files' => true,
 			'worker_id' => $active_worker->id,
@@ -688,208 +668,6 @@ class ChTicketsPage extends CerberusPageExtension {
 		}
 	}
 	
-	function showViewAutoAssistAction() {
-		@$view_id = DevblocksPlatform::importGPC($_REQUEST['view_id'],'string');
-		@$mode = DevblocksPlatform::importGPC($_REQUEST['mode'],'string','senders');
-		@$mode_param = DevblocksPlatform::importGPC($_REQUEST['mode_param'],'string','');
-
-		$tpl = DevblocksPlatform::getTemplateService();
-		
-		$visit = CerberusApplication::getVisit(); /* @var $visit CerberusVisit */
-
-		$view = C4_AbstractViewLoader::getView($view_id);
-		$view->setAutoPersist(false);
-		
-		$tpl->assign('view_id', $view_id);
-		$tpl->assign('mode', $mode);
-
-		if($mode == "headers" && empty($mode_param)) {
-			$tpl->display('devblocks:cerberusweb.core::tickets/rpc/ticket_view_assist_headers.tpl');
-			
-		} else {
-			$groups = DAO_Group::getAll();
-			$tpl->assign('groups', $groups);
-			
-			$group_buckets = DAO_Bucket::getGroups();
-			$tpl->assign('group_buckets', $group_buckets);
-			
-			$workers = DAO_Worker::getAllActive();
-			$tpl->assign('workers', $workers);
-			
-			// Enforce group memberships
-			$active_worker = CerberusApplication::getActiveWorker();
-			$memberships = $active_worker->getMemberships();
-			
-			$params = $view->getParams();
-			$params[] = new DevblocksSearchCriteria(SearchFields_Ticket::TICKET_GROUP_ID, 'in', array_keys($memberships));
-			
-			// [JAS]: Calculate statistics about the current view (top unique senders/subjects/domains)
-			
-			$biggest = DAO_Ticket::analyze($params, 15, $mode, $mode_param);
-			$tpl->assign('biggest', $biggest);
-			
-			$tpl->display('devblocks:cerberusweb.core::tickets/rpc/ticket_view_assist.tpl');
-		}
-	}
-	
-	function viewAutoAssistAction() {
-		@$view_id = DevblocksPlatform::importGPC($_POST['view_id'],'string');
-
-		$visit = CerberusApplication::getVisit(); /* @var $visit CerberusVisit */
-		
-		$view = C4_AbstractViewLoader::getView($view_id);
-		$view->setAutoPersist(false);
-
-		$buckets = DAO_Bucket::getAll();
-		
-		@$piles_always = DevblocksPlatform::importGPC($_POST['piles_always'],'array', array());
-		@$piles_hash = DevblocksPlatform::importGPC($_POST['piles_hash'],'array', array());
-		@$piles_moveto = DevblocksPlatform::importGPC($_POST['piles_moveto'],'array', array());
-		@$piles_type = DevblocksPlatform::importGPC($_POST['piles_type'],'array', array());
-		@$piles_type_param = DevblocksPlatform::importGPC($_POST['piles_type_param'],'array', array());
-		@$piles_value = DevblocksPlatform::importGPC($_POST['piles_value'],'array', array());
-		
-		$piles_always = array_flip($piles_always); // Flip hash
-
-		// Enforce worker memberships
-		$active_worker = CerberusApplication::getActiveWorker();
-		$memberships = $active_worker->getMemberships();
-		$view->addParam(new DevblocksSearchCriteria(SearchFields_Ticket::TICKET_GROUP_ID, 'in', array_keys($memberships)), 'tmpMemberships');
-		
-		foreach($piles_hash as $idx => $hash) {
-			@$moveto = $piles_moveto[$idx];
-			@$type = $piles_type[$idx];
-			@$type_param = $piles_type_param[$idx];
-			@$val = $piles_value[$idx];
-			
-			if(empty($hash) || empty($moveto) || empty($type) || empty($val))
-				continue;
-			
-			$doActions = array();
-			
-			switch(strtolower(substr($moveto,0,1))) {
-				// Group/bucket
-				case 'm':
-					$b_id = intval(substr($moveto,1));
-					@$g_id = intval($buckets[$b_id]->group_id);
-					
-					if(!empty($g_id))
-					$doActions = array(
-						'move' => array(
-							'group_id' => $g_id,
-							'bucket_id' => $b_id,
-						)
-					);
-					break;
-					
-				// Status
-				case 'a':
-					switch(strtolower(substr($moveto,1))) {
-						case 'c': // close
-							$doActions = array(
-								'status' => array(
-									'is_closed' => 1,
-									'is_deleted' => 0,
-								)
-							);
-							break;
-						case 's': // spam
-							$doActions = array(
-								'status' => array(
-									'is_closed' => 1,
-									'is_deleted' => 1,
-								),
-								'spam' => array(
-									'is_spam' => 1,
-								)
-							);
-							break;
-						case 'd': // delete
-							$doActions = array(
-								'status' => array(
-									'is_closed' => 1,
-									'is_deleted' => 1,
-								)
-							);
-							break;
-					}
-					break;
-					
-				// Owners
-				case 'o':
-					$w_id = intval(substr($moveto,1));
-					
-					if(!empty($w_id))
-					$doActions = array(
-						'owner' => array(
-							'worker_id' => $w_id,
-						),
-					);
-					break;
-					
-				// Watchers
-				case 'w':
-					$w_id = intval(substr($moveto,1));
-					
-					if(!empty($w_id))
-					$doActions = array(
-						'watchers' => array(
-							'add' => array($w_id),
-						)
-					);
-					break;
-					
-					
-				// Actions
-				default:
-					switch($moveto) {
-						case 'merge':
-							$doActions = array(
-								'merge' => true,
-							);
-							break;
-							
-						default:
-							$doActions = array();
-							break;
-					}
-					
-					break;
-			}
-			
-			$doTypeParam = $type_param;
-			
-			// Domains, senders are both sender batch actions
-			switch($type) {
-				default:
-				case 'sender':
-					$doType = 'sender';
-					break;
-					
-				case 'subject':
-					$doType = 'subject';
-					break;
-					
-				case 'header':
-					$doType = 'header';
-					break;
-			}
-
-			// Make wildcards
-			$doData = array();
-			if($type=="domain") {
-				$doData = array('*'.$val);
-			} else {
-				$doData = array($val);
-			}
-			
-			if(!empty($doActions))
-				$view->doBulkUpdate($doType, $doTypeParam, $doData, $doActions, array());
-		}
-		
-		$view->render();
-	}
-
 	function viewMoveTicketsAction() {
 		@$view_id = DevblocksPlatform::importGPC($_REQUEST['view_id'],'string');
 		@$ticket_ids = DevblocksPlatform::importGPC($_REQUEST['ticket_id'],'array');
@@ -978,7 +756,7 @@ class ChTicketsPage extends CerberusPageExtension {
 		@$ticket_ids = DevblocksPlatform::importGPC($_REQUEST['ticket_id'],'array:integer');
 		
 		$fields = array(
-			DAO_Ticket::IS_CLOSED => CerberusTicketStatus::CLOSED,
+			DAO_Ticket::STATUS_ID => Model_Ticket::STATUS_CLOSED,
 		);
 		
 		//====================================
@@ -989,7 +767,7 @@ class ChTicketsPage extends CerberusPageExtension {
 		if(is_array($ticket_ids))
 		foreach($ticket_ids as $ticket_id) {
 			$last_action->ticket_ids[$ticket_id] = array(
-				DAO_Ticket::IS_CLOSED => CerberusTicketStatus::OPEN
+				DAO_Ticket::STATUS_ID => Model_Ticket::STATUS_OPEN
 			);
 		}
 
@@ -1019,7 +797,7 @@ class ChTicketsPage extends CerberusPageExtension {
 		@$ticket_ids = DevblocksPlatform::importGPC($_REQUEST['ticket_id'],'array:integer');
 
 		$fields = array(
-			DAO_Ticket::IS_WAITING => 1,
+			DAO_Ticket::STATUS_ID => Model_Ticket::STATUS_WAITING,
 		);
 		
 		//====================================
@@ -1030,7 +808,7 @@ class ChTicketsPage extends CerberusPageExtension {
 		if(is_array($ticket_ids))
 		foreach($ticket_ids as $ticket_id) {
 			$last_action->ticket_ids[$ticket_id] = array(
-				DAO_Ticket::IS_WAITING => 0,
+				DAO_Ticket::STATUS_ID => Model_Ticket::STATUS_OPEN,
 			);
 		}
 
@@ -1060,7 +838,7 @@ class ChTicketsPage extends CerberusPageExtension {
 		@$ticket_ids = DevblocksPlatform::importGPC($_REQUEST['ticket_id'],'array:integer');
 
 		$fields = array(
-			DAO_Ticket::IS_WAITING => 0,
+			DAO_Ticket::STATUS_ID => Model_Ticket::STATUS_OPEN,
 		);
 		
 		//====================================
@@ -1071,7 +849,7 @@ class ChTicketsPage extends CerberusPageExtension {
 		if(is_array($ticket_ids))
 		foreach($ticket_ids as $ticket_id) {
 			$last_action->ticket_ids[$ticket_id] = array(
-				DAO_Ticket::IS_WAITING => 1,
+				DAO_Ticket::STATUS_ID => Model_Ticket::STATUS_WAITING,
 			);
 		}
 
@@ -1101,8 +879,7 @@ class ChTicketsPage extends CerberusPageExtension {
 		@$ticket_ids = DevblocksPlatform::importGPC($_REQUEST['ticket_id'],'array:integer');
 
 		$fields = array(
-			DAO_Ticket::IS_CLOSED => 0,
-			DAO_Ticket::IS_DELETED => 0,
+			DAO_Ticket::STATUS_ID => Model_Ticket::STATUS_OPEN,
 		);
 		
 		//====================================
@@ -1115,8 +892,7 @@ class ChTicketsPage extends CerberusPageExtension {
 			$last_action->ticket_ids[$ticket_id] = array(
 				DAO_Ticket::SPAM_TRAINING => CerberusTicketSpamTraining::BLANK,
 				DAO_Ticket::SPAM_SCORE => 0.0001, // [TODO] Fix
-				DAO_Ticket::IS_CLOSED => 0,
-				DAO_Ticket::IS_DELETED => 0
+				DAO_Ticket::STATUS_ID => Model_Ticket::STATUS_OPEN,
 			);
 		}
 
@@ -1152,8 +928,7 @@ class ChTicketsPage extends CerberusPageExtension {
 		@$ticket_ids = DevblocksPlatform::importGPC($_REQUEST['ticket_id'],'array:integer');
 
 		$fields = array(
-			DAO_Ticket::IS_CLOSED => 1,
-			DAO_Ticket::IS_DELETED => 1,
+			DAO_Ticket::STATUS_ID => Model_Ticket::STATUS_DELETED,
 		);
 		
 		//====================================
@@ -1166,8 +941,7 @@ class ChTicketsPage extends CerberusPageExtension {
 			$last_action->ticket_ids[$ticket_id] = array(
 				DAO_Ticket::SPAM_TRAINING => CerberusTicketSpamTraining::BLANK,
 				DAO_Ticket::SPAM_SCORE => 0.5000, // [TODO] Fix
-				DAO_Ticket::IS_CLOSED => 0,
-				DAO_Ticket::IS_DELETED => 0
+				DAO_Ticket::STATUS_ID => Model_Ticket::STATUS_OPEN,
 			);
 		}
 
@@ -1203,8 +977,7 @@ class ChTicketsPage extends CerberusPageExtension {
 		@$ticket_ids = DevblocksPlatform::importGPC($_REQUEST['ticket_id'],'array:integer');
 
 		$fields = array(
-			DAO_Ticket::IS_CLOSED => 1,
-			DAO_Ticket::IS_DELETED => 1,
+			DAO_Ticket::STATUS_ID => Model_Ticket::STATUS_DELETED,
 		);
 		
 		//====================================
@@ -1215,8 +988,7 @@ class ChTicketsPage extends CerberusPageExtension {
 		if(is_array($ticket_ids))
 		foreach($ticket_ids as $ticket_id) {
 			$last_action->ticket_ids[$ticket_id] = array(
-				DAO_Ticket::IS_CLOSED => 0,
-				DAO_Ticket::IS_DELETED => 0
+				DAO_Ticket::STATUS_ID => Model_Ticket::STATUS_OPEN,
 			);
 		}
 
@@ -1278,54 +1050,16 @@ class ChTicketsPage extends CerberusPageExtension {
 		$tpl = DevblocksPlatform::getTemplateService();
 		$tpl->assign('view_id', $view_id);
 
-		$unique_sender_ids = array();
-		$unique_subjects = array();
-		
 		if(!empty($ids)) {
-			$ticket_ids = DevblocksPlatform::parseCsvString($ids);
-			
-			if(empty($ticket_ids))
-				return;
-			
-			$tickets = DAO_Ticket::getIds($ticket_ids);
-			if(is_array($tickets))
-			foreach($tickets as $ticket) { /* @var $ticket Model_Ticket */
-				$ptr =& $unique_sender_ids[$ticket->first_wrote_address_id];
-				$ptr = intval($ptr) + 1;
-				$ptr =& $unique_subjects[$ticket->subject];
-				$ptr = intval($ptr) + 1;
-			}
-	
-			arsort($unique_subjects); // sort by occurrences
-			
-			$senders = DAO_Address::getWhere(
-				sprintf("%s IN (%s)",
-					DAO_Address::ID,
-					implode(',',array_keys($unique_sender_ids))
-			));
-			
-			foreach($senders as $sender) {
-				$ptr =& $unique_senders[$sender->email];
-				$ptr = intval($ptr) + 1;
-			}
-			
-			arsort($unique_senders);
-			
-			unset($senders);
-			unset($unique_sender_ids);
-			
-			@$tpl->assign('ids', $ids);
-			@$tpl->assign('unique_senders', $unique_senders);
-			@$tpl->assign('unique_subjects', $unique_subjects);
+			$tpl->assign('ids', $ids);
 		}
 		
 		// Groups
 		$groups = DAO_Group::getAll();
 		$tpl->assign('groups', $groups);
 		
-		// Buckets
-		$group_buckets = DAO_Bucket::getGroups(); // [TODO] Cache these
-		$tpl->assign('group_buckets', $group_buckets);
+		$buckets = DAO_Bucket::getAll();
+		$tpl->assign('buckets', $buckets);
 		
 		$workers = DAO_Worker::getAllActive();
 		$tpl->assign('workers', $workers);
@@ -1342,42 +1076,35 @@ class ChTicketsPage extends CerberusPageExtension {
 		);
 		$tpl->assign('macros', $macros);
 		
-		// Broadcast
-		CerberusContexts::getContext(CerberusContexts::CONTEXT_TICKET, null, $token_labels, $token_values);
-		
 		// HTML templates
 		$html_templates = DAO_MailHtmlTemplate::getAll();
 		$tpl->assign('html_templates', $html_templates);
+		
+		// Broadcast
+		CerberusContexts::getContext(CerberusContexts::CONTEXT_TICKET, null, $token_labels, $token_values);
 		
 		// Signature
 		$translate = DevblocksPlatform::getTranslationService();
 		$token_labels['signature'] = mb_convert_case($translate->_('common.signature'), MB_CASE_TITLE);
 		asort($token_labels);
 		
-		$tpl->assign('token_labels', $token_labels);
+		$placeholders = Extension_DevblocksContext::getPlaceholderTree($token_labels);
+		$tpl->assign('placeholders', $placeholders);
 		
 		$tpl->display('devblocks:cerberusweb.core::tickets/rpc/bulk.tpl');
 	}
 	
 	// Ajax
-	function doBulkUpdateAction() {
+	function startBulkUpdateJsonAction() {
 		$active_worker = CerberusApplication::getActiveWorker();
 		
 		@$ticket_id_str = DevblocksPlatform::importGPC($_REQUEST['ids'],'string');
-		@$shortcut_name = DevblocksPlatform::importGPC($_REQUEST['shortcut_name'],'string','');
-
 		@$filter = DevblocksPlatform::importGPC($_REQUEST['filter'],'string','');
-		@$senders = DevblocksPlatform::importGPC($_REQUEST['senders'],'string','');
-		@$subjects = DevblocksPlatform::importGPC($_REQUEST['subjects'],'string','');
-		
+
 		@$view_id = DevblocksPlatform::importGPC($_REQUEST['view_id'],'string');
-		
 		$view = C4_AbstractViewLoader::getView($view_id);
 		$view->setAutoPersist(false);
 
-		$subjects = DevblocksPlatform::parseCrlfString($subjects);
-		$senders = DevblocksPlatform::parseCrlfString($senders);
-		
 		// Scheduled behavior
 		@$behavior_id = DevblocksPlatform::importGPC($_POST['behavior_id'],'string','');
 		@$behavior_when = DevblocksPlatform::importGPC($_POST['behavior_when'],'string','');
@@ -1420,7 +1147,7 @@ class ChTicketsPage extends CerberusPageExtension {
 		@$owner_id = DevblocksPlatform::importGPC($_REQUEST['do_owner'],'string',null);
 		if(is_numeric($owner_id)) {
 			$do['owner'] = array(
-				'worker_id' => $owner_id,
+				'worker_id' => intval($owner_id),
 			);
 		}
 		
@@ -1428,24 +1155,22 @@ class ChTicketsPage extends CerberusPageExtension {
 		@$org_id = DevblocksPlatform::importGPC($_REQUEST['do_org'],'string',null);
 		if(is_numeric($org_id)) {
 			$do['org'] = array(
-				'org_id' => $org_id,
+				'org_id' => intval($org_id),
 			);
 		}
 		
 		// Set status
-		@$status = DevblocksPlatform::importGPC($_REQUEST['do_status'],'string',null);
-		if(0 != strlen($status)) {
+		@$status_id = DevblocksPlatform::importGPC($_REQUEST['do_status'],'string',null);
+		if(is_numeric($status_id)) {
 			$do['status'] = array(
-				'is_waiting' => (3==$status?1:0), // explicit waiting
-				'is_closed' => ((0==$status||3==$status)?0:1), // not open or waiting
-				'is_deleted' => (2==$status?1:0), // explicit deleted
+				'status_id' => intval($status_id),
 			);
 			
 			// Waiting until
 			$reopen = '';
-			switch($status) {
-				case 1: // closed
-				case 3: // waiting
+			switch($status_id) {
+				case Model_Ticket::STATUS_WAITING:
+				case Model_Ticket::STATUS_CLOSED:
 					@$reopen = DevblocksPlatform::importGPC($_REQUEST['do_reopen'],'string',null);
 					break;
 			}
@@ -1489,12 +1214,6 @@ class ChTicketsPage extends CerberusPageExtension {
 		$ids = array();
 		
 		switch($filter) {
-			case 'sender':
-				$data = $senders;
-				break;
-			case 'subject':
-				$data = $subjects;
-				break;
 			case 'checks':
 				$filter = ''; // bulk update just looks for $ids == !null
 				$ids = DevblocksPlatform::parseCsvString($ticket_id_str);
@@ -1515,112 +1234,21 @@ class ChTicketsPage extends CerberusPageExtension {
 		// Do: Custom fields
 		$do = DAO_CustomFieldValue::handleBulkPost($do);
 		
-		$view->doBulkUpdate($filter, '', $data, $do, $ids);
-		$view->render();
-		return;
-	}
-
-	function doBulkUpdateBroadcastTestAction() {
-		@$view_id = DevblocksPlatform::importGPC($_REQUEST['view_id'],'string');
-		
-		$active_worker = CerberusApplication::getActiveWorker();
-		$tpl_builder = DevblocksPlatform::getTemplateBuilder();
-		
-		$view = C4_AbstractViewLoader::getView($view_id);
-		$view->setAutoPersist(false);
-
-		$tpl = DevblocksPlatform::getTemplateService();
-		
-		if($active_worker->hasPriv('core.ticket.view.actions.broadcast_reply')) {
-			@$broadcast_message = DevblocksPlatform::importGPC($_REQUEST['broadcast_message'],'string',null);
-			@$broadcast_format = DevblocksPlatform::importGPC($_REQUEST['broadcast_format'],'string',null);
-			@$broadcast_html_template_id = DevblocksPlatform::importGPC($_REQUEST['broadcast_html_template_id'],'integer',0);
-
-			@$filter = DevblocksPlatform::importGPC($_REQUEST['filter'],'string','');
-			@$ids = DevblocksPlatform::importGPC($_REQUEST['ids'],'string','');
-			
-			// Filter to checked
-			if('checks' == $filter && !empty($ids)) {
-				$view->addParam(new DevblocksSearchCriteria(SearchFields_Ticket::TICKET_ID,'in',explode(',', $ids)));
-			}
-			
-			$results = $view->getDataSample(1);
-			
-			if(empty($results)) {
-				$success = false;
-				$output = "There aren't any rows in this view!";
-				
-			} else {
-				// Try to build the template
-				CerberusContexts::getContext(CerberusContexts::CONTEXT_TICKET, current($results), $token_labels, $token_values);
-				
-				// Add the signature to the token_values
-				// [TODO] This shouldn't be redundant with ::doBulkUpdateAction()
-				if(in_array('signature', $tpl_builder->tokenize($broadcast_message))) {
-					if(isset($token_values['group_id']) && null != ($sig_group = DAO_Group::get($token_values['group_id']))) {
-						 $sig_template = $sig_group->getReplySignature(@intval($token_values['bucket_id']));
-						 CerberusContexts::getContext(CerberusContexts::CONTEXT_WORKER, $active_worker->id, $worker_labels, $worker_values);
-						 if(false !== ($out = $tpl_builder->build($sig_template, $worker_values))) {
-						 	$token_values['signature'] = $out;
-						 }
-					}
-				}
-				
-				if(false === ($out = $tpl_builder->build($broadcast_message, $token_values))) {
-					// If we failed, show the compile errors
-					$errors = $tpl_builder->getErrors();
-					$success = false;
-					$output = @array_shift($errors);
-					
-				} else {
-					// If successful, return the parsed template
-					$success = true;
-					$output = $out;
-					
-					switch($broadcast_format) {
-						case 'parsedown':
-							// Markdown
-							$output = DevblocksPlatform::parseMarkdown($output);
-							
-							// HTML Template
-							
-							$html_template = null;
-							
-							if($broadcast_html_template_id)
-								$html_template = DAO_MailHtmlTemplate::get($broadcast_html_template_id);
-							
-							if(!$html_template && false != ($group = DAO_Group::get($token_values['group_id'])))
-								$html_template = $group->getReplyHtmlTemplate($token_values['bucket_id']);
-							
-							if(!$html_template && false != ($replyto = DAO_AddressOutgoing::getDefault()))
-								$html_template = $replyto->getReplyHtmlTemplate();
-							
-							if($html_template)
-								$output = $tpl_builder->build($html_template->content, array('message_body' => $output));
-							
-							// HTML Purify
-							$output = DevblocksPlatform::purifyHTML($output, true);
-							break;
-							
-						default:
-							$output = nl2br(DevblocksPlatform::strEscapeHtml($output));
-							break;
-					}
-				}
-			}
-			
-			if($success) {
-				header("Content-Type: text/html; charset=" . LANG_CHARSET_CODE);
-				echo sprintf('<html><head><meta http-equiv="content-type" content="text/html; charset=%s"></head><body>',
-					LANG_CHARSET_CODE
-				);
-				echo $output;
-				echo '</body></html>';
-				
-			} else {
-				echo $output;
-			}
+		// If we have specific IDs, add a filter for those too
+		if(!empty($ids)) {
+			$view->addParam(new DevblocksSearchCriteria(SearchFields_Ticket::TICKET_ID, 'in', $ids));
 		}
+		
+		// Create batches
+		$batch_key = DAO_ContextBulkUpdate::createFromView($view, $do);
+		
+		header('Content-Type: application/json; charset=utf-8');
+		
+		echo json_encode(array(
+			'cursor' => $batch_key,
+		));
+		
+		return;
 	}
 	
 };

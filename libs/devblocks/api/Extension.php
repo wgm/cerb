@@ -287,17 +287,146 @@ abstract class Extension_DevblocksContext extends DevblocksExtension {
 			return $ext;
 		}
 	}
+	
+	static function getPlaceholderTree($labels) {
+		$keys = array();
+		
+		// Tokenize the placeholders
+		foreach($labels as $k => &$label) {
+			$label = trim($label);
+			
+			if('_label' == $k || '_label' == substr($k, -6)) {
+				$label = !empty($label) ? ($label.' (Record)') : '(Record)';
+			}
+			
+			$parts = explode(' ', $label);
+			
+			$ptr =& $keys;
+			
+			while($part = array_shift($parts)) {
+				if(!isset($ptr[$part]))
+					$ptr[$part] = array();
+				
+				$ptr =& $ptr[''.$part];
+			}
+		}
+		
+		// Convert the flat tokens into a tree
+		$forward_recurse = function(&$node, $node_key, &$stack=null) use (&$keys, &$forward_recurse, &$labels) {
+			if(is_null($stack))
+				$stack = array();
+			
+			$len = count($node);
+			
+			if(!empty($node_key))
+				array_push($stack, ''.$node_key);
+			
+			switch($len) {
+				case 0:
+					$o = new stdClass();
+					$o->label = implode(' ', $stack);
+					$o->key = array_search($o->label, $labels);
+					$o->l = $node_key;
+					$node = $o;
+					break;
+					
+				default:
+					if(is_array($node))
+					foreach($node as $k => &$n) {
+						$forward_recurse($n, $k, $stack);
+					}
+					break;
+			}
+			
+			array_pop($stack);
+		};
+		
+		$forward_recurse($keys, '');
+		
+		$condense = function(&$node, $key=null, &$parent=null) use (&$condense) {
+			// If this node has exactly one child
+			if(is_array($node) && 1 == count($node) && $parent) {
+				reset($node);
+				
+				// Replace the current node with its only child
+				$k = key($node);
+				$n = array_pop($node);
+				if(is_object($n))
+					$n->l = $key . ' ' . $n->l;
+				
+				// Deconstruct our parent
+				$keys = array_keys($parent);
+				$vals = array_values($parent);
+				
+				// Replace this node's key and value in the parent
+				$idx = array_search($key, $keys);
+				$keys[$idx] = $key.' '.$k;
+				$vals[$idx] = $n;
+				
+				// Reconstruct the parent
+				$parent = array_combine($keys, $vals);
+			}
+			
+			// If this node still has children, recurse into them
+			if(is_array($node))
+			foreach($node as $k => &$n)
+				$condense($n, $k, $node);
+		};
+		$condense($keys);
+		
+		return $keys;
+	}
 
-   	function authorize($context_id, Model_Worker $worker) {
+	function authorize($context_id, Model_Worker $worker) {
 		return true;
 	}
 
 	abstract function getRandom();
 	abstract function getMeta($context_id);
 	abstract function getContext($object, &$token_labels, &$token_values, $prefix=null);
+	
+	function getDefaultProperties() {
+		return array();
+	}
+	
+	/**
+	 * @return array
+	 */
+	function getCardProperties() {
+		// Load cascading properties
+		$properties = DevblocksPlatform::getPluginSetting('cerberusweb.core', 'card:' . $this->id, array(), true);
+		
+		if(empty($properties))
+			$properties = $this->getDefaultProperties();
+		
+		return $properties;
+	}
 
 	function getDaoClass() {
-		return @$this->manifest->params['dao_class'];
+		$class = str_replace('Context_','DAO_', get_called_class());
+		
+		if(!class_exists($class))
+			return false;
+		
+		return $class;
+	}
+	
+	function getSearchClass() {
+		$class = str_replace('Context_','SearchFields_', get_called_class());
+		
+		if(!class_exists($class))
+			return false;
+		
+		return $class;
+	}
+
+	function getViewClass() {
+		$class = str_replace('Context_','View_', get_called_class());
+		
+		if(!class_exists($class))
+			return false;
+		
+		return $class;
 	}
 
 	function getModelObjects(array $ids) {
@@ -423,11 +552,6 @@ abstract class Extension_DevblocksContext extends DevblocksExtension {
 	}
 
 	abstract function getChooserView($view_id=null);
-
-	function getViewClass() {
-		return @$this->manifest->params['view_class'];
-	}
-
 	abstract function getView($context=null, $context_id=null, $options=array(), $view_id=null);
 
 	function lazyLoadContextValues($token, $dictionary) { return array(); }
@@ -598,6 +722,37 @@ abstract class Extension_DevblocksContext extends DevblocksExtension {
 		}
 
 		return true;
+	}
+	
+	static function getTimelineComments($context, $context_id, $is_ascending=true) {
+		$timeline = array();
+		
+		if(false != ($comments = DAO_Comment::getByContext($context, $context_id)))
+			$timeline = array_merge($timeline, $comments);
+		
+		usort($timeline, function($a, $b) use ($is_ascending) {
+			if($a instanceof Model_Comment) {
+				$a_time = intval($a->created);
+			} else {
+				$a_time = 0;
+			}
+			
+			if($b instanceof Model_Comment) {
+				$b_time = intval($b->created);
+			} else {
+				$b_time = 0;
+			}
+			
+			if($a_time > $b_time) {
+				return ($is_ascending) ? 1 : -1;
+			} else if ($a_time < $b_time) {
+				return ($is_ascending) ? -1 : 1;
+			} else {
+				return 0;
+			}
+		});
+		
+		return $timeline;
 	}
 };
 
@@ -1889,7 +2044,6 @@ interface IDevblocksSearchEngine {
 
 	public function getQuickSearchExamples(Extension_DevblocksSearchSchema $schema);
 	public function getIndexMeta(Extension_DevblocksSearchSchema $schema);
-	public function getQueryFromParam($param);
 
 	public function query(Extension_DevblocksSearchSchema $schema, $query, array $attributes=array(), $limit=250);
 	public function index(Extension_DevblocksSearchSchema $schema, $id, array $doc, array $attributes=array());
@@ -1927,7 +2081,7 @@ abstract class Extension_DevblocksSearchEngine extends DevblocksExtension implem
 			return $ext;
 		}
 	}
-
+	
 	protected function escapeNamespace($namespace) {
 		return strtolower(DevblocksPlatform::strAlphaNum($namespace, '\_'));
 	}
@@ -1944,6 +2098,33 @@ abstract class Extension_DevblocksSearchEngine extends DevblocksExtension implem
 		return implode(' ', $output);
 	}
 
+	public function getQueryFromParam($param) {
+		$values = array();
+
+		if(!is_array($param->value) && !is_string($param->value))
+			return false;
+		
+		if(!is_array($param->value) && preg_match('#^\[.*\]$#', $param->value)) {
+			$values = json_decode($param->value, true);
+			
+		} elseif(is_array($param->value)) {
+			$values = $param->value;
+			
+		} else {
+			$values = $param->value;
+			
+		}
+		
+		if(!is_array($values)) {
+			$value = $values;
+			
+		} else {
+			$value = $values[0];
+		}
+		
+		return $value;
+	}
+	
 	public function truncateOnWhitespace($content, $length) {
 		$start = 0;
 		$len = mb_strlen($content);
@@ -2060,31 +2241,9 @@ abstract class Extension_DevblocksSearchSchema extends DevblocksExtension {
 		return $engine->getIndexMeta($this);
 	}
 	
-	protected function _getDictionariesFromModels(array $models, $context, array $keys=array()) {
-		$dicts = array();
-		
-		if(empty($models)) {
-			return array();
-		}
-		
-		foreach($models as $model_id => $model) {
-			$labels = array();
-			$values = array();
-			CerberusContexts::getContext($context, $model, $labels, $values, null, true, true);
-			$dicts[$model_id] = DevblocksDictionaryDelegate::instance($values);
-		}
-		
-		// Batch load extra keys
-		if(is_array($keys) && !empty($keys))
-		foreach($keys as $key) {
-			DevblocksDictionaryDelegate::bulkLazyLoad($dicts, $key);
-		}
-		
-		return $dicts;
-	}
-
 	abstract function getNamespace();
 	abstract function getAttributes();
+	//abstract function getFields();
 	abstract function query($query, $attributes=array(), $limit=250);
 	abstract function index($stop_time=null);
 	abstract function reindex();

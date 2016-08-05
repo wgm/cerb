@@ -2,29 +2,29 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
 | The latest version of this license can be found here:
-| http://cerberusweb.com/license
+| http://cerb.io/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://www.cerbweb.com	    http://www.webgroupmedia.com/
+|	http://cerb.io	    http://webgroup.media
 ***********************************************************************/
 /*
- * IMPORTANT LICENSING NOTE from your friends on the Cerb Development Team
+ * IMPORTANT LICENSING NOTE from your friends at Cerb
  *
- * Sure, it would be so easy to just cheat and edit this file to use the
- * software without paying for it.  But we trust you anyway.  In fact, we're
- * writing this software for you!
+ * Sure, it would be really easy to just cheat and edit this file to use
+ * Cerb without paying for a license.  We trust you anyway.
  *
- * Quality software backed by a dedicated team takes money to develop.  We
- * don't want to be out of the office bagging groceries when you call up
- * needing a helping hand.  We'd rather spend our free time coding your
- * feature requests than mowing the neighbors' lawns for rent money.
+ * It takes a significant amount of time and money to develop, maintain,
+ * and support high-quality enterprise software with a dedicated team.
+ * For Cerb's entire history we've avoided taking money from outside
+ * investors, and instead we've relied on actual sales from satisfied
+ * customers to keep the project running.
  *
  * We've never believed in hiding our source code out of paranoia over not
  * getting paid.  We want you to have the full source code and be able to
@@ -32,19 +32,12 @@
  * having less of everything than you might need (time, people, money,
  * energy).  We shouldn't be your bottleneck.
  *
- * We've been building our expertise with this project since January 2002.  We
- * promise spending a couple bucks [Euro, Yuan, Rupees, Galactic Credits] to
- * let us take over your shared e-mail headache is a worthwhile investment.
- * It will give you a sense of control over your inbox that you probably
- * haven't had since spammers found you in a game of 'E-mail Battleship'.
- * Miss. Miss. You sunk my inbox!
+ * As a legitimate license owner, your feedback will help steer the project.
+ * We'll also prioritize your issues, and work closely with you to make sure
+ * your teams' needs are being met.
  *
- * A legitimate license entitles you to support from the developers,
- * and the warm fuzzy feeling of feeding a couple of obsessed developers
- * who want to help you get more done.
- *
- \* - Jeff Standen, Darren Sugita, Dan Hildebrandt
- *	 Webgroup Media LLC - Developers of Cerb
+ * - Jeff Standen and Dan Hildebrandt
+ *	 Founders at Webgroup Media LLC; Developers of Cerb
  */
 
 if(class_exists('Extension_PageSection')):
@@ -424,6 +417,9 @@ class View_Translation extends C4_AbstractView implements IAbstractView_Subtotal
 			$this->renderSortAsc,
 			$this->renderTotal
 		);
+		
+		$this->_lazyLoadCustomFieldsIntoObjects($objects, 'SearchFields_Translation');
+		
 		return $objects;
 	}
 
@@ -441,12 +437,6 @@ class View_Translation extends C4_AbstractView implements IAbstractView_Subtotal
 				case SearchFields_Translation::LANG_CODE:
 					$pass = true;
 					break;
-					
-				// Valid custom fields
-				default:
-					if('cf_' == substr($field_key,0,3))
-						$pass = $this->_canSubtotalCustomField($field_key);
-					break;
 			}
 			
 			if($pass)
@@ -459,6 +449,7 @@ class View_Translation extends C4_AbstractView implements IAbstractView_Subtotal
 	function getSubtotalCounts($column) {
 		$counts = array();
 		$fields = $this->getFields();
+		$context = null; // [TODO]
 
 		if(!isset($fields[$column]))
 			return array();
@@ -466,26 +457,115 @@ class View_Translation extends C4_AbstractView implements IAbstractView_Subtotal
 		switch($column) {
 			case SearchFields_Translation::LANG_CODE:
 				$codes = DAO_Translation::getDefinedLangCodes();
-				$counts = $this->_getSubtotalCountForStringColumn('DAO_Translation', $column, $codes, 'in', 'options[]');
-				break;
-
-			default:
-				// Custom fields
-				if('cf_' == substr($column,0,3)) {
-					$counts = $this->_getSubtotalCountForCustomColumn('DAO_Translation', $column, 't.id');
-				}
-				
+				$counts = $this->_getSubtotalCountForLanguage();
 				break;
 		}
 		
 		return $counts;
 	}
 	
+	private function _getSubtotalCountForLanguage() {
+		$field_key = SearchFields_Translation::LANG_CODE;
+		$value_oper = DevblocksSearchCriteria::OPER_IN;
+		$value_key = 'options[]';
+		
+		if(false == ($results = $this->_getSubtotalDataForLanguage()))
+			return false;
+		
+		if(is_array($results))
+		foreach($results as $result) {
+			$label = $result['label'];
+			$key = $label;
+			$hits = $result['hits'];
+
+			if(isset($label_map[$result['label']]))
+				$label = $label_map[$result['label']];
+			
+			// Null strings
+			if(empty($label)) {
+				$label = '(none)';
+				if(!isset($counts[$key]))
+					$counts[$key] = array(
+						'hits' => $hits,
+						'label' => $label,
+						'filter' =>
+							array(
+								'field' => $field_key,
+								'oper' => DevblocksSearchCriteria::OPER_IN_OR_NULL,
+								'values' => array($value_key => ''),
+							),
+						'children' => array()
+					);
+				
+			// Anything else
+			} else {
+				if(!isset($counts[$key]))
+					$counts[$key] = array(
+						'hits' => $hits,
+						'label' => $label,
+						'filter' =>
+							array(
+								'field' => $field_key,
+								'oper' => $value_oper,
+								'values' => array($value_key => $key),
+							),
+						'children' => array()
+					);
+				
+			}
+		}
+		
+		return $counts;
+	}
+	
+	private function _getSubtotalDataForLanguage() {
+		$db = DevblocksPlatform::getDatabaseService();
+		
+		$field_key = SearchFields_Translation::LANG_CODE;
+		
+		$fields = $this->getFields();
+		$columns = $this->view_columns;
+		$params = $this->getParams();
+		
+		if(!method_exists('DAO_Translation','getSearchQueryComponents'))
+			return array();
+		
+		if(!isset($columns[$field_key]))
+			$columns[] = $field_key;
+		
+		$query_parts = call_user_func_array(
+			array('DAO_Translation','getSearchQueryComponents'),
+			array(
+				$columns,
+				$params,
+				$this->renderSortBy,
+				$this->renderSortAsc
+			)
+		);
+		
+		$join_sql = $query_parts['join'];
+		$where_sql = $query_parts['where'];
+		
+		$sql = sprintf("SELECT %s.%s as label, count(*) as hits ", //SQL_CALC_FOUND_ROWS
+				$fields[$field_key]->db_table,
+				$fields[$field_key]->db_column
+			).
+			$join_sql.
+			$where_sql.
+			"GROUP BY label ".
+			"ORDER BY hits DESC ".
+			"LIMIT 0,250 "
+		;
+		
+		$results = $db->GetArraySlave($sql);
+		return $results;
+	}
+	
 	function getQuickSearchFields() {
 		$search_fields = SearchFields_Translation::getFields();
 		
 		$fields = array(
-			'_fulltext' => 
+			'text' => 
 				array(
 					'type' => DevblocksSearchCriteria::TYPE_TEXT,
 					'options' => array('param_key' => SearchFields_Translation::STRING_DEFAULT, 'match' => DevblocksSearchCriteria::OPTION_TEXT_PARTIAL),
@@ -499,13 +579,18 @@ class View_Translation extends C4_AbstractView implements IAbstractView_Subtotal
 				array(
 					'type' => DevblocksSearchCriteria::TYPE_VIRTUAL,
 					'options' => array('param_key' => SearchFields_Translation::LANG_CODE),
+					'examples' => array(
+						'en',
+						'[en,de,nl]',
+						'![en]',
+					)
 				),
-			'myTranslation' => 
+			'mine' => 
 				array(
 					'type' => DevblocksSearchCriteria::TYPE_TEXT,
 					'options' => array('param_key' => SearchFields_Translation::STRING_OVERRIDE, 'match' => DevblocksSearchCriteria::OPTION_TEXT_PARTIAL),
 				),
-			'text' => 
+			'theirs' => 
 				array(
 					'type' => DevblocksSearchCriteria::TYPE_TEXT,
 					'options' => array('param_key' => SearchFields_Translation::STRING_DEFAULT, 'match' => DevblocksSearchCriteria::OPTION_TEXT_PARTIAL),
@@ -522,46 +607,62 @@ class View_Translation extends C4_AbstractView implements IAbstractView_Subtotal
 		
 		return $fields;
 	}	
-	
-	function getParamsFromQuickSearchFields($fields) {
-		$search_fields = $this->getQuickSearchFields();
-		$params = DevblocksSearchCriteria::getParamsFromQueryFields($fields, $search_fields);
 
-		// Handle virtual fields and overrides
-		if(is_array($fields))
-		foreach($fields as $k => $v) {
-			switch($k) {
-				case 'lang':
-					$lang_codes = DAO_Translation::getDefinedLangCodes();
-					
-					$field_keys = array(
-						'lang' => SearchFields_Translation::LANG_CODE,
-					);
-					
-					@$field_key = $field_keys[$k];
-					$oper = DevblocksSearchCriteria::OPER_IN;
-					$patterns = DevblocksPlatform::parseCsvString($v);
-					
-					$values = array();
-					
-					foreach($patterns as $pattern) {
-						foreach($lang_codes as $lang_code => $lang_label) {
-							if(false !== stripos($lang_code . ' ' . $lang_label, $pattern))
-								$values[$lang_code] = true;
-						}
+	function getParamFromQuickSearchFieldTokens($field, $tokens) {
+		switch($field) {
+			case 'lang':
+				$field_key = SearchFields_Translation::LANG_CODE;
+				$oper = null;
+				$patterns = array();
+				
+				CerbQuickSearchLexer::getOperArrayFromTokens($tokens, $oper, $patterns);
+				
+				$lang_codes = DAO_Translation::getDefinedLangCodes();
+				
+				$values = array();
+				
+				foreach($patterns as $pattern) {
+					foreach($lang_codes as $lang_code => $lang_label) {
+						if(false !== stripos($lang_code . ' ' . $lang_label, $pattern))
+							$values[$lang_code] = true;
 					}
+				}
 
-					$param = new DevblocksSearchCriteria(
-						$field_key,
-						$oper,
-						array_keys($values)
-					);
-					$params[$field_key] = $param;
-					break;
-			}
+				return new DevblocksSearchCriteria(
+					$field_key,
+					$oper,
+					array_keys($values)
+				);
+				break;
+		
+			case 'ticket.id':
+				$field_key = SearchFields_Address::VIRTUAL_TICKET_ID;
+				$oper = null;
+				$value = null;
+				
+				if(false == CerbQuickSearchLexer::getOperArrayFromTokens($tokens, $oper, $value))
+					return false;
+				
+				$value = DevblocksPlatform::sanitizeArray($value, 'int');
+				
+				return new DevblocksSearchCriteria(
+					$field_key,
+					$oper,
+					$value
+				);
+				break;
+				
+			case 'watchers':
+				return DevblocksSearchCriteria::getWatcherParamFromTokens(SearchFields_Address::VIRTUAL_WATCHERS, $tokens);
+				break;
+				
+			default:
+				$search_fields = $this->getQuickSearchFields();
+				return DevblocksSearchCriteria::getParamFromQueryFieldTokens($field, $tokens, $search_fields);
+				break;
 		}
 		
-		return $params;
+		return false;
 	}
 	
 	function render() {

@@ -203,11 +203,6 @@
 				<seg>[Tickets] Kan tickets in lijsten samenvoegen</seg>
 			</tuv>
 		</tu>
-		<tu tuid="acl.core.ticket.view.actions.pile_sort">
-			<tuv xml:lang="nl_NL">
-				<seg>[Tickets] Kan stapel-sorteerder op lijsten gebruiken </seg>
-			</tuv>
-		</tu>
 		<tu tuid="acl.core.watchers.assign">
 			<tuv xml:lang="nl_NL">
 				<seg/>
@@ -483,56 +478,6 @@
 				<seg/>
 			</tuv>
 		</tu>
-		<tu tuid="activity.activity">
-			<tuv xml:lang="nl_NL">
-				<seg>%s bekijkt het activiteiten logboek</seg>
-			</tuv>
-		</tu>
-		<tu tuid="activity.address_book">
-			<tuv xml:lang="nl_NL">
-				<seg>%s bekijkt het adresboek</seg>
-			</tuv>
-		</tu>
-		<tu tuid="activity.config">
-			<tuv xml:lang="nl_NL">
-				<seg>%s configureert de helpdesk</seg>
-			</tuv>
-		</tu>
-		<tu tuid="activity.default">
-			<tuv xml:lang="nl_NL">
-				<seg>%s bekijkt de helpdesk</seg>
-			</tuv>
-		</tu>
-		<tu tuid="activity.display_ticket">
-			<tuv xml:lang="nl_NL">
-				<seg>%s bekijkt ticket %s</seg>
-			</tuv>
-		</tu>
-		<tu tuid="activity.kb">
-			<tuv xml:lang="nl_NL">
-				<seg>%s bekijkt de kennisdatabase</seg>
-			</tuv>
-		</tu>
-		<tu tuid="activity.mail.search">
-			<tuv xml:lang="nl_NL">
-				<seg>%s zoekt naar tickets</seg>
-			</tuv>
-		</tu>
-		<tu tuid="activity.mail.workspaces">
-			<tuv xml:lang="nl_NL">
-				<seg>%s bekijkt %s in werkbladen</seg>
-			</tuv>
-		</tu>
-		<tu tuid="activity.simulator">
-			<tuv xml:lang="nl_NL">
-				<seg>%s genereert gesimuleerde tickets</seg>
-			</tuv>
-		</tu>
-		<tu tuid="activity.tickets">
-			<tuv xml:lang="nl_NL">
-				<seg>%s bekijkt %s tickets</seg>
-			</tuv>
-		</tu>
 		<tu tuid="address.address">
 			<tuv xml:lang="nl_NL">
 				<seg/>
@@ -693,11 +638,6 @@
 				<seg>Log Call</seg>
 			</tuv>
 		</tu>
-		<tu tuid="call_entry.model.is_closed">
-			<tuv xml:lang="nl_NL">
-				<seg>Is gesloten</seg>
-			</tuv>
-		</tu>
 		<tu tuid="call_entry.model.is_outgoing">
 			<tuv xml:lang="nl_NL">
 				<seg>Is uitgaand</seg>
@@ -771,6 +711,11 @@
 		<tu tuid="common.access_denied">
 			<tuv xml:lang="nl_NL">
 				<seg>Toegang gewijgerd</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.actions">
+			<tuv xml:lang="nl_NL">
+				<seg>Acties</seg>
 			</tuv>
 		</tu>
 		<tu tuid="common.active">
@@ -1221,6 +1166,16 @@
 		<tu tuid="common.languages">
 			<tuv xml:lang="nl_NL">
 				<seg>Talen</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.last_activity">
+			<tuv xml:lang="nl_NL">
+				<seg>Laatste activiteit</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.last_activity_date">
+			<tuv xml:lang="nl_NL">
+				<seg>Datum laatste activiteit</seg>
 			</tuv>
 		</tu>
 		<tu tuid="common.last_login">
@@ -2506,11 +2461,6 @@
 		<tu tuid="dashboard">
 			<tuv xml:lang="nl_NL">
 				<seg>Werkblad</seg>
-			</tuv>
-		</tu>
-		<tu tuid="dashboard.actions">
-			<tuv xml:lang="nl_NL">
-				<seg>Acties</seg>
 			</tuv>
 		</tu>
 		<tu tuid="dashboard.active_dashboard">
@@ -4554,6 +4504,11 @@
 				<seg>Gesloten</seg>
 			</tuv>
 		</tu>
+		<tu tuid="status.completed">
+			<tuv xml:lang="nl_NL">
+				<seg>Voltooid</seg>
+			</tuv>
+		</tu>
 		<tu tuid="status.deleted">
 			<tuv xml:lang="nl_NL">
 				<seg>Verwijderd</seg>
@@ -4587,11 +4542,6 @@
 		<tu tuid="task.status.active">
 			<tuv xml:lang="nl_NL">
 				<seg>Actief</seg>
-			</tuv>
-		</tu>
-		<tu tuid="task.status.completed">
-			<tuv xml:lang="nl_NL">
-				<seg>Voltooid</seg>
 			</tuv>
 		</tu>
 		<tu tuid="task.worker_id">
@@ -4964,16 +4914,6 @@
 				<seg>Activiteit</seg>
 			</tuv>
 		</tu>
-		<tu tuid="timetracking_entry.id">
-			<tuv xml:lang="nl_NL">
-				<seg>ID</seg>
-			</tuv>
-		</tu>
-		<tu tuid="timetracking_entry.is_closed">
-			<tuv xml:lang="nl_NL">
-				<seg>Is gesloten</seg>
-			</tuv>
-		</tu>
 		<tu tuid="timetracking_entry.log_date">
 			<tuv xml:lang="nl_NL">
 				<seg>Log datum</seg>
@@ -5189,11 +5129,6 @@
 				<seg/>
 			</tuv>
 		</tu>
-		<tu tuid="whos_online.heading">
-			<tuv xml:lang="nl_NL">
-				<seg>%s Werknemer(s) ingelogd:</seg>
-			</tuv>
-		</tu>
 		<tu tuid="worker.at_mention_name">
 			<tuv xml:lang="nl_NL">
 				<seg/>
@@ -5207,16 +5142,6 @@
 		<tu tuid="worker.is_superuser">
 			<tuv xml:lang="nl_NL">
 				<seg>Administrator</seg>
-			</tuv>
-		</tu>
-		<tu tuid="worker.last_activity">
-			<tuv xml:lang="nl_NL">
-				<seg>Laatste activiteit</seg>
-			</tuv>
-		</tu>
-		<tu tuid="worker.last_activity_date">
-			<tuv xml:lang="nl_NL">
-				<seg>Datum laatste activiteit</seg>
 			</tuv>
 		</tu>
 		<tu tuid="worker.title">

@@ -2,17 +2,17 @@
 /************************************************************************
  | Cerb(tm) developed by Webgroup Media, LLC.
  |-----------------------------------------------------------------------
- | All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
+ | All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
  |   unless specifically noted otherwise.
  |
  | This source code is released under the Devblocks Public License.
  | The latest version of this license can be found here:
- | http://cerberusweb.com/license
+ | http://cerb.io/license
  |
  | By using this software, you acknowledge having read this license
  | and agree to be bound thereby.
  | ______________________________________________________________________
- |	http://www.cerbweb.com	    http://www.webgroupmedia.com/
+ |	http://cerb.io	    http://webgroup.media
  ***********************************************************************/
 
 class DAO_WorkspaceWidget extends Cerb_ORMHelper {
@@ -37,7 +37,7 @@ class DAO_WorkspaceWidget extends Cerb_ORMHelper {
 		return $id;
 	}
 	
-	static function update($ids, $fields) {
+	static function update($ids, $fields, $option_bits = 0) {
 		if(!is_array($ids))
 			$ids = array($ids);
 		
@@ -49,7 +49,7 @@ class DAO_WorkspaceWidget extends Cerb_ORMHelper {
 				continue;
 			
 			// Make changes
-			parent::_update($batch_ids, 'workspace_widget', $fields);
+			parent::_update($batch_ids, 'workspace_widget', $fields, 'id', $option_bits);
 		}
 	}
 	
@@ -119,6 +119,9 @@ class DAO_WorkspaceWidget extends Cerb_ORMHelper {
 	static private function _getObjectsFromResult($rs) {
 		$objects = array();
 		
+		if(!($rs instanceof mysqli_result))
+			return false;
+		
 		while($row = mysqli_fetch_assoc($rs)) {
 			$object = new Model_WorkspaceWidget();
 			$object->id = intval($row['id']);
@@ -187,7 +190,7 @@ class DAO_WorkspaceWidget extends Cerb_ORMHelper {
 	public static function getSearchQueryComponents($columns, $params, $sortBy=null, $sortAsc=null) {
 		$fields = SearchFields_WorkspaceWidget::getFields();
 		
-		list($tables,$wheres) = parent::_parseSearchParams($params, $columns, $fields, $sortBy);
+		list($tables,$wheres) = parent::_parseSearchParams($params, $columns, 'SearchFields_WorkspaceWidget', $sortBy);
 		
 		$select_sql = sprintf("SELECT ".
 			"workspace_widget.id as %s, ".
@@ -215,18 +218,7 @@ class DAO_WorkspaceWidget extends Cerb_ORMHelper {
 		$where_sql = "".
 			(!empty($wheres) ? sprintf("WHERE %s ",implode(' AND ',$wheres)) : "WHERE 1 ");
 			
-		$sort_sql = self::_buildSortClause($sortBy, $sortAsc, $fields);
-	
-		array_walk_recursive(
-			$params,
-			array('DAO_WorkspaceWidget', '_translateVirtualParameters'),
-			array(
-				'join_sql' => &$join_sql,
-				'where_sql' => &$where_sql,
-				'tables' => &$tables,
-				'has_multiple_values' => &$has_multiple_values
-			)
-		);
+		$sort_sql = self::_buildSortClause($sortBy, $sortAsc, $fields, $select_sql, 'SearchFields_WorkspaceWidget');
 	
 		return array(
 			'primary_table' => 'workspace_widget',
@@ -236,26 +228,6 @@ class DAO_WorkspaceWidget extends Cerb_ORMHelper {
 			'has_multiple_values' => $has_multiple_values,
 			'sort' => $sort_sql,
 		);
-	}
-	
-	private static function _translateVirtualParameters($param, $key, &$args) {
-		if(!is_a($param, 'DevblocksSearchCriteria'))
-			return;
-			
-		//$from_context = CerberusContexts::CONTEXT_EXAMPLE;
-		//$from_index = 'example.id';
-		
-		$param_key = $param->field;
-		settype($param_key, 'string');
-		
-		switch($param_key) {
-			/*
-			case SearchFields_EXAMPLE::VIRTUAL_WATCHERS:
-				$args['has_multiple_values'] = true;
-				self::_searchComponentsVirtualWatchers($param, $from_context, $from_index, $args['join_sql'], $args['where_sql'], $args['tables']);
-				break;
-			*/
-		}
 	}
 	
 	/**
@@ -290,13 +262,18 @@ class DAO_WorkspaceWidget extends Cerb_ORMHelper {
 			$sort_sql;
 			
 		if($limit > 0) {
-			$rs = $db->SelectLimit($sql,$limit,$page*$limit) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs mysqli_result */
+			if(false == ($rs = $db->SelectLimit($sql,$limit,$page*$limit)))
+				return false;
 		} else {
-			$rs = $db->ExecuteSlave($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs mysqli_result */
+			if(false == ($rs = $db->ExecuteSlave($sql)))
+				return false;
 			$total = mysqli_num_rows($rs);
 		}
 		
 		$results = array();
+		
+		if(!($rs instanceof mysqli_result))
+			return false;
 		
 		while($row = mysqli_fetch_assoc($rs)) {
 			$object_id = intval($row[SearchFields_WorkspaceWidget::ID]);
@@ -323,7 +300,7 @@ class DAO_WorkspaceWidget extends Cerb_ORMHelper {
 
 };
 
-class SearchFields_WorkspaceWidget implements IDevblocksSearchFields {
+class SearchFields_WorkspaceWidget extends DevblocksSearchFields {
 	const ID = 'w_id';
 	const EXTENSION_ID = 'w_extension_id';
 	const WORKSPACE_TAB_ID = 'w_workspace_tab_id';
@@ -333,10 +310,41 @@ class SearchFields_WorkspaceWidget implements IDevblocksSearchFields {
 	const POS = 'w_pos';
 	const CACHE_TTL = 'w_cache_ttl';
 	
+	static private $_fields = null;
+	
+	static function getPrimaryKey() {
+		return 'workspace_widget.id';
+	}
+	
+	static function getCustomFieldContextKeys() {
+		return array(
+			CerberusContexts::CONTEXT_WORKSPACE_WIDGET => new DevblocksSearchFieldContextKeys('workspace_widget.id', self::ID),
+			CerberusContexts::CONTEXT_WORKSPACE_TAB => new DevblocksSearchFieldContextKeys('workspace_widget.workspace_tab_id', self::WORKSPACE_TAB_ID),
+		);
+	}
+	
+	static function getWhereSQL(DevblocksSearchCriteria $param) {
+		if('cf_' == substr($param->field, 0, 3)) {
+			return self::_getWhereSQLFromCustomFields($param);
+		} else {
+			return $param->getWhereSQL(self::getFields(), self::getPrimaryKey());
+		}
+	}
+	
 	/**
 	 * @return DevblocksSearchField[]
 	 */
 	static function getFields() {
+		if(is_null(self::$_fields))
+			self::$_fields = self::_getFields();
+		
+		return self::$_fields;
+	}
+	
+	/**
+	 * @return DevblocksSearchField[]
+	 */
+	static function _getFields() {
 		$translate = DevblocksPlatform::getTranslationService();
 		
 		$columns = array(

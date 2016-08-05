@@ -2,29 +2,29 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
 | The latest version of this license can be found here:
-| http://cerberusweb.com/license
+| http://cerb.io/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://www.cerbweb.com	    http://www.webgroupmedia.com/
+|	http://cerb.io	    http://webgroup.media
 ***********************************************************************/
 /*
- * IMPORTANT LICENSING NOTE from your friends on the Cerb Development Team
+ * IMPORTANT LICENSING NOTE from your friends at Cerb
  *
- * Sure, it would be so easy to just cheat and edit this file to use the
- * software without paying for it.  But we trust you anyway.  In fact, we're
- * writing this software for you!
+ * Sure, it would be really easy to just cheat and edit this file to use
+ * Cerb without paying for a license.  We trust you anyway.
  *
- * Quality software backed by a dedicated team takes money to develop.  We
- * don't want to be out of the office bagging groceries when you call up
- * needing a helping hand.  We'd rather spend our free time coding your
- * feature requests than mowing the neighbors' lawns for rent money.
+ * It takes a significant amount of time and money to develop, maintain,
+ * and support high-quality enterprise software with a dedicated team.
+ * For Cerb's entire history we've avoided taking money from outside
+ * investors, and instead we've relied on actual sales from satisfied
+ * customers to keep the project running.
  *
  * We've never believed in hiding our source code out of paranoia over not
  * getting paid.  We want you to have the full source code and be able to
@@ -32,19 +32,12 @@
  * having less of everything than you might need (time, people, money,
  * energy).  We shouldn't be your bottleneck.
  *
- * We've been building our expertise with this project since January 2002.  We
- * promise spending a couple bucks [Euro, Yuan, Rupees, Galactic Credits] to
- * let us take over your shared e-mail headache is a worthwhile investment.
- * It will give you a sense of control over your inbox that you probably
- * haven't had since spammers found you in a game of 'E-mail Battleship'.
- * Miss. Miss. You sunk my inbox!
+ * As a legitimate license owner, your feedback will help steer the project.
+ * We'll also prioritize your issues, and work closely with you to make sure
+ * your teams' needs are being met.
  *
- * A legitimate license entitles you to support from the developers,
- * and the warm fuzzy feeling of feeding a couple of obsessed developers
- * who want to help you get more done.
- *
- \* - Jeff Standen, Darren Sugita, Dan Hildebrandt
- *	 Webgroup Media LLC - Developers of Cerb
+ * - Jeff Standen and Dan Hildebrandt
+ *	 Founders at Webgroup Media LLC; Developers of Cerb
  */
 class ChUpdateController extends DevblocksControllerExtension {
 	/*
@@ -99,11 +92,11 @@ class ChUpdateController extends DevblocksControllerExtension {
 				$pass = false;
 				foreach ($authorized_ips as $ip)
 				{
-					if(substr($ip,0,strlen($ip)) == substr($_SERVER['REMOTE_ADDR'],0,strlen($ip)))
+					if(substr($ip,0,strlen($ip)) == substr(DevblocksPlatform::getClientIp(),0,strlen($ip)))
 				 	{ $pass=true; break; }
 				}
 				if(!$pass) {
-					echo vsprintf($translate->_('update.ip_unauthorized'), $_SERVER['REMOTE_ADDR']);
+					echo vsprintf($translate->_('update.ip_unauthorized'), DevblocksPlatform::getClientIp());
 					return;
 				}
 				
@@ -154,10 +147,10 @@ class ChUpdateController extends DevblocksControllerExtension {
 				
 				try {
 					// If authorized, lock and attempt update
-					if(!file_exists($file) || @filectime($file)+600 < time()) { // 10 min lock
+					if(!file_exists($file) || @filectime($file)+1200 < time()) { // 20 min lock
 						// Log everybody out since we're touching the database
-						$session = DevblocksPlatform::getSessionService();
-						$session->clearAll();
+						//$session = DevblocksPlatform::getSessionService();
+						//$session->clearAll();
 
 						// Lock file
 						touch($file);
@@ -173,18 +166,26 @@ class ChUpdateController extends DevblocksControllerExtension {
 						DevblocksPlatform::getClassLoaderService()->destroy();
 						
 						// Clear compiled templates
-						$tpl = DevblocksPlatform::getTemplateService();
-						$tpl->clearCompiledTemplate();
-						$tpl->clearAllCache();
+						if(!APP_SMARTY_COMPILE_PATH_MULTI_TENANT) {
+							$tpl = DevblocksPlatform::getTemplateService();
+							$tpl->clearCompiledTemplate();
+							$tpl->clearAllCache();
+						}
 
+						if(!APP_SMARTY_SANDBOX_COMPILE_PATH_MULTI_TENANT) {
+							$tpl = DevblocksPlatform::getTemplateSandboxService();
+							$tpl->clearCompiledTemplate();
+							$tpl->clearAllCache();
+						}
+						
 						// Reload plugin translations
 						DAO_Translation::reloadPluginStrings();
 
-						// Set the build
-						file_put_contents(APP_STORAGE_PATH . '/_version', APP_BUILD);
+						// Set the build in opcache
+						file_put_contents(APP_STORAGE_PATH . '/version.php', sprintf("<?php define('APP_BUILD_CACHED', %d); ?>", APP_BUILD));
 						
 						// Redirect
-						DevblocksPlatform::redirect(new DevblocksHttpResponse(array('login')));
+						DevblocksPlatform::redirect(new DevblocksHttpResponse(array()));
 	
 					} else {
 						echo $translate->_('update.locked_another');
@@ -192,7 +193,7 @@ class ChUpdateController extends DevblocksControllerExtension {
 					
 			} catch(Exception $e) {
 				unlink($file);
-				die($e->getMessage());
+				DevblocksPlatform::dieWithHttpError($e->getMessage());
 			}
 		}
 		

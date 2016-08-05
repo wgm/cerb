@@ -2,17 +2,17 @@
 /***********************************************************************
  | Cerb(tm) developed by Webgroup Media, LLC.
  |-----------------------------------------------------------------------
- | All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
+ | All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
  |   unless specifically noted otherwise.
  |
  | This source code is released under the Devblocks Public License.
  | The latest version of this license can be found here:
- | http://cerberusweb.com/license
+ | http://cerb.io/license
  |
  | By using this software, you acknowledge having read this license
  | and agree to be bound thereby.
  | ______________________________________________________________________
- |	http://www.cerbweb.com	    http://www.webgroupmedia.com/
+ |	http://cerb.io	    http://webgroup.media
  ***********************************************************************/
 
 class ChReportTopTicketsByContact extends Extension_Report {
@@ -28,6 +28,9 @@ class ChReportTopTicketsByContact extends Extension_Report {
 		$years = array();
 		$sql = "SELECT date_format(from_unixtime(created_date),'%Y') as year FROM ticket WHERE created_date > 0 GROUP BY year having year <= date_format(now(),'%Y') ORDER BY year desc limit 0,10";
 		$rs = $db->ExecuteSlave($sql);
+		
+		if(!($rs instanceof mysqli_result))
+			return false;
 		
 		while($row = mysqli_fetch_assoc($rs)) {
 			$years[] = intval($row['year']);
@@ -103,7 +106,7 @@ class ChReportTopTicketsByContact extends Extension_Report {
 				"FROM ticket t  ".
 				"INNER JOIN address a ON t.first_wrote_address_id = a.id  ".
 				"WHERE created_date > %d AND created_date <= %d  ".
-				"AND is_deleted = 0 ".
+				"AND status_id != 3 ".
 				"AND spam_score < 0.9000 ".
 				"AND spam_training != 'S'  ".
 				"AND t.group_id != 0 ".
@@ -119,7 +122,7 @@ class ChReportTopTicketsByContact extends Extension_Report {
 				"INNER JOIN address a ON t.first_wrote_address_id = a.id ".
 				"INNER JOIN contact_org o ON a.contact_org_id = o.id ".
 				"WHERE created_date > %d AND created_date <= %d ".
-				"AND is_deleted = 0 ".
+				"AND status_id != 3 ".
 				"AND spam_score < 0.9000 ".
 				"AND spam_training != 'S' ".
 				"AND a.contact_org_id != 0 ".
@@ -178,7 +181,7 @@ class ChReportTopTicketsByContact extends Extension_Report {
 				"FROM ticket t ".
 				"INNER JOIN address a ON t.first_wrote_address_id = a.id ".
 				"WHERE created_date > %d AND created_date <= %d ".
-				"AND is_deleted = 0 ".
+				"AND status_id != 3 ".
 				"AND spam_score < 0.9000 ".
 				"AND spam_training != 'S' ".
 				"AND t.group_id != 0 " .
@@ -205,7 +208,7 @@ class ChReportTopTicketsByContact extends Extension_Report {
 				"INNER JOIN address a ON t.first_wrote_address_id = a.id ".
 				"WHERE created_date > %d AND created_date <= %d ".
 				"AND a.id IN (%s) ".
-				"AND is_deleted = 0 ".
+				"AND status_id != 3 ".
 				"AND spam_score < 0.9000 ".
 				"AND spam_training != 'S' ".
 				"AND t.group_id != 0 " .
@@ -222,7 +225,7 @@ class ChReportTopTicketsByContact extends Extension_Report {
 				"INNER JOIN address a ON t.first_wrote_address_id = a.id ".
 				"INNER JOIN contact_org o ON a.contact_org_id = o.id ".
 				"WHERE created_date > %d AND created_date <= %d ".
-				"AND is_deleted = 0 ".
+				"AND status_id != 3 ".
 				"AND spam_score < 0.9000 ".
 				"AND spam_training != 'S' ".
 				"AND t.group_id != 0 " .
@@ -251,7 +254,7 @@ class ChReportTopTicketsByContact extends Extension_Report {
 				"INNER JOIN contact_org o ON a.contact_org_id = o.id ".
 				"WHERE created_date > %d AND created_date <= %d ".
 				"AND o.id IN (%s) ".
-				"AND is_deleted = 0 ".
+				"AND status_id != 3 ".
 				"AND spam_score < 0.9000 ".
 				"AND spam_training != 'S' ".
 				"AND t.group_id != 0 " .
@@ -264,6 +267,9 @@ class ChReportTopTicketsByContact extends Extension_Report {
 			);
 		};
 		$rs = $db->ExecuteSlave($sql);
+		
+		if(!($rs instanceof mysqli_result))
+			return false;
 		
 		$data = array();
 		$labels = array();

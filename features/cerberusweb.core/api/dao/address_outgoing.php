@@ -2,17 +2,17 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
 | The latest version of this license can be found here:
-| http://cerberusweb.com/license
+| http://cerb.io/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://www.cerbweb.com	    http://www.webgroupmedia.com/
+|	http://cerb.io	    http://webgroup.media
 ***********************************************************************/
 
 class DAO_AddressOutgoing extends Cerb_ORMHelper {
@@ -37,7 +37,9 @@ class DAO_AddressOutgoing extends Cerb_ORMHelper {
 			"VALUES (%d)",
 			$id
 		);
-		$db->ExecuteMaster($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
+		
+		if(false == ($db->ExecuteMaster($sql)))
+			return false;
 		
 		self::update($id, $fields);
 		
@@ -67,9 +69,12 @@ class DAO_AddressOutgoing extends Cerb_ORMHelper {
 				"INNER JOIN address AS a ON (a.id=ao.address_id) ".
 				"ORDER BY a.email ASC "
 				;
-			$rs = $db->ExecuteMaster($sql);
 			
-			$froms = self::_getObjectsFromResultSet($rs);
+			if(false == ($rs = $db->ExecuteMaster($sql, _DevblocksDatabaseManager::OPT_NO_READ_AFTER_WRITE)))
+				return false;
+			
+			if(false == ($froms = self::_getObjectsFromResultSet($rs)) || !is_array($froms))
+				return array();
 			
 			$cache->save($froms, self::_CACHE_ALL);
 		}
@@ -151,6 +156,9 @@ class DAO_AddressOutgoing extends Cerb_ORMHelper {
 	
 	static private function _getObjectsFromResultSet($rs) {
 		$objects = array();
+		
+		if(!($rs instanceof mysqli_result))
+			return false;
 		
 		while($row = mysqli_fetch_assoc($rs)) {
 			$object = new Model_AddressOutgoing();

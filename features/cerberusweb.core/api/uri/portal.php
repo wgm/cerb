@@ -2,17 +2,17 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
 | The latest version of this license can be found here:
-| http://cerberusweb.com/license
+| http://cerb.io/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://www.cerbweb.com	    http://www.webgroupmedia.com/
+|	http://cerb.io	    http://webgroup.media
 ***********************************************************************/
 
 class Controller_Portal extends DevblocksControllerExtension {
@@ -40,7 +40,8 @@ class Controller_Portal extends DevblocksControllerExtension {
 		// Routing
 
 		if(null != (@$tool = DAO_CommunityTool::getByCode($code))) {
-			$manifest = DevblocksPlatform::getExtension($tool->extension_id,false,true);
+			if(false == ($manifest = DevblocksPlatform::getExtension($tool->extension_id,false,true)))
+				DevblocksPlatform::dieWithHttpError("Portal extension not found.", 404);
 			
 			if(DEVELOPMENT_MODE) {
 				$tool = $manifest->createInstance();
@@ -54,7 +55,7 @@ class Controller_Portal extends DevblocksControllerExtension {
 				return $tool->handleRequest($delegate_request);
 			}
 		} else {
-			die("Tool not found.");
+			DevblocksPlatform::dieWithHttpError("Portal not found.", 404);
 		}
 	}
 	
@@ -80,7 +81,7 @@ class Controller_Portal extends DevblocksControllerExtension {
 				$tool->writeResponse(new DevblocksHttpResponse($stack));
 			}
 		} else {
-			die("Tool not found.");
+			DevblocksPlatform::dieWithHttpError("Tool not found.", 404);
 		}
 	}
 };
@@ -128,7 +129,7 @@ class ChPortalHelper {
 				// [TODO] We don't need to be storing this in the cookie
 				self::$_fingerprint = array(
 					'browser' => @$_SERVER['HTTP_USER_AGENT'],
-					'ip' => @$_SERVER['REMOTE_ADDR'],
+					'ip' => DevblocksPlatform::getClientIp(),
 					'local_sessid' => session_id(),
 					'started' => time(),
 				);

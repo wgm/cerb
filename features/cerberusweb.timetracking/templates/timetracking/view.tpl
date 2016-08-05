@@ -1,8 +1,8 @@
 {$view_context = CerberusContexts::CONTEXT_TIMETRACKING}
 {$view_fields = $view->getColumnsAvailable()}
-{assign var=results value=$view->getData()}
-{assign var=total value=$results[1]}
-{assign var=data value=$results[0]}
+{$results = $view->getData()}
+{$total = $results[1]}
+{$data = $results[0]}
 
 {include file="devblocks:cerberusweb.core::internal/views/view_marquee.tpl" view=$view}
 
@@ -67,26 +67,26 @@
 	{foreach from=$data item=result key=idx name=results}
 
 	{if $smarty.foreach.results.iteration % 2}
-		{assign var=tableRowClass value="even"}
+		{$tableRowClass = "even"}
 	{else}
-		{assign var=tableRowClass value="odd"}
+		{$tableRowClass = "odd"}
 	{/if}
 	
-	{assign var=worker_id value=$result.tt_worker_id}
-	{assign var=activity_id value=$result.tt_activity_id}
+	{$worker_id = $result.tt_worker_id}
+	{$activity_id = $result.tt_activity_id}
+	{$generic_worker = 'timetracking.ui.generic_worker'|devblocks_translate}
 	
-	{assign var=generic_worker value='timetracking.ui.generic_worker'|devblocks_translate}
 	{if isset($workers.$worker_id)}
-		{assign var=worker_name value=$workers.$worker_id->getName()}
+		{$worker_name = $workers.$worker_id->getName()}
 	{else}
-		{assign var=worker_name value=$generic_worker}
+		{$worker_name = $generic_worker}
 	{/if}
 	<tbody style="cursor:pointer;">
 		<tr class="{$tableRowClass}">
-			<td align="center" rowspan="2" nowrap="nowrap" style="padding:5px;">
+			<td data-column="*_watchers" align="center" rowspan="2" nowrap="nowrap" style="padding:5px;">
 				{include file="devblocks:cerberusweb.core::internal/watchers/context_follow_button.tpl" context=$view_context context_id=$result.tt_id}
 			</td>
-			<td colspan="{$smarty.foreach.headers.total}">
+			<td data-column="label" colspan="{$smarty.foreach.headers.total}">
 				<input type="checkbox" name="row_id[]" value="{$result.tt_id}" style="display:none;">
 				{if $result.tt_is_closed}<span class="glyphicons glyphicons-circle-ok" style="font-size:16px;color:rgb(80,80,80);"></span>{/if}
 				{if $result.tt_time_actual_mins >= 60}
@@ -108,15 +108,15 @@
 			{if substr($column,0,3)=="cf_"}
 				{include file="devblocks:cerberusweb.core::internal/custom_fields/view/cell_renderer.tpl"}
 			{elseif $column=="tt_id"}
-			<td>{$result.tt_id}&nbsp;</td>
+			<td data-column="{$column}">{$result.tt_id}&nbsp;</td>
 			{elseif $column=="tt_log_date"}
-			<td title="{$result.tt_log_date|devblocks_date}">{$result.tt_log_date|devblocks_prettytime}&nbsp;</td>
+			<td data-column="{$column}" title="{$result.tt_log_date|devblocks_date}">{$result.tt_log_date|devblocks_prettytime}&nbsp;</td>
 			{elseif $column=="tt_worker_id"}
-				<td>{if isset($workers.$worker_id)}{$workers.$worker_id->getName()}{/if}&nbsp;</td>
+				<td data-column="{$column}">{if isset($workers.$worker_id)}{$workers.$worker_id->getName()}{/if}&nbsp;</td>
 			{elseif $column=="tt_activity_id"}
-				<td>{if isset($activities.$activity_id)}{$activities.$activity_id->name}{/if}&nbsp;</td>
+				<td data-column="{$column}">{if isset($activities.$activity_id)}{$activities.$activity_id->name}{/if}&nbsp;</td>
 			{else}
-			<td>{$result.$column}</td>
+			<td data-column="{$column}">{$result.$column}</td>
 			{/if}
 		{/foreach}
 		</tr>
@@ -150,7 +150,7 @@
 	{if $total}
 	<div style="float:left;" id="{$view->id}_actions">
 		<button type="button" class="action-always-show action-explore" onclick="this.form.explore_from.value=$(this).closest('form').find('tbody input:checkbox:checked:first').val();this.form.a.value='viewTimeExplore';this.form.submit();"><span class="glyphicons glyphicons-play-button"></span> {'common.explore'|devblocks_translate|lower}</button>
-		<button type="button" class="action-always-show action-bulkupdate" onclick="genericAjaxPopup('peek','c=timetracking&a=showBulkPanel&view_id={$view->id}&ids=' + Devblocks.getFormEnabledCheckboxValues('viewForm{$view->id}','row_id[]'),null,false,'500');"><span class="glyphicons glyphicons-folder-closed"></span> {'common.bulk_update'|devblocks_translate|lower}</button>
+		<button type="button" class="action-always-show action-bulkupdate" onclick="genericAjaxPopup('peek','c=profiles&a=handleSectionAction&section=time_tracking&action=showBulkPopup&view_id={$view->id}&ids=' + Devblocks.getFormEnabledCheckboxValues('viewForm{$view->id}','row_id[]'),null,false,'50%');"><span class="glyphicons glyphicons-folder-closed"></span> {'common.bulk_update'|devblocks_translate|lower}</button>
 		<button type="button" class="action-close" onclick="genericAjaxPost($(this).closest('form'),'view{$view->id}','c=timetracking&a=viewMarkClosed');"><span class="glyphicons glyphicons-circle-ok" style="color:rgb(0,180,0);"></span> {'common.close'|devblocks_translate|lower}</button>
 	</div>
 	{/if}
@@ -162,46 +162,45 @@
 {include file="devblocks:cerberusweb.core::internal/views/view_common_jquery_ui.tpl"}
 
 <script type="text/javascript">
-$frm = $('#viewForm{$view->id}');
-
-{if $pref_keyboard_shortcuts}
-$frm.bind('keyboard_shortcut',function(event) {
-	//console.log("{$view->id} received " + (indirect ? 'indirect' : 'direct') + " keyboard event for: " + event.keypress_event.which);
+$(function() {
+	var $frm = $('#viewForm{$view->id}');
 	
-	$view_actions = $('#{$view->id}_actions');
+	{if $pref_keyboard_shortcuts}
+	$frm.bind('keyboard_shortcut',function(event) {
+		var $view_actions = $('#{$view->id}_actions');
+		var hotkey_activated = true;
 	
-	hotkey_activated = true;
-
-	switch(event.keypress_event.which) {
-		case 98: // (b) bulk update
-			$btn = $view_actions.find('button.action-bulkupdate');
-		
-			if(event.indirect) {
-				$btn.select().focus();
-				
-			} else {
-				$btn.click();
-			}
-			break;
-		
-		case 101: // (e) explore
-			$btn = $view_actions.find('button.action-explore');
-		
-			if(event.indirect) {
-				$btn.select().focus();
-				
-			} else {
-				$btn.click();
-			}
-			break;
+		switch(event.keypress_event.which) {
+			case 98: // (b) bulk update
+				var $btn = $view_actions.find('button.action-bulkupdate');
 			
-		default:
-			hotkey_activated = false;
-			break;
-	}
-
-	if(hotkey_activated)
-		event.preventDefault();
+				if(event.indirect) {
+					$btn.select().focus();
+					
+				} else {
+					$btn.click();
+				}
+				break;
+			
+			case 101: // (e) explore
+				var $btn = $view_actions.find('button.action-explore');
+			
+				if(event.indirect) {
+					$btn.select().focus();
+					
+				} else {
+					$btn.click();
+				}
+				break;
+				
+			default:
+				hotkey_activated = false;
+				break;
+		}
+	
+		if(hotkey_activated)
+			event.preventDefault();
+	});
+	{/if}
 });
-{/if}
 </script>

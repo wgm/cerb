@@ -2,29 +2,29 @@
 /***********************************************************************
  | Cerb(tm) developed by Webgroup Media, LLC.
  |-----------------------------------------------------------------------
- | All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
+ | All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
  |   unless specifically noted otherwise.
  |
  | This source code is released under the Devblocks Public License.
  | The latest version of this license can be found here:
- | http://cerberusweb.com/license
+ | http://cerb.io/license
  |
  | By using this software, you acknowledge having read this license
  | and agree to be bound thereby.
  | ______________________________________________________________________
- |	http://www.cerbweb.com	    http://www.webgroupmedia.com/
+ |	http://cerb.io	    http://webgroup.media
  ***********************************************************************/
 /*
- * IMPORTANT LICENSING NOTE from your friends on the Cerb Development Team
+ * IMPORTANT LICENSING NOTE from your friends at Cerb
  *
- * Sure, it would be so easy to just cheat and edit this file to use the
- * software without paying for it.  But we trust you anyway.  In fact, we're
- * writing this software for you!
+ * Sure, it would be really easy to just cheat and edit this file to use
+ * Cerb without paying for a license.  We trust you anyway.
  *
- * Quality software backed by a dedicated team takes money to develop.  We
- * don't want to be out of the office bagging groceries when you call up
- * needing a helping hand.  We'd rather spend our free time coding your
- * feature requests than mowing the neighbors' lawns for rent money.
+ * It takes a significant amount of time and money to develop, maintain,
+ * and support high-quality enterprise software with a dedicated team.
+ * For Cerb's entire history we've avoided taking money from outside
+ * investors, and instead we've relied on actual sales from satisfied
+ * customers to keep the project running.
  *
  * We've never believed in hiding our source code out of paranoia over not
  * getting paid.  We want you to have the full source code and be able to
@@ -32,19 +32,12 @@
  * having less of everything than you might need (time, people, money,
  * energy).  We shouldn't be your bottleneck.
  *
- * We've been building our expertise with this project since January 2002.  We
- * promise spending a couple bucks [Euro, Yuan, Rupees, Galactic Credits] to
- * let us take over your shared e-mail headache is a worthwhile investment.
- * It will give you a sense of control over your inbox that you probably
- * haven't had since spammers found you in a game of 'E-mail Battleship'.
- * Miss. Miss. You sunk my inbox!
+ * As a legitimate license owner, your feedback will help steer the project.
+ * We'll also prioritize your issues, and work closely with you to make sure
+ * your teams' needs are being met.
  *
- * A legitimate license entitles you to support from the developers,
- * and the warm fuzzy feeling of feeding a couple of obsessed developers
- * who want to help you get more done.
- *
- \* - Jeff Standen, Darren Sugita, Dan Hildebrandt
- *	 Webgroup Media LLC - Developers of Cerb
+ * - Jeff Standen and Dan Hildebrandt
+ *	 Founders at Webgroup Media LLC; Developers of Cerb
  */
 
 class DAO_DevblocksSession extends Cerb_ORMHelper {
@@ -129,12 +122,36 @@ class DAO_DevblocksSession extends Cerb_ORMHelper {
 		return null;
 	}
 	
+	static function getByUserId($user_id) {
+		return self::getWhere(
+			sprintf("%s = %d",
+				self::escape(DAO_DevblocksSession::USER_ID),
+				$user_id
+			),
+			DAO_DevblocksSession::UPDATED,
+			false,
+			null
+		);
+	}
+	
+	static function getLatestByUserId($user_id) {
+		$sessions = self::getByUserId($user_id);
+		
+		if(is_array($sessions) && !empty($sessions))
+			return array_shift($sessions);
+		
+		return NULL;
+	}
+	
 	/**
 	 * @param resource $rs
 	 * @return Model_DevblocksSession[]
 	 */
 	static private function _getObjectsFromResult($rs) {
 		$objects = array();
+		
+		if(!($rs instanceof mysqli_result))
+			return false;
 		
 		while($row = mysqli_fetch_assoc($rs)) {
 			$object = new Model_DevblocksSession();
@@ -196,7 +213,7 @@ class DAO_DevblocksSession extends Cerb_ORMHelper {
 	public static function getSearchQueryComponents($columns, $params, $sortBy=null, $sortAsc=null) {
 		$fields = SearchFields_DevblocksSession::getFields();
 		
-		list($tables,$wheres) = parent::_parseSearchParams($params, $columns, $fields, $sortBy);
+		list($tables,$wheres) = parent::_parseSearchParams($params, $columns, 'SearchFields_DevblocksSession', $sortBy);
 		
 		$select_sql = sprintf("SELECT ".
 			"devblocks_session.session_key as %s, ".
@@ -222,23 +239,8 @@ class DAO_DevblocksSession extends Cerb_ORMHelper {
 		$where_sql = "".
 			(!empty($wheres) ? sprintf("WHERE %s ",implode(' AND ',$wheres)) : "WHERE 1 ");
 			
-		$sort_sql = self::_buildSortClause($sortBy, $sortAsc, $fields);
+		$sort_sql = self::_buildSortClause($sortBy, $sortAsc, $fields, $select_sql, 'SearchFields_DevblocksSession');
 	
-		// Virtuals
-		
-		$args = array(
-			'join_sql' => &$join_sql,
-			'where_sql' => &$where_sql,
-			'tables' => &$tables,
-			'has_multiple_values' => &$has_multiple_values
-		);
-	
-		array_walk_recursive(
-			$params,
-			array('DAO_DevblocksSession', '_translateVirtualParameters'),
-			$args
-		);
-		
 		return array(
 			'primary_table' => 'devblocks_session',
 			'select' => $select_sql,
@@ -247,17 +249,6 @@ class DAO_DevblocksSession extends Cerb_ORMHelper {
 			'has_multiple_values' => $has_multiple_values,
 			'sort' => $sort_sql,
 		);
-	}
-	
-	private static function _translateVirtualParameters($param, $key, &$args) {
-		if(!is_a($param, 'DevblocksSearchCriteria'))
-			return;
-			
-		$param_key = $param->field;
-		settype($param_key, 'string');
-		
-		switch($param_key) {
-		}
 	}
 	
 	/**
@@ -292,13 +283,18 @@ class DAO_DevblocksSession extends Cerb_ORMHelper {
 			$sort_sql;
 			
 		if($limit > 0) {
-			$rs = $db->SelectLimit($sql,$limit,$page*$limit) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs mysqli_result */
+			if(false == ($rs = $db->SelectLimit($sql,$limit,$page*$limit)))
+				return false;
 		} else {
-			$rs = $db->ExecuteSlave($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs mysqli_result */
+			if(false == ($rs = $db->ExecuteSlave($sql)))
+				return false;
 			$total = mysqli_num_rows($rs);
 		}
 		
 		$results = array();
+		
+		if(!($rs instanceof mysqli_result))
+			return false;
 		
 		while($row = mysqli_fetch_assoc($rs)) {
 			$object_id = $row[SearchFields_DevblocksSession::SESSION_KEY];
@@ -335,7 +331,7 @@ class Model_DevblocksSession {
 	public $user_agent;
 };
 
-class SearchFields_DevblocksSession implements IDevblocksSearchFields {
+class SearchFields_DevblocksSession extends DevblocksSearchFields {
 	const SESSION_KEY = 'd_session_key';
 	const CREATED = 'd_created';
 	const UPDATED = 'd_updated';
@@ -344,10 +340,41 @@ class SearchFields_DevblocksSession implements IDevblocksSearchFields {
 	const USER_IP = 'd_user_ip';
 	const USER_AGENT = 'd_user_agent';
 	
+	static private $_fields = null;
+	
+	static function getPrimaryKey() {
+		return 'devblocks_session.session_key';
+	}
+	
+	static function getCustomFieldContextKeys() {
+		return array(
+			'' => new DevblocksSearchFieldContextKeys('devblocks_session.session_key', self::SESSION_KEY),
+			CerberusContexts::CONTEXT_WORKER => new DevblocksSearchFieldContextKeys('devblocks_session.user_id', self::USER_ID),
+		);
+	}
+	
+	static function getWhereSQL(DevblocksSearchCriteria $param) {
+		if('cf_' == substr($param->field, 0, 3)) {
+			return self::_getWhereSQLFromCustomFields($param);
+		} else {
+			return $param->getWhereSQL(self::getFields(), self::getPrimaryKey());
+		}
+	}
+	
 	/**
 	 * @return DevblocksSearchField[]
 	 */
 	static function getFields() {
+		if(is_null(self::$_fields))
+			self::$_fields = self::_getFields();
+		
+		return self::$_fields;
+	}
+	
+	/**
+	 * @return DevblocksSearchField[]
+	 */
+	static function _getFields() {
 		$translate = DevblocksPlatform::getTranslationService();
 		
 		$columns = array(
@@ -367,7 +394,7 @@ class SearchFields_DevblocksSession implements IDevblocksSearchFields {
 	}
 };
 
-class View_DevblocksSession extends C4_AbstractView implements IAbstractView_Subtotals, IAbstractView_QuickSearch {
+class View_DevblocksSession extends C4_AbstractView implements IAbstractView_QuickSearch { /* IAbstractView_Subtotals */
 	const DEFAULT_ID = 'devblocks_sessions';
 
 	function __construct() {
@@ -410,6 +437,9 @@ class View_DevblocksSession extends C4_AbstractView implements IAbstractView_Sub
 			$this->renderSortAsc,
 			$this->renderTotal
 		);
+		
+		$this->_lazyLoadCustomFieldsIntoObjects($objects, 'SearchFields_DevblocksSession');
+		
 		return $objects;
 	}
 	
@@ -421,6 +451,7 @@ class View_DevblocksSession extends C4_AbstractView implements IAbstractView_Sub
 		return $this->_doGetDataSample('DAO_DevblocksSession', $size);
 	}
 
+	/*
 	function getSubtotalFields() {
 		$all_fields = $this->getParamsAvailable(true);
 		
@@ -447,6 +478,7 @@ class View_DevblocksSession extends C4_AbstractView implements IAbstractView_Sub
 	function getSubtotalCounts($column) {
 		$counts = array();
 		$fields = $this->getFields();
+		$context = null;
 
 		if(!isset($fields[$column]))
 			return array();
@@ -460,18 +492,19 @@ class View_DevblocksSession extends C4_AbstractView implements IAbstractView_Sub
 					$label_map[$worker_id] = $worker->getName();
 				}
 				
-				$counts = $this->_getSubtotalCountForStringColumn('DAO_DevblocksSession', $column, $label_map, 'in', 'worker_id[]');
+				$counts = $this->_getSubtotalCountForStringColumn($context, $column, $label_map, 'in', 'worker_id[]');
 				break;
 		}
 		
 		return $counts;
 	}
+	*/
 	
 	function getQuickSearchFields() {
 		$search_fields = SearchFields_DevblocksSession::getFields();
 		
 		$fields = array(
-			'_fulltext' => 
+			'text' => 
 				array(
 					'type' => DevblocksSearchCriteria::TYPE_TEXT,
 					'options' => array('param_key' => SearchFields_DevblocksSession::USER_AGENT, 'match' => DevblocksSearchCriteria::OPTION_TEXT_PARTIAL),
@@ -512,26 +545,19 @@ class View_DevblocksSession extends C4_AbstractView implements IAbstractView_Sub
 		ksort($fields);
 		
 		return $fields;
-	}	
-	
-	function getParamsFromQuickSearchFields($fields) {
-		$search_fields = $this->getQuickSearchFields();
-		$params = DevblocksSearchCriteria::getParamsFromQueryFields($fields, $search_fields);
-
-		// Handle virtual fields and overrides
-		if(is_array($fields))
-		foreach($fields as $k => $v) {
-			switch($k) {
-				// ...
-			}
-		}
-		
-		$this->renderPage = 0;
-		$this->addParams($params, true);
-		
-		return $params;
 	}
 	
+	function getParamFromQuickSearchFieldTokens($field, $tokens) {
+		switch($field) {
+			default:
+				$search_fields = $this->getQuickSearchFields();
+				return DevblocksSearchCriteria::getParamFromQueryFieldTokens($field, $tokens, $search_fields);
+				break;
+		}
+		
+		return false;
+	}
+
 	function render() {
 		$this->_sanitize();
 		
@@ -637,63 +663,5 @@ class View_DevblocksSession extends C4_AbstractView implements IAbstractView_Sub
 			$this->addParam($criteria, $field);
 			$this->renderPage = 0;
 		}
-	}
-		
-	function doBulkUpdate($filter, $do, $ids=array()) {
-		@set_time_limit(600); // 10m
-	
-		$change_fields = array();
-		$is_deleted = false;
-
-		// Make sure we have actions
-		if(empty($do))
-			return;
-
-		// Make sure we have checked items if we want a checked list
-		if(0 == strcasecmp($filter,"checks") && empty($ids))
-			return;
-		
-		if(is_array($do))
-		foreach($do as $k => $v) {
-			switch($k) {
-				case 'deleted':
-					$is_deleted = true;
-					break;
-			}
-		}
-
-		$pg = 0;
-
-		if(empty($ids))
-		do {
-			list($objects, $null) = DAO_DevblocksSession::search(
-				array(),
-				$this->getParams(),
-				100,
-				$pg++,
-				SearchFields_DevblocksSession::SESSION_KEY,
-				true,
-				false
-			);
-			$ids = array_merge($ids, array_keys($objects));
-			 
-		} while(!empty($objects));
-
-		$batch_total = count($ids);
-		for($x=0;$x<=$batch_total;$x+=100) {
-			$batch_ids = array_slice($ids,$x,100);
-
-			if($is_deleted) {
-				DAO_DevblocksSession::delete($batch_ids);
-				
-			} else {
-				if(!empty($change_fields))
-					DAO_DevblocksSession::update($batch_ids, $change_fields);
-			}
-
-			unset($batch_ids);
-		}
-
-		unset($ids);
 	}
 };

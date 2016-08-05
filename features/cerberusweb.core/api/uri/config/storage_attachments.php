@@ -2,17 +2,17 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
 | The latest version of this license can be found here:
-| http://cerberusweb.com/license
+| http://cerb.io/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://www.cerbweb.com	    http://www.webgroupmedia.com/
+|	http://cerb.io	    http://webgroup.media
 ***********************************************************************/
 
 class PageSection_SetupStorageAttachments extends Extension_PageSection {
@@ -47,7 +47,7 @@ class PageSection_SetupStorageAttachments extends Extension_PageSection {
 		$tpl->display('devblocks:cerberusweb.core::configuration/section/storage_attachments/bulk.tpl');
 	}
 	
-	function doAttachmentsBulkUpdateAction() {
+	function startBulkUpdateJsonAction() {
 		// Filter: whole list or check
 		@$filter = DevblocksPlatform::importGPC($_REQUEST['filter'],'string','');
 		$ids = array();
@@ -66,26 +66,37 @@ class PageSection_SetupStorageAttachments extends Extension_PageSection {
 		if(0 != strlen($deleted))
 			$do['deleted'] = intval($deleted);
 			
-		// Do: Custom fields
-//		$do = DAO_CustomFieldValue::handleBulkPost($do);
-		
 		switch($filter) {
 			// Checked rows
 			case 'checks':
 				@$ids_str = DevblocksPlatform::importGPC($_REQUEST['ids'],'string');
 				$ids = DevblocksPlatform::parseCsvString($ids_str);
 				break;
+				
 			case 'sample':
 				@$sample_size = min(DevblocksPlatform::importGPC($_REQUEST['filter_sample_size'],'integer',0),9999);
 				$filter = 'checks';
 				$ids = $view->getDataSample($sample_size);
 				break;
+				
 			default:
 				break;
 		}
-			
-		$view->doBulkUpdate($filter, $do, $ids);
-		$view->render();
+		
+		// If we have specific IDs, add a filter for those too
+		if(!empty($ids)) {
+			$view->addParam(new DevblocksSearchCriteria(SearchFields_AttachmentLink::GUID, 'in', $ids));
+		}
+		
+		// Create batches
+		$batch_key = DAO_ContextBulkUpdate::createFromView($view, $do);
+		
+		header('Content-Type: application/json; charset=utf-8');
+		
+		echo json_encode(array(
+			'cursor' => $batch_key,
+		));
+		
 		return;
 	}
 }

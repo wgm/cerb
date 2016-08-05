@@ -2,17 +2,17 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
 | The latest version of this license can be found here:
-| http://cerberusweb.com/license
+| http://cerb.io/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://www.cerbweb.com	    http://www.webgroupmedia.com/
+|	http://cerb.io	    http://webgroup.media
 ***********************************************************************/
 
 class DAO_WorkspacePage extends Cerb_ORMHelper {
@@ -58,6 +58,9 @@ class DAO_WorkspacePage extends Cerb_ORMHelper {
 				Cerb_ORMHelper::OPT_GET_MASTER_ONLY
 			);
 			
+			if(!is_array($pages))
+				return false;
+			
 			$cache->save($pages, self::_CACHE_ALL);
 		}
 		
@@ -85,7 +88,7 @@ class DAO_WorkspacePage extends Cerb_ORMHelper {
 			;
 
 		if($options & Cerb_ORMHelper::OPT_GET_MASTER_ONLY) {
-			$rs = $db->ExecuteMaster($sql);
+			$rs = $db->ExecuteMaster($sql, _DevblocksDatabaseManager::OPT_NO_READ_AFTER_WRITE);
 		} else {
 			$rs = $db->ExecuteSlave($sql);
 		}
@@ -184,6 +187,9 @@ class DAO_WorkspacePage extends Cerb_ORMHelper {
 	 */
 	static private function _getObjectsFromResult($rs) {
 		$objects = array();
+		
+		if(!($rs instanceof mysqli_result))
+			return false;
 
 		while($row = mysqli_fetch_assoc($rs)) {
 			$object = new Model_WorkspacePage();
@@ -233,7 +239,7 @@ class DAO_WorkspacePage extends Cerb_ORMHelper {
 	public static function getSearchQueryComponents($columns, $params, $sortBy=null, $sortAsc=null) {
 		$fields = SearchFields_WorkspacePage::getFields();
 
-		list($tables,$wheres) = parent::_parseSearchParams($params, $columns, $fields, $sortBy);
+		list($tables,$wheres) = parent::_parseSearchParams($params, $columns, 'SearchFields_WorkspacePage', $sortBy);
 
 		$select_sql = sprintf("SELECT ".
 			"workspace_page.id as %s, ".
@@ -253,7 +259,7 @@ class DAO_WorkspacePage extends Cerb_ORMHelper {
 		$where_sql = "".
 			(!empty($wheres) ? sprintf("WHERE %s ",implode(' AND ',$wheres)) : "WHERE 1 ");
 			
-		$sort_sql = self::_buildSortClause($sortBy, $sortAsc, $fields);
+		$sort_sql = self::_buildSortClause($sortBy, $sortAsc, $fields, $select_sql, 'SearchFields_WorkspacePage');
 
 		return array(
 			'primary_table' => 'workspace_page',
@@ -312,13 +318,18 @@ class DAO_WorkspacePage extends Cerb_ORMHelper {
 			$sort_sql;
 
 		if($limit > 0) {
-			$rs = $db->SelectLimit($sql,$limit,$page*$limit) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs mysqli_result */
+			if(false == ($rs = $db->SelectLimit($sql,$limit,$page*$limit)))
+				return false;
 		} else {
-			$rs = $db->ExecuteSlave($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs mysqli_result */
+			if(false == ($rs = $db->ExecuteSlave($sql)))
+				return false;
 			$total = mysqli_num_rows($rs);
 		}
 
 		$results = array();
+		
+		if(!($rs instanceof mysqli_result))
+			return false;
 
 		while($row = mysqli_fetch_assoc($rs)) {
 			$object_id = intval($row[SearchFields_WorkspacePage::ID]);
@@ -434,6 +445,10 @@ class DAO_WorkspaceTab extends Cerb_ORMHelper {
 				null,
 				Cerb_ORMHelper::OPT_GET_MASTER_ONLY
 			);
+			
+			if(!is_array($tabs))
+				return false;
+			
 			$cache->save($tabs, self::_CACHE_ALL);
 		}
 		
@@ -461,7 +476,7 @@ class DAO_WorkspaceTab extends Cerb_ORMHelper {
 		;
 
 		if($options & Cerb_ORMHelper::OPT_GET_MASTER_ONLY) {
-			$rs = $db->ExecuteMaster($sql);
+			$rs = $db->ExecuteMaster($sql, _DevblocksDatabaseManager::OPT_NO_READ_AFTER_WRITE);
 		} else {
 			$rs = $db->ExecuteSlave($sql);
 		}
@@ -503,6 +518,9 @@ class DAO_WorkspaceTab extends Cerb_ORMHelper {
 	 */
 	static private function _getObjectsFromResult($rs) {
 		$objects = array();
+		
+		if(!($rs instanceof mysqli_result))
+			return false;
 		
 		while($row = mysqli_fetch_assoc($rs)) {
 			$object = new Model_WorkspaceTab();
@@ -572,9 +590,9 @@ class DAO_WorkspaceTab extends Cerb_ORMHelper {
 	}
 	
 	public static function getSearchQueryComponents($columns, $params, $sortBy=null, $sortAsc=null) {
-		$fields = SearchFields_Workspace::getFields();
+		$fields = SearchFields_WorkspaceTab::getFields();
 		
-		list($tables,$wheres) = parent::_parseSearchParams($params, $columns, $fields, $sortBy);
+		list($tables, $wheres) = parent::_parseSearchParams($params, $columns, 'SearchFields_Workspace', $sortBy);
 		
 		$select_sql = sprintf("SELECT ".
 			"workspace_tab.id as %s, ".
@@ -594,7 +612,7 @@ class DAO_WorkspaceTab extends Cerb_ORMHelper {
 		$where_sql = "".
 			(!empty($wheres) ? sprintf("WHERE %s ",implode(' AND ',$wheres)) : "WHERE 1 ");
 			
-		$sort_sql = self::_buildSortClause($sortBy, $sortAsc, $fields);
+		$sort_sql = self::_buildSortClause($sortBy, $sortAsc, $fields, $select_sql, 'SearchFields_WorkspaceTab');
 	
 		return array(
 			'primary_table' => 'workspace_tab',
@@ -638,13 +656,18 @@ class DAO_WorkspaceTab extends Cerb_ORMHelper {
 			$sort_sql;
 			
 		if($limit > 0) {
-			$rs = $db->SelectLimit($sql,$limit,$page*$limit) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs mysqli_result */
+			if(false == ($rs = $db->SelectLimit($sql,$limit,$page*$limit)))
+				return false;
 		} else {
-			$rs = $db->ExecuteSlave($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs mysqli_result */
+			if(false == ($rs = $db->ExecuteSlave($sql)))
+				return false;
 			$total = mysqli_num_rows($rs);
 		}
 		
 		$results = array();
+		
+		if(!($rs instanceof mysqli_result))
+			return false;
 		
 		while($row = mysqli_fetch_assoc($rs)) {
 			$object_id = intval($row[SearchFields_WorkspaceTab::ID]);
@@ -684,7 +707,7 @@ class DAO_WorkspaceTab extends Cerb_ORMHelper {
 	
 };
 
-class SearchFields_WorkspacePage implements IDevblocksSearchFields {
+class SearchFields_WorkspacePage extends DevblocksSearchFields {
 	const ID = 'w_id';
 	const NAME = 'w_name';
 	const OWNER_CONTEXT = 'w_owner_context';
@@ -693,10 +716,40 @@ class SearchFields_WorkspacePage implements IDevblocksSearchFields {
 	
 	const VIRTUAL_OWNER = '*_owner';
 	
+	static private $_fields = null;
+	
+	static function getPrimaryKey() {
+		return 'workspace_page.id';
+	}
+	
+	static function getCustomFieldContextKeys() {
+		return array(
+			CerberusContexts::CONTEXT_WORKSPACE_PAGE => new DevblocksSearchFieldContextKeys('workspace_page.id', self::ID),
+		);
+	}
+	
+	static function getWhereSQL(DevblocksSearchCriteria $param) {
+		if('cf_' == substr($param->field, 0, 3)) {
+			return self::_getWhereSQLFromCustomFields($param);
+		} else {
+			return $param->getWhereSQL(self::getFields(), self::getPrimaryKey());
+		}
+	}
+	
 	/**
 	 * @return DevblocksSearchField[]
 	 */
 	static function getFields() {
+		if(is_null(self::$_fields))
+			self::$_fields = self::_getFields();
+		
+		return self::$_fields;
+	}
+	
+	/**
+	 * @return DevblocksSearchField[]
+	 */
+	static function _getFields() {
 		$translate = DevblocksPlatform::getTranslationService();
 		
 		$columns = array(
@@ -716,17 +769,48 @@ class SearchFields_WorkspacePage implements IDevblocksSearchFields {
 	}
 };
 
-class SearchFields_WorkspaceTab implements IDevblocksSearchFields {
+class SearchFields_WorkspaceTab extends DevblocksSearchFields {
 	const ID = 'w_id';
 	const NAME = 'w_name';
 	const WORKSPACE_PAGE_ID = 'w_workspace_page_id';
 	const POS = 'w_pos';
 	const EXTENSION_ID = 'w_extension_id';
 	
+	static private $_fields = null;
+	
+	static function getPrimaryKey() {
+		return 'workspace_tab.id';
+	}
+	
+	static function getCustomFieldContextKeys() {
+		return array(
+			CerberusContexts::CONTEXT_WORKSPACE_TAB => new DevblocksSearchFieldContextKeys('workspace_tab.id', self::ID),
+			CerberusContexts::CONTEXT_WORKSPACE_PAGE => new DevblocksSearchFieldContextKeys('workspace_tab.workspace_page_id', self::WORKSPACE_PAGE_ID),
+		);
+	}
+	
+	static function getWhereSQL(DevblocksSearchCriteria $param) {
+		if('cf_' == substr($param->field, 0, 3)) {
+			return self::_getWhereSQLFromCustomFields($param);
+		} else {
+			return $param->getWhereSQL(self::getFields(), self::getPrimaryKey());
+		}
+	}
+	
 	/**
 	 * @return DevblocksSearchField[]
 	 */
 	static function getFields() {
+		if(is_null(self::$_fields))
+			self::$_fields = self::_getFields();
+		
+		return self::$_fields;
+	}
+	
+	/**
+	 * @return DevblocksSearchField[]
+	 */
+	static function _getFields() {
 		$translate = DevblocksPlatform::getTranslationService();
 		
 		$columns = array(
@@ -924,7 +1008,8 @@ class DAO_WorkspaceList extends Cerb_ORMHelper {
 		$sql = sprintf("INSERT INTO workspace_list () ".
 			"VALUES ()"
 		);
-		$db->ExecuteMaster($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
+		if(false == ($db->ExecuteMaster($sql)))
+			return false;
 		$id = $db->LastInsertId();
 
 		self::update($id, $fields);
@@ -966,9 +1051,14 @@ class DAO_WorkspaceList extends Cerb_ORMHelper {
 			"FROM workspace_list ".
 			(!empty($where) ? sprintf("WHERE %s ",$where) : " ").
 			"ORDER BY list_pos ASC";
-		$rs = $db->ExecuteSlave($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
+		
+		if(false == ($rs = $db->ExecuteSlave($sql)))
+			return false;
 
 		$objects = array();
+		
+		if(!($rs instanceof mysqli_result))
+			return false;
 		
 		while($row = mysqli_fetch_assoc($rs)) {
 			$object = new Model_WorkspaceList();
@@ -1019,7 +1109,8 @@ class DAO_WorkspaceList extends Cerb_ORMHelper {
 		$db = DevblocksPlatform::getDatabaseService();
 		$ids_list = implode(',', $ids);
 		
-		$db->ExecuteMaster(sprintf("DELETE FROM workspace_list WHERE id IN (%s)", $ids_list)) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
+		if(false == ($db->ExecuteMaster(sprintf("DELETE FROM workspace_list WHERE id IN (%s)", $ids_list))))
+			return false;
 		
 		// Delete worker view prefs
 		foreach($ids as $id) {
@@ -1090,6 +1181,9 @@ class View_WorkspacePage extends C4_AbstractView implements IAbstractView_QuickS
 			$this->renderSortAsc,
 			$this->renderTotal
 		);
+		
+		$this->_lazyLoadCustomFieldsIntoObjects($objects, 'SearchFields_WorkspacePage');
+		
 		return $objects;
 	}
 
@@ -1101,7 +1195,7 @@ class View_WorkspacePage extends C4_AbstractView implements IAbstractView_QuickS
 		$search_fields = SearchFields_WorkspacePage::getFields();
 		
 		$fields = array(
-			'_fulltext' => 
+			'text' => 
 				array(
 					'type' => DevblocksSearchCriteria::TYPE_TEXT,
 					'options' => array('param_key' => SearchFields_WorkspacePage::NAME, 'match' => DevblocksSearchCriteria::OPTION_TEXT_PARTIAL),
@@ -1126,21 +1220,17 @@ class View_WorkspacePage extends C4_AbstractView implements IAbstractView_QuickS
 		ksort($fields);
 		
 		return $fields;
-	}	
+	}
 	
-	function getParamsFromQuickSearchFields($fields) {
-		$search_fields = $this->getQuickSearchFields();
-		$params = DevblocksSearchCriteria::getParamsFromQueryFields($fields, $search_fields);
-
-		// Handle virtual fields and overrides
-		if(is_array($fields))
-		foreach($fields as $k => $v) {
-			switch($k) {
-				// ...
-			}
+	function getParamFromQuickSearchFieldTokens($field, $tokens) {
+		switch($field) {
+			default:
+				$search_fields = $this->getQuickSearchFields();
+				return DevblocksSearchCriteria::getParamFromQueryFieldTokens($field, $tokens, $search_fields);
+				break;
 		}
 		
-		return $params;
+		return false;
 	}
 
 	function render() {

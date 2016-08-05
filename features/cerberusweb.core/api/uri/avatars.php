@@ -2,17 +2,17 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
 | The latest version of this license can be found here:
-| http://cerberusweb.com/license
+| http://cerb.io/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://www.cerbweb.com	    http://www.webgroupmedia.com/
+|	http://cerb.io	    http://webgroup.media
 ***********************************************************************/
 
 class Controller_Avatars extends DevblocksControllerExtension {
@@ -37,7 +37,7 @@ class Controller_Avatars extends DevblocksControllerExtension {
 		
 		// Security
 		if(null == ($active_worker = CerberusApplication::getActiveWorker()))
-			die($translate->_('common.access_denied'));
+			DevblocksPlatform::dieWithHttpError($translate->_('common.access_denied'), 403);
 
 		switch($alias) {
 			case '_fetch':
@@ -97,9 +97,7 @@ class Controller_Avatars extends DevblocksControllerExtension {
 			if(empty($url))
 				throw new DevblocksException("No URL provided");
 		
-			$ch = curl_init($url);
-			curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-			curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+			$ch = DevblocksPlatform::curlInit($url);
 			
 			// If same origin, add cookie and CSRF header
 			if(parse_url($base_url, PHP_URL_HOST) == parse_url($url, PHP_URL_HOST)) {
@@ -111,7 +109,7 @@ class Controller_Avatars extends DevblocksControllerExtension {
 				curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
 			}
 			
-			$output = curl_exec($ch);
+			$output = DevblocksPlatform::curlExec($ch);
 			$info = curl_getinfo($ch);
 			curl_close($ch);
 			
@@ -302,7 +300,9 @@ class Controller_Avatars extends DevblocksControllerExtension {
 		header('Accept-Ranges: bytes');
 		header('Content-Type: image/png');
 		
-		$im = @imagecreate(100, 100); // or die("Cannot Initialize new GD image stream");
+		if(false == ($im = @imagecreate(100, 100)))
+			DevblocksPlatform::dieWithHttpError(null, 500);
+			
 		$background_color = imagecolorallocate($im, $r_rand, $g_rand, $b_rand);
 		$text_color = imagecolorallocate($im, 255, 255, 255);
 		//imagerectangle($im, $x, $y, $x+$box_width, $y-$box_height, $text_color);
@@ -339,11 +339,9 @@ class Controller_Avatars extends DevblocksControllerExtension {
 		$hash = md5($email);
 		$url = sprintf("https://www.gravatar.com/avatar/%s?s=100&r=pg&d=404", $hash);
 
-		$ch = curl_init($url);
-		curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-		curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+		$ch = DevblocksPlatform::curlInit($url);
 		curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5); // 5 sec
-		$imagedata = curl_exec($ch);
+		$imagedata = DevblocksPlatform::curlExec($ch);
 		$info = curl_getinfo($ch);
 		curl_close($ch);
 		

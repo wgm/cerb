@@ -48,7 +48,7 @@ class DAO_WebApiCredentials extends Cerb_ORMHelper {
 		;
 
 		if($options & Cerb_ORMHelper::OPT_GET_MASTER_ONLY) {
-			$rs = $db->ExecuteMaster($sql);
+			$rs = $db->ExecuteMaster($sql, _DevblocksDatabaseManager::OPT_NO_READ_AFTER_WRITE);
 		} else {
 			$rs = $db->ExecuteSlave($sql);
 		}
@@ -87,6 +87,10 @@ class DAO_WebApiCredentials extends Cerb_ORMHelper {
 				null,
 				Cerb_ORMHelper::OPT_GET_MASTER_ONLY
 			);
+			
+			if(!is_array($credentials))
+				return false;
+			
 			$cache->save($credentials, self::_CACHE_ALL);
 		}
 		
@@ -110,6 +114,9 @@ class DAO_WebApiCredentials extends Cerb_ORMHelper {
 	 */
 	static private function _getObjectsFromResult($rs) {
 		$objects = array();
+		
+		if(!($rs instanceof mysqli_result))
+			return false;
 		
 		while($row = mysqli_fetch_assoc($rs)) {
 			$object = new Model_WebApiCredentials();
@@ -149,7 +156,7 @@ class DAO_WebApiCredentials extends Cerb_ORMHelper {
 	public static function getSearchQueryComponents($columns, $params, $sortBy=null, $sortAsc=null) {
 		$fields = SearchFields_WebApiCredentials::getFields();
 		
-		list($tables,$wheres) = parent::_parseSearchParams($params, $columns, $fields, $sortBy);
+		list($tables,$wheres) = parent::_parseSearchParams($params, $columns, 'SearchFields_WebApiCredentials', $sortBy);
 		
 		$select_sql = sprintf("SELECT ".
 			"webapi_credentials.id as %s, ".
@@ -169,23 +176,8 @@ class DAO_WebApiCredentials extends Cerb_ORMHelper {
 		$where_sql = "".
 			(!empty($wheres) ? sprintf("WHERE %s ",implode(' AND ',$wheres)) : "WHERE 1 ");
 			
-		$sort_sql = self::_buildSortClause($sortBy, $sortAsc, $fields);
+		$sort_sql = self::_buildSortClause($sortBy, $sortAsc, $fields, $select_sql, 'SearchFields_WebApiCredentials');
 	
-		// Virtuals
-		
-		$args = array(
-			'join_sql' => &$join_sql,
-			'where_sql' => &$where_sql,
-			'tables' => &$tables,
-			'has_multiple_values' => &$has_multiple_values
-		);
-		
-		array_walk_recursive(
-			$params,
-			array('DAO_WebApiCredentials', '_translateVirtualParameters'),
-			$args
-		);
-		
 		return array(
 			'primary_table' => 'webapi_credentials',
 			'select' => $select_sql,
@@ -194,26 +186,6 @@ class DAO_WebApiCredentials extends Cerb_ORMHelper {
 			'has_multiple_values' => $has_multiple_values,
 			'sort' => $sort_sql,
 		);
-	}
-	
-	private static function _translateVirtualParameters($param, $key, &$args) {
-		if(!is_a($param, 'DevblocksSearchCriteria'))
-			return;
-			
-		//$from_context = CerberusContexts::CONTEXT_EXAMPLE;
-		//$from_index = 'example.id';
-		
-		$param_key = $param->field;
-		settype($param_key, 'string');
-		
-		switch($param_key) {
-			/*
-			case SearchFields_EXAMPLE::VIRTUAL_WATCHERS:
-				$args['has_multiple_values'] = true;
-				self::_searchComponentsVirtualWatchers($param, $from_context, $from_index, $args['join_sql'], $args['where_sql'], $args['tables']);
-				break;
-			*/
-		}
 	}
 	
 	/**
@@ -248,13 +220,18 @@ class DAO_WebApiCredentials extends Cerb_ORMHelper {
 			$sort_sql;
 			
 		if($limit > 0) {
-			$rs = $db->SelectLimit($sql,$limit,$page*$limit) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs mysqli_result */
+			if(false == ($rs = $db->SelectLimit($sql,$limit,$page*$limit)))
+				return false;
 		} else {
-			$rs = $db->ExecuteSlave($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs mysqli_result */
+			if(false == ($rs = $db->ExecuteSlave($sql)))
+				return false;
 			$total = mysqli_num_rows($rs);
 		}
 		
 		$results = array();
+		
+		if(!($rs instanceof mysqli_result))
+			return false;
 		
 		while($row = mysqli_fetch_assoc($rs)) {
 			$object_id = intval($row[SearchFields_WebApiCredentials::ID]);
@@ -285,7 +262,7 @@ class DAO_WebApiCredentials extends Cerb_ORMHelper {
 	}
 };
 
-class SearchFields_WebApiCredentials implements IDevblocksSearchFields {
+class SearchFields_WebApiCredentials extends DevblocksSearchFields {
 	const ID = 'w_id';
 	const LABEL = 'w_label';
 	const WORKER_ID = 'w_worker_id';
@@ -293,10 +270,41 @@ class SearchFields_WebApiCredentials implements IDevblocksSearchFields {
 	const SECRET_KEY = 'w_secret_key';
 	const PARAMS_JSON = 'w_params_json';
 	
+	static private $_fields = null;
+	
+	static function getPrimaryKey() {
+		return 'webapi_credentials.id';
+	}
+	
+	static function getCustomFieldContextKeys() {
+		return array(
+			'' => new DevblocksSearchFieldContextKeys('webapi_credentials.id', self::ID),
+			CerberusContexts::CONTEXT_WORKER => new DevblocksSearchFieldContextKeys('webapi_credentials.worker_id', self::WORKER_ID),
+		);
+	}
+	
+	static function getWhereSQL(DevblocksSearchCriteria $param) {
+		if('cf_' == substr($param->field, 0, 3)) {
+			return self::_getWhereSQLFromCustomFields($param);
+		} else {
+			return $param->getWhereSQL(self::getFields(), self::getPrimaryKey());
+		}
+	}
+	
 	/**
 	 * @return DevblocksSearchField[]
 	 */
 	static function getFields() {
+		if(is_null(self::$_fields))
+			self::$_fields = self::_getFields();
+		
+		return self::$_fields;
+	}
+	
+	/**
+	 * @return DevblocksSearchField[]
+	 */
+	static function _getFields() {
 		$translate = DevblocksPlatform::getTranslationService();
 		
 		$columns = array(
@@ -367,6 +375,9 @@ class View_WebApiCredentials extends C4_AbstractView implements IAbstractView_Qu
 			$this->renderSortAsc,
 			$this->renderTotal
 		);
+		
+		$this->_lazyLoadCustomFieldsIntoObjects($objects, 'SearchFields_WebApiCredentials');
+		
 		return $objects;
 	}
 	
@@ -378,7 +389,7 @@ class View_WebApiCredentials extends C4_AbstractView implements IAbstractView_Qu
 		$search_fields = SearchFields_WebApiCredentials::getFields();
 		
 		$fields = array(
-			'_fulltext' => 
+			'text' => 
 				array(
 					'type' => DevblocksSearchCriteria::TYPE_TEXT,
 					'options' => array('param_key' => SearchFields_WebApiCredentials::LABEL, 'match' => DevblocksSearchCriteria::OPTION_TEXT_PARTIAL),
@@ -409,21 +420,17 @@ class View_WebApiCredentials extends C4_AbstractView implements IAbstractView_Qu
 		ksort($fields);
 		
 		return $fields;
-	}	
+	}
 	
-	function getParamsFromQuickSearchFields($fields) {
-		$search_fields = $this->getQuickSearchFields();
-		$params = DevblocksSearchCriteria::getParamsFromQueryFields($fields, $search_fields);
-
-		// Handle virtual fields and overrides
-		if(is_array($fields))
-		foreach($fields as $k => $v) {
-			switch($k) {
-				// ...
-			}
+	function getParamFromQuickSearchFieldTokens($field, $tokens) {
+		switch($field) {
+			default:
+				$search_fields = $this->getQuickSearchFields();
+				return DevblocksSearchCriteria::getParamFromQueryFieldTokens($field, $tokens, $search_fields);
+				break;
 		}
 		
-		return $params;
+		return false;
 	}
 
 	function render() {
@@ -525,60 +532,5 @@ class View_WebApiCredentials extends C4_AbstractView implements IAbstractView_Qu
 			$this->addParam($criteria, $field);
 			$this->renderPage = 0;
 		}
-	}
-		
-	function doBulkUpdate($filter, $do, $ids=array()) {
-		@set_time_limit(600); // 10m
-	
-		$change_fields = array();
-		$custom_fields = array();
-
-		// Make sure we have actions
-		if(empty($do))
-			return;
-
-		// Make sure we have checked items if we want a checked list
-		if(0 == strcasecmp($filter,"checks") && empty($ids))
-			return;
-			
-		if(is_array($do))
-		foreach($do as $k => $v) {
-			switch($k) {
-				// [TODO] Implement actions
-				case 'example':
-					//$change_fields[DAO_WebApiCredentials::EXAMPLE] = 'some value';
-					break;
-			}
-		}
-
-		$pg = 0;
-
-		if(empty($ids))
-		do {
-			list($objects,$null) = DAO_WebApiCredentials::search(
-				array(),
-				$this->getParams(),
-				100,
-				$pg++,
-				SearchFields_WebApiCredentials::ID,
-				true,
-				false
-			);
-			$ids = array_merge($ids, array_keys($objects));
-			 
-		} while(!empty($objects));
-
-		$batch_total = count($ids);
-		for($x=0;$x<=$batch_total;$x+=100) {
-			$batch_ids = array_slice($ids,$x,100);
-			
-			if(!empty($change_fields)) {
-				DAO_WebApiCredentials::update($batch_ids, $change_fields);
-			}
-
-			unset($batch_ids);
-		}
-
-		unset($ids);
 	}
 };

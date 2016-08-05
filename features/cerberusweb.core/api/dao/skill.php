@@ -86,7 +86,7 @@ class DAO_Skill extends Cerb_ORMHelper {
 		;
 		
 		if($options & Cerb_ORMHelper::OPT_GET_MASTER_ONLY) {
-			$rs = $db->ExecuteMaster($sql);
+			$rs = $db->ExecuteMaster($sql, _DevblocksDatabaseManager::OPT_NO_READ_AFTER_WRITE);
 		} else {
 			$rs = $db->ExecuteSlave($sql);
 		}
@@ -110,6 +110,10 @@ class DAO_Skill extends Cerb_ORMHelper {
 				null,
 				Cerb_ORMHelper::OPT_GET_MASTER_ONLY
 			);
+			
+			if(!is_array($objects))
+				return false;
+			
 			$cache->save($objects, self::CACHE_ALL);
 		}
 		
@@ -175,6 +179,9 @@ class DAO_Skill extends Cerb_ORMHelper {
 	static private function _getObjectsFromResult($rs) {
 		$objects = array();
 		
+		if(!($rs instanceof mysqli_result))
+			return false;
+		
 		while($row = mysqli_fetch_assoc($rs)) {
 			$object = new Model_Skill();
 			$object->id = $row['id'];
@@ -232,7 +239,7 @@ class DAO_Skill extends Cerb_ORMHelper {
 	public static function getSearchQueryComponents($columns, $params, $sortBy=null, $sortAsc=null) {
 		$fields = SearchFields_Skill::getFields();
 		
-		list($tables,$wheres) = parent::_parseSearchParams($params, $columns, $fields, $sortBy);
+		list($tables,$wheres) = parent::_parseSearchParams($params, $columns, 'SearchFields_Skill', $sortBy);
 		
 		$select_sql = sprintf("SELECT ".
 			"skill.id as %s, ".
@@ -251,19 +258,10 @@ class DAO_Skill extends Cerb_ORMHelper {
 			(isset($tables['context_link']) ? sprintf("INNER JOIN context_link ON (context_link.to_context = %s AND context_link.to_context_id = skill.id) ", Cerb_ORMHelper::qstr(CerberusContexts::CONTEXT_SKILL)) : " ").
 			'';
 		
-		// Custom field joins
-		list($select_sql, $join_sql, $has_multiple_values) = self::_appendSelectJoinSqlForCustomFieldTables(
-			$tables,
-			$params,
-			'skill.id',
-			$select_sql,
-			$join_sql
-		);
-				
 		$where_sql = "".
 			(!empty($wheres) ? sprintf("WHERE %s ",implode(' AND ',$wheres)) : "WHERE 1 ");
 			
-		$sort_sql = self::_buildSortClause($sortBy, $sortAsc, $fields);
+		$sort_sql = self::_buildSortClause($sortBy, $sortAsc, $fields, $select_sql, 'SearchFields_Skill');
 	
 		// Virtuals
 		
@@ -309,11 +307,6 @@ class DAO_Skill extends Cerb_ORMHelper {
 			case SearchFields_Skill::VIRTUAL_HAS_FIELDSET:
 				self::_searchComponentsVirtualHasFieldset($param, $from_context, $from_index, $args['join_sql'], $args['where_sql']);
 				break;
-		
-			case SearchFields_Skill::VIRTUAL_WATCHERS:
-				$args['has_multiple_values'] = true;
-				self::_searchComponentsVirtualWatchers($param, $from_context, $from_index, $args['join_sql'], $args['where_sql'], $args['tables']);
-				break;
 		}
 	}
 	
@@ -349,13 +342,18 @@ class DAO_Skill extends Cerb_ORMHelper {
 			$sort_sql;
 			
 		if($limit > 0) {
-			$rs = $db->SelectLimit($sql,$limit,$page*$limit) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs mysqli_result */
+			if(false == ($rs = $db->SelectLimit($sql,$limit,$page*$limit)))
+				return false;
 		} else {
-			$rs = $db->ExecuteSlave($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs mysqli_result */
+			if(false == ($rs = $db->ExecuteSlave($sql)))
+				return false;
 			$total = mysqli_num_rows($rs);
 		}
 		
 		$results = array();
+		
+		if(!($rs instanceof mysqli_result))
+			return false;
 		
 		while($row = mysqli_fetch_assoc($rs)) {
 			$object_id = intval($row[SearchFields_Skill::ID]);
@@ -388,7 +386,7 @@ class DAO_Skill extends Cerb_ORMHelper {
 
 };
 
-class SearchFields_Skill implements IDevblocksSearchFields {
+class SearchFields_Skill extends DevblocksSearchFields {
 	const ID = 's_id';
 	const NAME = 's_name';
 	const SKILLSET_ID = 's_skillset_id';
@@ -402,10 +400,49 @@ class SearchFields_Skill implements IDevblocksSearchFields {
 	const CONTEXT_LINK = 'cl_context_from';
 	const CONTEXT_LINK_ID = 'cl_context_from_id';
 	
+	static private $_fields = null;
+	
+	static function getPrimaryKey() {
+		return 'skill.id';
+	}
+	
+	static function getCustomFieldContextKeys() {
+		return array(
+			CerberusContexts::CONTEXT_SKILL => new DevblocksSearchFieldContextKeys('skill.id', self::ID),
+			CerberusContexts::CONTEXT_SKILLSET => new DevblocksSearchFieldContextKeys('skill.skillset_id', self::SKILLSET_ID),
+		);
+	}
+	
+	static function getWhereSQL(DevblocksSearchCriteria $param) {
+		switch($param->field) {
+			case self::VIRTUAL_WATCHERS:
+				return self::_getWhereSQLFromWatchersField($param, CerberusContexts::CONTEXT_SKILL, self::getPrimaryKey());
+				break;
+			
+			default:
+				if('cf_' == substr($param->field, 0, 3)) {
+					return self::_getWhereSQLFromCustomFields($param);
+				} else {
+					return $param->getWhereSQL(self::getFields(), self::getPrimaryKey());
+				}
+				break;
+		}
+	}
+	
 	/**
 	 * @return DevblocksSearchField[]
 	 */
 	static function getFields() {
+		if(is_null(self::$_fields))
+			self::$_fields = self::_getFields();
+		
+		return self::$_fields;
+	}
+	
+	/**
+	 * @return DevblocksSearchField[]
+	 */
+	static function _getFields() {
 		$translate = DevblocksPlatform::getTranslationService();
 		
 		$columns = array(
@@ -424,9 +461,7 @@ class SearchFields_Skill implements IDevblocksSearchFields {
 		);
 		
 		// Custom Fields
-		$custom_columns = DevblocksSearchField::getCustomSearchFieldsByContexts(array(
-			CerberusContexts::CONTEXT_SKILL,
-		));
+		$custom_columns = DevblocksSearchField::getCustomSearchFieldsByContexts(array_keys(self::getCustomFieldContextKeys()));
 		
 		if(!empty($custom_columns))
 			$columns = array_merge($columns, $custom_columns);
@@ -486,6 +521,9 @@ class View_Skill extends C4_AbstractView implements IAbstractView_Subtotals, IAb
 			$this->renderSortAsc,
 			$this->renderTotal
 		);
+		
+		$this->_lazyLoadCustomFieldsIntoObjects($objects, 'SearchFields_Skill');
+		
 		return $objects;
 	}
 	
@@ -508,9 +546,9 @@ class View_Skill extends C4_AbstractView implements IAbstractView_Subtotals, IAb
 			
 			switch($field_key) {
 				// Fields
-//				case SearchFields_Skill::EXAMPLE:
-//					$pass = true;
-//					break;
+				case SearchFields_Skill::SKILLSET_ID:
+					$pass = true;
+					break;
 					
 				// Virtuals
 				case SearchFields_Skill::VIRTUAL_CONTEXT_LINK:
@@ -536,35 +574,37 @@ class View_Skill extends C4_AbstractView implements IAbstractView_Subtotals, IAb
 	function getSubtotalCounts($column) {
 		$counts = array();
 		$fields = $this->getFields();
+		$context = CerberusContexts::CONTEXT_SKILL;
 
 		if(!isset($fields[$column]))
 			return array();
 		
 		switch($column) {
-//			case SearchFields_Skill::EXAMPLE_BOOL:
-//				$counts = $this->_getSubtotalCountForBooleanColumn('DAO_Skill', $column);
-//				break;
-
-//			case SearchFields_Skill::EXAMPLE_STRING:
-//				$counts = $this->_getSubtotalCountForStringColumn('DAO_Skill', $column);
-//				break;
+			case SearchFields_Skill::SKILLSET_ID:
+				$skillsets = DAO_Skillset::getAll();
+				$labels = array();
+				foreach($skillsets as $skillset)
+					$labels[$skillset->id] = $skillset->name;
+				
+				$counts = $this->_getSubtotalCountForStringColumn($context, $column, $labels, 'in', 'options[]');
+				break;
 				
 			case SearchFields_Skill::VIRTUAL_CONTEXT_LINK:
-				$counts = $this->_getSubtotalCountForContextLinkColumn('DAO_Skill', CerberusContexts::CONTEXT_SKILL, $column);
+				$counts = $this->_getSubtotalCountForContextLinkColumn($context, $column);
 				break;
 
 			case SearchFields_Skill::VIRTUAL_HAS_FIELDSET:
-				$counts = $this->_getSubtotalCountForHasFieldsetColumn('DAO_Skill', CerberusContexts::CONTEXT_SKILL, $column);
+				$counts = $this->_getSubtotalCountForHasFieldsetColumn($context, $column);
 				break;
 				
 			case SearchFields_Skill::VIRTUAL_WATCHERS:
-				$counts = $this->_getSubtotalCountForWatcherColumn('DAO_Skill', $column);
+				$counts = $this->_getSubtotalCountForWatcherColumn($context, $column);
 				break;
 			
 			default:
 				// Custom fields
 				if('cf_' == substr($column,0,3)) {
-					$counts = $this->_getSubtotalCountForCustomColumn('DAO_Skill', $column, 'skill.id');
+					$counts = $this->_getSubtotalCountForCustomColumn($context, $column);
 				}
 				
 				break;
@@ -577,7 +617,7 @@ class View_Skill extends C4_AbstractView implements IAbstractView_Subtotals, IAb
 		$search_fields = SearchFields_Skill::getFields();
 		
 		$fields = array(
-			'_fulltext' => 
+			'text' => 
 				array(
 					'type' => DevblocksSearchCriteria::TYPE_TEXT,
 					'options' => array('param_key' => SearchFields_Skill::NAME, 'match' => DevblocksSearchCriteria::OPTION_TEXT_PARTIAL),
@@ -620,44 +660,44 @@ class View_Skill extends C4_AbstractView implements IAbstractView_Subtotals, IAb
 		ksort($fields);
 		
 		return $fields;
-	}	
+	}
 	
-	function getParamsFromQuickSearchFields($fields) {
-		$search_fields = $this->getQuickSearchFields();
-		$params = DevblocksSearchCriteria::getParamsFromQueryFields($fields, $search_fields);
-
-		// Handle virtual fields and overrides
-		if(is_array($fields))
-		foreach($fields as $k => $v) {
-			switch($k) {
-				case 'skillset':
-					$field_key = SearchFields_Skill::SKILLSET_ID;
-					$oper = DevblocksSearchCriteria::OPER_IN;
-					
-					$skillsets = DAO_Skillset::getAll();
-					$patterns = DevblocksPlatform::parseCsvString($v);
-					$values = array();
-					
-					if(is_array($values))
-					foreach($patterns as $pattern) {
-						foreach($skillsets as $skillset_id => $skillset) {
-							if(false !== stripos($skillset->name, $pattern))
-								$values[$skillset_id] = true;
-						}
+	function getParamFromQuickSearchFieldTokens($field, $tokens) {
+		switch($field) {
+			case 'skillset':
+				$field_key = SearchFields_Skill::SKILLSET_ID;
+				$oper = null;
+				$terms = null;
+				
+				CerbQuickSearchLexer::getOperArrayFromTokens($tokens, $oper, $terms);
+				
+				$skillsets = DAO_Skillset::getAll();
+				$values = array();
+				
+				if(is_array($values))
+				foreach($terms as $term) {
+					foreach($skillsets as $skillset_id => $skillset) {
+						if(false !== stripos($skillset->name, $term))
+							$values[$skillset_id] = true;
 					}
-					
-					if(!empty($values)) {
-						$params[$field_key] = new DevblocksSearchCriteria(
-							$field_key,
-							$oper,
-							array_keys($values)
-						);
-					}
-					break;
-			}
+				}
+				
+				if(!empty($values)) {
+					return new DevblocksSearchCriteria(
+						$field_key,
+						$oper,
+						array_keys($values)
+					);
+				}
+				break;
+				
+			default:
+				$search_fields = $this->getQuickSearchFields();
+				return DevblocksSearchCriteria::getParamFromQueryFieldTokens($field, $tokens, $search_fields);
+				break;
 		}
 		
-		return $params;
+		return false;
 	}
 	
 	function render() {
@@ -828,70 +868,6 @@ class View_Skill extends C4_AbstractView implements IAbstractView_Subtotals, IAb
 			$this->addParam($criteria, $field);
 			$this->renderPage = 0;
 		}
-	}
-		
-	function doBulkUpdate($filter, $do, $ids=array()) {
-		@set_time_limit(600); // 10m
-	
-		$change_fields = array();
-		$custom_fields = array();
-
-		// Make sure we have actions
-		if(empty($do))
-			return;
-
-		// Make sure we have checked items if we want a checked list
-		if(0 == strcasecmp($filter,"checks") && empty($ids))
-			return;
-			
-		if(is_array($do))
-		foreach($do as $k => $v) {
-			switch($k) {
-				case 'example':
-					//$change_fields[DAO_Skill::EXAMPLE] = 'some value';
-					break;
-					
-				default:
-					// Custom fields
-					if(substr($k,0,3)=="cf_") {
-						$custom_fields[substr($k,3)] = $v;
-					}
-					break;
-			}
-		}
-
-		$pg = 0;
-
-		if(empty($ids))
-		do {
-			list($objects,$null) = DAO_Skill::search(
-				array(),
-				$this->getParams(),
-				100,
-				$pg++,
-				SearchFields_Skill::ID,
-				true,
-				false
-			);
-			$ids = array_merge($ids, array_keys($objects));
-			 
-		} while(!empty($objects));
-
-		$batch_total = count($ids);
-		for($x=0;$x<=$batch_total;$x+=100) {
-			$batch_ids = array_slice($ids,$x,100);
-			
-			if(!empty($change_fields)) {
-				DAO_Skill::update($batch_ids, $change_fields);
-			}
-
-			// Custom Fields
-			self::_doBulkSetCustomFields(CerberusContexts::CONTEXT_SKILL, $custom_fields, $batch_ids);
-			
-			unset($batch_ids);
-		}
-
-		unset($ids);
 	}
 };
 

@@ -1,8 +1,8 @@
 <form action="{devblocks_url}{/devblocks_url}" method="POST" id="formBatchUpdate" onsubmit="return false;">
-<input type="hidden" name="c" value="config">
+<input type="hidden" name="c" value="profiles">
 <input type="hidden" name="a" value="handleSectionAction">
-<input type="hidden" name="section" value="workers">
-<input type="hidden" name="action" value="doWorkersBulkUpdate">
+<input type="hidden" name="section" value="worker">
+<input type="hidden" name="action" value="startBulkUpdateJson">
 <input type="hidden" name="view_id" value="{$view_id}">
 <input type="hidden" name="ids" value="{$ids}">
 <input type="hidden" name="_csrf_token" value="{$session.csrf_token}">
@@ -18,6 +18,57 @@
 	<legend>Set Fields</legend>
 	<table cellspacing="0" cellpadding="2" width="100%">
 		<tr>
+			<td width="0%" nowrap="nowrap" align="right">{'common.title'|devblocks_translate|capitalize}:</td>
+			<td width="100%">
+				<input type="text" name="title" size="45" value="" style="width:90%;">
+			</td>
+		</tr>
+		
+		<tr>
+			<td width="0%" nowrap="nowrap" align="right">{'common.location'|devblocks_translate|capitalize}:</td>
+			<td width="100%">
+				<input type="text" name="location" size="45" value="" style="width:90%;">
+			</td>
+		</tr>
+		
+		<tr>
+			<td width="0%" nowrap="nowrap" align="right">{'common.gender'|devblocks_translate|capitalize}:</td>
+			<td width="100%">
+				<select name="gender">
+					<option value=""></option>
+					<option value="M">{'common.gender.male'|devblocks_translate|capitalize}</option>
+					<option value="F">{'common.gender.female'|devblocks_translate|capitalize}</option>
+				</select>
+				<button type="button" onclick="this.form.gender.selectedIndex = 1;">{'common.gender.male'|devblocks_translate|lower}</button>
+				<button type="button" onclick="this.form.gender.selectedIndex = 2;">{'common.gender.female'|devblocks_translate|lower}</button>
+			</td>
+		</tr>
+		
+		<tr>
+			<td width="0%" nowrap="nowrap" align="right">{'common.language'|devblocks_translate|capitalize}:</td>
+			<td width="100%">
+				<select name="language">
+					<option value=""></option>
+					{foreach from=$languages item=lang key=lang_code}
+					<option value="{$lang_code}">{$lang}</option>
+					{/foreach}
+				</select>
+			</td>
+		</tr>
+	
+		<tr>
+			<td width="0%" nowrap="nowrap" align="right">{'common.timezone'|devblocks_translate|capitalize}:</td>
+			<td width="100%">
+				<select name="timezone">
+					<option value=""></option>
+					{foreach from=$timezones item=tz}
+					<option value="{$tz}">{$tz}</option>
+					{/foreach}
+				</select>
+			</td>
+		</tr>
+	
+		<tr>
 			<td width="0%" nowrap="nowrap" align="right">{'common.disabled'|devblocks_translate|capitalize}:</td>
 			<td width="100%">
 				<select name="is_disabled">
@@ -30,6 +81,7 @@
 				<button type="button" onclick="this.form.is_disabled.selectedIndex=2;">{'common.yes'|devblocks_translate}</button>
 			</td>
 		</tr>
+		
 		<tr>
 			<td width="0%" nowrap="nowrap" align="right">{'worker.auth_extension_id'|devblocks_translate|capitalize}:</td>
 			<td width="100%">
@@ -41,6 +93,8 @@
 				</select>
 			</td>
 		</tr>
+		
+		
 	</table>
 </fieldset>
 
@@ -53,21 +107,35 @@
 
 {include file="devblocks:cerberusweb.core::internal/custom_fieldsets/peek_custom_fieldsets.tpl" context=CerberusContexts::CONTEXT_WORKER bulk=true}
 
+{if $active_worker->hasPriv('context.worker.worklist.broadcast')}
+{include file="devblocks:cerberusweb.core::internal/views/bulk_broadcast.tpl" context=CerberusContexts::CONTEXT_WORKER}
+{/if}
+
 <button type="button" class="submit"><span class="glyphicons glyphicons-circle-ok" style="color:rgb(0,180,0);"></span> {'common.save_changes'|devblocks_translate|capitalize}</button>
 </form>
 
 <script type="text/javascript">
 $(function() {
 	var $popup = genericAjaxPopupFind('#formBatchUpdate');
+	$popup.css('overflow', 'inherit');
 	
 	$popup.one('popup_open', function(event,ui) {
 		$popup.dialog('option','title',"{'common.bulk_update'|devblocks_translate|capitalize|escape:'javascript' nofilter}");
 		
 		$popup.find('button.submit').click(function() {
-			genericAjaxPost('formBatchUpdate','view{$view_id}',null,function() {
+			genericAjaxPost('formBatchUpdate', '', null, function(json) {
+				if(json.cursor) {
+					// Pull the cursor
+					var $tips = $('#{$view_id}_tips').html('');
+					var $spinner = $('<span class="cerb-ajax-spinner"/>').appendTo($tips);
+					genericAjaxGet($tips, 'c=internal&a=viewBulkUpdateWithCursor&view_id={$view_id}&cursor=' + json.cursor);
+				}
+				
 				genericAjaxPopupClose($popup);
 			});
 		});
+		
+		{include file="devblocks:cerberusweb.core::internal/views/bulk_broadcast_jquery.tpl"}
 	});
 });
 </script>

@@ -1,8 +1,8 @@
 {$view_context = CerberusContexts::CONTEXT_SNIPPET}
 {$view_fields = $view->getColumnsAvailable()}
-{assign var=results value=$view->getData()}
-{assign var=total value=$results[1]}
-{assign var=data value=$results[0]}
+{$results = $view->getData()}
+{$total = $results[1]}
+{$data = $results[0]}
 
 {include file="devblocks:cerberusweb.core::internal/views/view_marquee.tpl" view=$view}
 
@@ -10,7 +10,7 @@
 	<tr>
 		<td nowrap="nowrap"><span class="title">{$view->name}</span></td>
 		<td nowrap="nowrap" align="right" class="title-toolbar">
-			{if $active_worker->hasPriv('core.snippets.actions.create')}<a href="javascript:;" title="{'common.add'|devblocks_translate|capitalize}" class="minimal" onclick="genericAjaxPopup('peek','c=internal&a=showSnippetsPeek&id=0&owner_context={$owner_context}&owner_context_id={$owner_context_id}&view_id={$view->id}',null,false,'550');"><span class="glyphicons glyphicons-circle-plus"></span></a>{/if}
+			{if $active_worker->hasPriv('core.snippets.actions.create')}<a href="javascript:;" title="{'common.add'|devblocks_translate|capitalize}" class="minimal" onclick="genericAjaxPopup('peek','c=internal&a=showSnippetsPeek&id=0&owner_context={$owner_context}&owner_context_id={$owner_context_id}&view_id={$view->id}',null,false,'50%');"><span class="glyphicons glyphicons-circle-plus"></span></a>{/if}
 			<a href="javascript:;" title="{'common.search'|devblocks_translate|capitalize}" class="minimal" onclick="genericAjaxPopup('search','c=internal&a=viewShowQuickSearchPopup&view_id={$view->id}',null,false,'400');"><span class="glyphicons glyphicons-search"></span></a>
 			<a href="javascript:;" title="{'common.customize'|devblocks_translate|capitalize}" class="minimal" onclick="genericAjaxGet('customize{$view->id}','c=internal&a=viewCustomize&id={$view->id}');toggleDiv('customize{$view->id}','block');"><span class="glyphicons glyphicons-cogwheel"></span></a>
 			<a href="javascript:;" title="{'common.subtotals'|devblocks_translate|capitalize}" class="subtotals minimal"><span class="glyphicons glyphicons-signal"></span></a>
@@ -59,9 +59,9 @@
 	{$custom_placeholders = $result.s_custom_placeholders_json|json_decode:true}
 
 	{if $smarty.foreach.results.iteration % 2}
-		{assign var=tableRowClass value="even"}
+		{$tableRowClass = "even"}
 	{else}
-		{assign var=tableRowClass value="odd"}
+		{$tableRowClass = "odd"}
 	{/if}
 	
 	{$dict = null}
@@ -72,12 +72,12 @@
 			{if substr($column,0,3)=="cf_"}
 				{include file="devblocks:cerberusweb.core::internal/custom_fields/view/cell_renderer.tpl"}
 			{elseif $column=="s_title"}
-			<td context="{$result.s_context}" id="{$result.s_id}" has_custom_placeholders="{if !empty($custom_placeholders)}true{else}false{/if}">
+			<td data-column="{$column}" context="{$result.s_context}" id="{$result.s_id}" has_custom_placeholders="{if !empty($custom_placeholders)}true{else}false{/if}">
 				<input type="checkbox" name="row_id[]" value="{$result.s_id}" style="display:none;">
 				<a href="javascript:;" onclick="genericAjaxPopup('peek','c=internal&a=showSnippetsPeek&view_id={$view->id}&id={$result.s_id}', null, false, '550');" class="subject">{if empty($result.$column)}(no title){else}{$result.$column}{/if}</a>
 			</td>
 			{elseif $column=="s_context"}
-			<td>
+			<td data-column="{$column}">
 				{if '' == $result.$column}
 					Plaintext
 				{elseif isset($contexts.{$result.$column})}
@@ -90,7 +90,7 @@
 				{$owner_context = $result.s_owner_context}
 				{$owner_context_id = $result.s_owner_context_id}
 				{$owner_context_ext = Extension_DevblocksContext::get($owner_context)}
-				<td>
+				<td data-column="{$column}">
 					{if !is_null($owner_context_ext)}
 						{$meta = $owner_context_ext->getMeta($owner_context_id)}
 						{if !empty($meta)}
@@ -100,16 +100,16 @@
 					{/if}
 				</td>
 			{elseif $column=="s_updated_at"}
-			<td>
+			<td data-column="{$column}">
 				<abbr title="{$result.$column|devblocks_date}">{$result.$column|devblocks_prettytime}</abbr>
 			</td>
 			{else}
-			<td>{$result.$column}</td>
+			<td data-column="{$column}">{$result.$column}</td>
 			{/if}
 		{/foreach}
 		</tr>
 		<tr class="{$tableRowClass} preview" style="display:none;">
-			<td colspan="{count($view->view_columns)}">
+			<td data-column="preview" colspan="{count($view->view_columns)}">
 				{$snippet_content = $result.s_content|regex_replace:'#({{.*?}})#':'[ph]\1[/ph]'}
 				
 				{if isset($dicts.{$result.s_context}) && isset($tpl_builder)}
@@ -159,7 +159,7 @@
 	{if $total}
 	<div style="float:left;" id="{$view->id}_actions">
 		{if $active_worker && $active_worker->is_superuser}
-			<button type="button" class="action-always-show action-bulkupdate" onclick="genericAjaxPopup('peek','c=internal&a=showSnippetBulkPanel&view_id={$view->id}&ids=' + Devblocks.getFormEnabledCheckboxValues('viewForm{$view->id}','row_id[]'),null,false,'500');"><span class="glyphicons glyphicons-folder-closed"></span> {'common.bulk_update'|devblocks_translate|lower}</button>
+			<button type="button" class="action-always-show action-bulkupdate" onclick="genericAjaxPopup('peek','c=internal&a=showSnippetBulkPanel&view_id={$view->id}&ids=' + Devblocks.getFormEnabledCheckboxValues('viewForm{$view->id}','row_id[]'),null,false,'50%');"><span class="glyphicons glyphicons-folder-closed"></span> {'common.bulk_update'|devblocks_translate|lower}</button>
 		{/if}
 	</div>
 	{/if}
@@ -172,35 +172,34 @@
 {include file="devblocks:cerberusweb.core::internal/views/view_common_jquery_ui.tpl"}
 
 <script type="text/javascript">
-$frm = $('#viewForm{$view->id}');
-
-{if $pref_keyboard_shortcuts}
-$frm.bind('keyboard_shortcut',function(event) {
-	//console.log("{$view->id} received " + (indirect ? 'indirect' : 'direct') + " keyboard event for: " + event.keypress_event.which);
+$(function() {
+	var $frm = $('#viewForm{$view->id}');
 	
-	$view_actions = $('#{$view->id}_actions');
+	{if $pref_keyboard_shortcuts}
+	$frm.bind('keyboard_shortcut',function(event) {
+		var $view_actions = $('#{$view->id}_actions');
+		var hotkey_activated = true;
 	
-	hotkey_activated = true;
-
-	switch(event.keypress_event.which) {
-		case 98: // (b) bulk update
-			$btn = $view_actions.find('button.action-bulkupdate');
-		
-			if(event.indirect) {
-				$btn.select().focus();
-				
-			} else {
-				$btn.click();
-			}
-			break;
-		
-		default:
-			hotkey_activated = false;
-			break;
-	}
-
-	if(hotkey_activated)
-		event.preventDefault();
+		switch(event.keypress_event.which) {
+			case 98: // (b) bulk update
+				var $btn = $view_actions.find('button.action-bulkupdate');
+			
+				if(event.indirect) {
+					$btn.select().focus();
+					
+				} else {
+					$btn.click();
+				}
+				break;
+			
+			default:
+				hotkey_activated = false;
+				break;
+		}
+	
+		if(hotkey_activated)
+			event.preventDefault();
+	});
+	{/if}
 });
-{/if}
 </script>

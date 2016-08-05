@@ -2,17 +2,17 @@
 /***********************************************************************
  | Cerb(tm) developed by Webgroup Media, LLC.
  |-----------------------------------------------------------------------
- | All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
+ | All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
  |   unless specifically noted otherwise.
  |
  | This source code is released under the Devblocks Public License.
  | The latest version of this license can be found here:
- | http://cerberusweb.com/license
+ | http://cerb.io/license
  |
  | By using this software, you acknowledge having read this license
  | and agree to be bound thereby.
  | ______________________________________________________________________
- |	http://www.cerbweb.com	    http://www.webgroupmedia.com/
+ |	http://cerb.io	    http://webgroup.media
  ***********************************************************************/
 
 class ChCoreTour extends DevblocksHttpResponseListenerExtension {
@@ -417,8 +417,8 @@ class ChCoreTour extends DevblocksHttpResponseListenerExtension {
 
 					case 'mail_from':
 						$tour = array(
-							'title' => 'Reply-To Addresses',
-							'body' => "Each group or bucket can specify a reply-to address.  This is where you configure all the available reply-to email addresses.  It is <b>very important</b> that these addresses deliver to one of the mailboxes that Cerb checks for new mail, otherwise you won't receive correspondence from your audience.",
+							'title' => 'Sender Addresses',
+							'body' => "Each group or bucket can specify a sender address.  This is where you configure all the available sender addresses.  It is <b>very important</b> that these addresses deliver to one of the mailboxes that Cerb checks for new mail, otherwise you won't receive correspondence from your audience.",
 						);
 						break;
 
@@ -1056,6 +1056,7 @@ class ChCoreEventListener extends DevblocksEventListenerExtension {
 		DAO_Attachment::maint();
 		DAO_WorkspacePage::maint();
 		DAO_WorkspaceTab::maint();
+		DAO_WorkerViewModel::flush();
 	}
 	
 	private function _handleCronHeartbeat($event) {
@@ -1063,12 +1064,7 @@ class ChCoreEventListener extends DevblocksEventListenerExtension {
 		list($results, $null) = DAO_Ticket::search(
 			array(),
 			array(
-				array(
-					DevblocksSearchCriteria::GROUP_OR,
-					SearchFields_Ticket::TICKET_CLOSED => new DevblocksSearchCriteria(SearchFields_Ticket::TICKET_CLOSED,'=',1),
-					SearchFields_Ticket::TICKET_WAITING => new DevblocksSearchCriteria(SearchFields_Ticket::TICKET_WAITING,'=',1),
-				),
-				SearchFields_Ticket::TICKET_DELETED => new DevblocksSearchCriteria(SearchFields_Ticket::TICKET_DELETED,'=',0),
+				SearchFields_Ticket::TICKET_STATUS_ID => new DevblocksSearchCriteria(SearchFields_Ticket::TICKET_STATUS_ID,'in',array(Model_Ticket::STATUS_WAITING, Model_Ticket::STATUS_CLOSED)),
 				array(
 					DevblocksSearchCriteria::GROUP_AND,
 					new DevblocksSearchCriteria(SearchFields_Ticket::TICKET_REOPEN_AT,DevblocksSearchCriteria::OPER_GT,0),
@@ -1083,8 +1079,7 @@ class ChCoreEventListener extends DevblocksEventListenerExtension {
 		);
 		
 		$fields = array(
-			DAO_Ticket::IS_CLOSED => 0,
-			DAO_Ticket::IS_WAITING => 0,
+			DAO_Ticket::STATUS_ID => Model_Ticket::STATUS_OPEN,
 			DAO_Ticket::REOPEN_AT => 0
 		);
 		

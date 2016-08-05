@@ -4,6 +4,16 @@ $logger = DevblocksPlatform::getConsoleLog();
 $tables = $db->metaTables();
 
 // ===========================================================================
+// Log everybody out since this is a major upgrade
+
+if(!isset($tables['devblocks_session'])) {
+	$logger->error("The 'devblocks_session' table does not exist.");
+	return FALSE;
+}
+
+$db->ExecuteMaster("DELETE FROM devblocks_session");
+
+// ===========================================================================
 // Fix the `plugin_library` latest_version field
 
 if(!isset($tables['plugin_library'])) {
@@ -204,7 +214,7 @@ if(!isset($tables['context_recommendation'])) {
 // ===========================================================================
 // Remove disabled workers from groups
 
-$db->Execute("DELETE FROM worker_to_group WHERE worker_id IN (SELECT id FROM worker WHERE is_disabled = 1)");
+$db->ExecuteMaster("DELETE FROM worker_to_group WHERE worker_id IN (SELECT id FROM worker WHERE is_disabled = 1)");
 
 // ===========================================================================
 // Add `importance` field to `ticket`
@@ -622,7 +632,7 @@ if(!isset($columns['csrf_token'])) {
 // ===========================================================================
 // Clear unused view models
 
-$db->Execute("DELETE FROM worker_view_model WHERE view_id = 'messages'");
+$db->ExecuteMaster("DELETE FROM worker_view_model WHERE view_id = 'messages'");
 
 // ===========================================================================
 // Fix stale group filtering on messages worklists

@@ -63,6 +63,54 @@ class DAO_ExampleObject extends Cerb_ORMHelper {
 	}
 	
 	/**
+	 * @param Model_ContextBulkUpdate $update
+	 * @return boolean
+	 */
+	static function bulkUpdate(Model_ContextBulkUpdate $update) {
+		$do = $update->actions;
+		$ids = $update->context_ids;
+
+		// Make sure we have actions
+		if(empty($ids) || empty($do))
+			return false;
+		
+		$update->markInProgress();
+		
+		$change_fields = array();
+		$custom_fields = array();
+
+		if(is_array($do))
+		foreach($do as $k => $v) {
+			switch($k) {
+				default:
+					// Custom fields
+					if(substr($k,0,3)=="cf_") {
+						$custom_fields[substr($k,3)] = $v;
+					}
+					break;
+			}
+		}
+		
+		if(!empty($change_fields))
+			DAO_ExampleObject::update($ids, $change_fields);
+
+		// Custom Fields
+		if(!empty($custom_fields))
+			C4_AbstractView::_doBulkSetCustomFields(Context_ExampleObject::ID, $custom_fields, $ids);
+		
+		// Scheduled behavior
+		if(isset($do['behavior']))
+			C4_AbstractView::_doBulkScheduleBehavior(Context_ExampleObject::ID, $do['behavior'], $ids);
+		
+		// Watchers
+		if(isset($do['watchers']))
+			C4_AbstractView::_doBulkChangeWatchers(Context_ExampleObject::ID, $do['watchers'], $ids);
+		
+		$update->markCompleted();
+		return true;
+	}
+	
+	/**
 	 * @param string $where
 	 * @param mixed $sortBy
 	 * @param mixed $sortAsc
@@ -110,6 +158,9 @@ class DAO_ExampleObject extends Cerb_ORMHelper {
 	 */
 	static private function _getObjectsFromResult($rs) {
 		$objects = array();
+		
+		if(!($rs instanceof mysqli_result))
+			return false;
 		
 		while($row = mysqli_fetch_assoc($rs)) {
 			$object = new Model_ExampleObject();
@@ -172,7 +223,7 @@ class DAO_ExampleObject extends Cerb_ORMHelper {
 	public static function getSearchQueryComponents($columns, $params, $sortBy=null, $sortAsc=null) {
 		$fields = SearchFields_ExampleObject::getFields();
 		
-		list($tables,$wheres) = parent::_parseSearchParams($params, $columns, $fields, $sortBy);
+		list($tables,$wheres) = parent::_parseSearchParams($params, $columns, 'SearchFields_ExampleObject', $sortBy);
 		
 		$select_sql = sprintf("SELECT ".
 			"example_object.id as %s, ".
@@ -189,38 +240,11 @@ class DAO_ExampleObject extends Cerb_ORMHelper {
 			(isset($tables['context_link']) ? sprintf("INNER JOIN context_link ON (context_link.to_context = %s AND context_link.to_context_id = example_object.id) ", Cerb_ORMHelper::qstr(Context_ExampleObject::ID)) : " ")
 			;
 		
-		// Custom field joins
-		list($select_sql, $join_sql, $has_multiple_values) = self::_appendSelectJoinSqlForCustomFieldTables(
-			$tables,
-			$params,
-			'example_object.id',
-			$select_sql,
-			$join_sql
-		);
-				
 		$where_sql = "".
 			(!empty($wheres) ? sprintf("WHERE %s ",implode(' AND ',$wheres)) : "WHERE 1 ");
 			
-		$sort_sql = self::_buildSortClause($sortBy, $sortAsc, $fields);
+		$sort_sql = self::_buildSortClause($sortBy, $sortAsc, $fields, $select_sql, 'SearchFields_ExampleObject');
 	
-		// Virtuals
-		foreach($params as $param) {
-			if(!is_a($param, 'DevblocksSearchCriteria'))
-				continue;
-			
-			$param_key = $param->field;
-			settype($param_key, 'string');
-			switch($param_key) {
-				case SearchFields_ExampleObject::VIRTUAL_WATCHERS:
-					$has_multiple_values = true;
-					$from_context = Context_ExampleObject::ID; // [TODO]
-					$from_index = 'example_object.id'; // [TODO]
-					
-					self::_searchComponentsVirtualWatchers($param, $from_context, $from_index, $join_sql, $where_sql);
-					break;
-			}
-		}
-		
 		return array(
 			'primary_table' => 'example_object',
 			'select' => $select_sql,
@@ -263,13 +287,18 @@ class DAO_ExampleObject extends Cerb_ORMHelper {
 			$sort_sql;
 			
 		if($limit > 0) {
-			$rs = $db->SelectLimit($sql,$limit,$page*$limit) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs mysqli_result */
+			if(false == ($rs = $db->SelectLimit($sql,$limit,$page*$limit)))
+				return false;
 		} else {
-			$rs = $db->ExecuteSlave($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs mysqli_result */
+			if(false == ($rs = $db->ExecuteSlave($sql)))
+				return false;
 			$total = mysqli_num_rows($rs);
 		}
 		
 		$results = array();
+		
+		if(!($rs instanceof mysqli_result))
+			return false;
 		
 		while($row = mysqli_fetch_assoc($rs)) {
 			$object_id = intval($row[SearchFields_ExampleObject::ID]);
@@ -296,7 +325,7 @@ class DAO_ExampleObject extends Cerb_ORMHelper {
 
 };
 
-class SearchFields_ExampleObject implements IDevblocksSearchFields {
+class SearchFields_ExampleObject extends DevblocksSearchFields {
 	const ID = 'e_id';
 	const NAME = 'e_name';
 	const CREATED = 'e_created';
@@ -306,10 +335,48 @@ class SearchFields_ExampleObject implements IDevblocksSearchFields {
 	
 	const VIRTUAL_WATCHERS = '*_workers';
 	
+	static private $_fields = null;
+	
+	static function getPrimaryKey() {
+		return 'example_object.id';
+	}
+	
+	static function getCustomFieldContextKeys() {
+		return array(
+			Context_ExampleObject::ID => new DevblocksSearchFieldContextKeys('example_object.id', self::ID),
+		);
+	}
+	
+	static function getWhereSQL(DevblocksSearchCriteria $param) {
+		switch($param->field) {
+			case self::VIRTUAL_WATCHERS:
+				return self::_getWhereSQLFromWatchersField($param, Context_ExampleObject::ID, self::getPrimaryKey());
+				break;
+			
+			default:
+				if('cf_' == substr($param->field, 0, 3)) {
+					return self::_getWhereSQLFromCustomFields($param);
+				} else {
+					return $param->getWhereSQL(self::getFields(), self::getPrimaryKey());
+				}
+				break;
+		}
+	}
+	
 	/**
 	 * @return DevblocksSearchField[]
 	 */
 	static function getFields() {
+		if(is_null(self::$_fields))
+			self::$_fields = self::_getFields();
+		
+		return self::$_fields;
+	}
+	
+	/**
+	 * @return DevblocksSearchField[]
+	 */
+	static function _getFields() {
 		$translate = DevblocksPlatform::getTranslationService();
 		
 		$columns = array(
@@ -325,9 +392,7 @@ class SearchFields_ExampleObject implements IDevblocksSearchFields {
 		
 		// Custom fields with fieldsets
 		
-		$custom_columns = DevblocksSearchField::getCustomSearchFieldsByContexts(array(
-			Context_ExampleObject::ID,
-		));
+		$custom_columns = DevblocksSearchField::getCustomSearchFieldsByContexts(array_keys(self::getCustomFieldContextKeys()));
 		
 		if(is_array($custom_columns))
 			$columns = array_merge($columns, $custom_columns);
@@ -387,6 +452,9 @@ class View_ExampleObject extends C4_AbstractView implements IAbstractView_Subtot
 			$this->renderSortAsc,
 			$this->renderTotal
 		);
+		
+		$this->_lazyLoadCustomFieldsIntoObjects($objects, 'SearchFields_ExampleObject');
+		
 		return $objects;
 	}
 	
@@ -430,23 +498,24 @@ class View_ExampleObject extends C4_AbstractView implements IAbstractView_Subtot
 	function getSubtotalCounts($column) {
 		$counts = array();
 		$fields = $this->getFields();
+		$context = Context_ExampleObject::ID;
 
 		if(!isset($fields[$column]))
 			return array();
 		
 		switch($column) {
 			case SearchFields_ExampleObject::NAME:
-				$counts = $this->_getSubtotalCountForStringColumn('DAO_ExampleObject', $column);
+				$counts = $this->_getSubtotalCountForStringColumn($context, $column);
 				break;
 
 			case SearchFields_ExampleObject::VIRTUAL_WATCHERS:
-				$counts = $this->_getSubtotalCountForWatcherColumn('DAO_ExampleObject', $column);
+				$counts = $this->_getSubtotalCountForWatcherColumn($context, $column);
 				break;
 			
 			default:
 				// Custom fields
 				if('cf_' == substr($column,0,3)) {
-					$counts = $this->_getSubtotalCountForCustomColumn('DAO_ExampleObject', $column, 'e.id');
+					$counts = $this->_getSubtotalCountForCustomColumn($context, $column);
 				}
 				
 				break;
@@ -459,7 +528,7 @@ class View_ExampleObject extends C4_AbstractView implements IAbstractView_Subtot
 		$search_fields = SearchFields_ExampleObject::getFields();
 		
 		$fields = array(
-			'_fulltext' => 
+			'text' => 
 				array(
 					'type' => DevblocksSearchCriteria::TYPE_TEXT,
 					'options' => array('param_key' => SearchFields_ExampleObject::NAME, 'match' => DevblocksSearchCriteria::OPTION_TEXT_PARTIAL),
@@ -494,23 +563,19 @@ class View_ExampleObject extends C4_AbstractView implements IAbstractView_Subtot
 		ksort($fields);
 		
 		return $fields;
-	}	
-	
-	function getParamsFromQuickSearchFields($fields) {
-		$search_fields = $this->getQuickSearchFields();
-		$params = DevblocksSearchCriteria::getParamsFromQueryFields($fields, $search_fields);
-
-		// Handle virtual fields and overrides
-		if(is_array($fields))
-		foreach($fields as $k => $v) {
-			switch($k) {
-				// ...
-			}
-		}
-		
-		return $params;
 	}
 	
+	function getParamFromQuickSearchFieldTokens($field, $tokens) {
+		switch($field) {
+			default:
+				$search_fields = $this->getQuickSearchFields();
+				return DevblocksSearchCriteria::getParamFromQueryFieldTokens($field, $tokens, $search_fields);
+				break;
+		}
+		
+		return false;
+	}
+
 	function render() {
 		$this->_sanitize();
 		
@@ -626,81 +691,6 @@ class View_ExampleObject extends C4_AbstractView implements IAbstractView_Subtot
 			$this->renderPage = 0;
 		}
 	}
-		
-	function doBulkUpdate($filter, $do, $ids=array()) {
-		@set_time_limit(600); // 10m
-		
-		$change_fields = array();
-		$custom_fields = array();
-
-		// Make sure we have actions
-		if(empty($do))
-			return;
-
-		// Make sure we have checked items if we want a checked list
-		if(0 == strcasecmp($filter,"checks") && empty($ids))
-			return;
-			
-		if(is_array($do))
-		foreach($do as $k => $v) {
-			switch($k) {
-				// [TODO] Implement actions
-				case 'example':
-					//$change_fields[DAO_ExampleObject::EXAMPLE] = 'some value';
-					break;
-					
-				default:
-					// Custom fields
-					if(substr($k,0,3)=="cf_") {
-						$custom_fields[substr($k,3)] = $v;
-					}
-					break;
-			}
-		}
-
-		$pg = 0;
-		
-		if(empty($ids))
-		do {
-			list($objects,$null) = DAO_ExampleObject::search(
-				array(),
-				$this->getParams(),
-				100,
-				$pg++,
-				SearchFields_ExampleObject::ID,
-				true,
-				false
-			);
-			$ids = array_merge($ids, array_keys($objects));
-			 
-		} while(!empty($objects));
-		
-		$batch_total = count($ids);
-		for($x=0;$x<=$batch_total;$x+=100) {
-			$batch_ids = array_slice($ids,$x,100);
-			
-			if(!empty($change_fields))
-				DAO_ExampleObject::update($batch_ids, $change_fields);
-
-			// Custom Fields
-			self::_doBulkSetCustomFields(Context_ExampleObject::ID, $custom_fields, $batch_ids);
-			
-			// Watchers
-			if(isset($do['watchers']) && is_array($do['watchers'])) {
-				$watcher_params = $do['watchers'];
-				foreach($batch_ids as $batch_id) {
-					if(isset($watcher_params['add']) && is_array($watcher_params['add']))
-						CerberusContexts::addWatchers(Context_ExampleObject::ID, $batch_id, $watcher_params['add']);
-					if(isset($watcher_params['remove']) && is_array($watcher_params['remove']))
-						CerberusContexts::removeWatchers(Context_ExampleObject::ID, $batch_id, $watcher_params['remove']);
-				}
-			}
-			
-			unset($batch_ids);
-		}
-
-		unset($ids);
-	}
 };
 
 class Context_ExampleObject extends Extension_DevblocksContext {
@@ -724,7 +714,6 @@ class Context_ExampleObject extends Extension_DevblocksContext {
 		);
 	}
 	
-	// [TODO] Interface
 	function getDefaultProperties() {
 		return array(
 			'created',

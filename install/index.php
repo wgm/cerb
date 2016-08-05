@@ -2,24 +2,28 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
 | The latest version of this license can be found here:
-| http://cerberusweb.com/license
+| http://cerb.io/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://www.cerbweb.com	    http://www.webgroupmedia.com/
+|	http://cerb.io	    http://webgroup.media
 ***********************************************************************/
 
-if(version_compare(PHP_VERSION, "5.3", "<"))
+if(version_compare(PHP_VERSION, "5.3", "<")) {
+	header('Status: 500');
 	die("Cerb requires PHP 5.3 or later.");
+}
 
-if(!extension_loaded('mysqli'))
+if(!extension_loaded('mysqli')) {
+	header('Status: 500');
 	die("Cerb requires the 'mysqli' PHP extension.  Please enable it.");
+}
 
 @set_time_limit(3600); // 1hr
 require('../framework.config.php');
@@ -67,22 +71,22 @@ if(empty($step)) $step = STEP_ENVIRONMENT;
 // [TODO] Could convert to CerberusApplication::checkRequirements()
 
 @chmod(APP_TEMP_PATH, 0770);
-@mkdir(APP_TEMP_PATH . '/templates_c/');
-@chmod(APP_TEMP_PATH . '/templates_c/', 0770);
+@mkdir(APP_SMARTY_COMPILE_PATH);
+@chmod(APP_SMARTY_COMPILE_PATH, 0770);
 @mkdir(APP_TEMP_PATH . '/cache/');
 @chmod(APP_TEMP_PATH . '/cache/', 0770);
 
 // Make sure the temporary directories of Devblocks are writeable.
 if(!is_writeable(APP_TEMP_PATH)) {
-	die(APP_TEMP_PATH ." is not writeable by the webserver.  Please adjust permissions and reload this page.");
+	DevblocksPlatform::dieWithHttpError(APP_TEMP_PATH ." is not writeable by the webserver.  Please adjust permissions and reload this page.", 500);
 }
 
-if(!is_writeable(APP_TEMP_PATH . "/templates_c/")) {
-	die(APP_TEMP_PATH . "/templates_c/" . " is not writeable by the webserver.  Please adjust permissions and reload this page.");
+if(!is_writeable(APP_SMARTY_COMPILE_PATH)) {
+	DevblocksPlatform::dieWithHttpError(APP_SMARTY_COMPILE_PATH . " is not writeable by the webserver.  Please adjust permissions and reload this page.", 500);
 }
 
 if(!is_writeable(APP_TEMP_PATH . "/cache/")) {
-	die(APP_TEMP_PATH . "/cache/" . " is not writeable by the webserver.  Please adjust permissions and reload this page.");
+	DevblocksPlatform::dieWithHttpError(APP_TEMP_PATH . "/cache/" . " is not writeable by the webserver.  Please adjust permissions and reload this page.", 500);
 }
 
 @chmod(APP_STORAGE_PATH, 0770);
@@ -90,23 +94,23 @@ if(!is_writeable(APP_TEMP_PATH . "/cache/")) {
 @chmod(APP_STORAGE_PATH . '/mail/fail/', 0770);
 
 if(!is_writeable(APP_STORAGE_PATH)) {
-	die(APP_STORAGE_PATH . " is not writeable by the webserver.  Please adjust permissions and reload this page.");
+	DevblocksPlatform::dieWithHttpError(APP_STORAGE_PATH . " is not writeable by the webserver.  Please adjust permissions and reload this page.", 500);
 }
 
 if(!is_writeable(APP_STORAGE_PATH . "/import/fail/")) {
-	die(APP_STORAGE_PATH . "/import/fail/ is not writeable by the webserver.  Please adjust permissions and reload this page.");
+	DevblocksPlatform::dieWithHttpError(APP_STORAGE_PATH . "/import/fail/ is not writeable by the webserver.  Please adjust permissions and reload this page.", 500);
 }
 
 if(!is_writeable(APP_STORAGE_PATH . "/import/new/")) {
-	die(APP_STORAGE_PATH . "/import/new/ is not writeable by the webserver.  Please adjust permissions and reload this page.");
+	DevblocksPlatform::dieWithHttpError(APP_STORAGE_PATH . "/import/new/ is not writeable by the webserver.  Please adjust permissions and reload this page.", 500);
 }
 
 if(!is_writeable(APP_STORAGE_PATH . "/mail/new/")) {
-	die(APP_STORAGE_PATH . "/mail/new/ is not writeable by the webserver.  Please adjust permissions and reload this page.");
+	DevblocksPlatform::dieWithHttpError(APP_STORAGE_PATH . "/mail/new/ is not writeable by the webserver.  Please adjust permissions and reload this page.", 500);
 }
 
 if(!is_writeable(APP_STORAGE_PATH . "/mail/fail/")) {
-	die(APP_STORAGE_PATH . "/mail/fail/ is not writeable by the webserver.  Please adjust permissions and reload this page.");
+	DevblocksPlatform::dieWithHttpError(APP_STORAGE_PATH . "/mail/fail/ is not writeable by the webserver.  Please adjust permissions and reload this page.", 500);
 }
 
 // [TODO] Move this to the framework init (installer blocks this at the moment)
@@ -327,8 +331,8 @@ switch($step) {
 		// [JAS]: Possible storage engines
 		
 		$engines = array(
-			'myisam' => 'MyISAM (Default)',
-			'innodb' => 'InnoDB (Advanced)',
+			'myisam' => 'MyISAM (Legacy)',
+			'innodb' => 'InnoDB (Recommended)',
 		);
 		
 		$tpl->assign('engines', $engines);
@@ -347,6 +351,12 @@ switch($step) {
 				
 				// Check if the engine we want exists, otherwise default
 				$rs = mysqli_query($_db, "SHOW ENGINES");
+				
+				if(!($rs instanceof mysqli_result)) {
+					$db_passed = false;
+					$errors[] = "Can't run SHOW ENGINES query against the database.";
+				}
+				
 				$discovered_engines = array();
 				while($row = mysqli_fetch_assoc($rs)) {
 					$discovered_engines[] = strtolower($row['Engine']);
@@ -358,11 +368,11 @@ switch($step) {
 					$db_passed = false;
 					$errors[] = sprintf("The '%s' storage engine is not enabled.", $db_engine);
 				}
-
+				
 				// We need this for fulltext indexing
-				if(!in_array('myisam', $discovered_engines)) {
+				if(!in_array('myisam', $discovered_engines) && mysqli_get_server_version($_db) < 50600) {
 					$db_passed = false;
-					$errors[] = "The 'MyISAM' storage engine is not enabled and is required for fulltext search.";
+					$errors[] = "The 'MyISAM' storage engine is not enabled and is required for fulltext search in MySQL < 5.6.";
 				}
 
 				// Check user privileges

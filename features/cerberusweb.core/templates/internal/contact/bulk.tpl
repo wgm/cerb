@@ -2,7 +2,7 @@
 <input type="hidden" name="c" value="profiles">
 <input type="hidden" name="a" value="handleSectionAction">
 <input type="hidden" name="section" value="contact">
-<input type="hidden" name="action" value="saveBulkPanel">
+<input type="hidden" name="action" value="startBulkUpdateJson">
 <input type="hidden" name="view_id" value="{$view_id}">
 <input type="hidden" name="ids" value="{$ids}">
 <input type="hidden" name="_csrf_token" value="{$session.csrf_token}">
@@ -21,24 +21,51 @@
 	<legend>Set Fields</legend>
 	<table cellspacing="0" cellpadding="2" width="100%">
 		<tr>
+			<td width="0%" nowrap="nowrap" align="right">{'common.organization'|devblocks_translate|capitalize}:</td>
+			<td width="100%">
+				<button type="button" class="chooser-abstract" data-field-name="org_id" data-context="{CerberusContexts::CONTEXT_ORG}" data-single="true" data-query="" data-autocomplete="if-null"><span class="glyphicons glyphicons-search"></span></button>
+				<ul class="bubbles chooser-container"></ul>
+			</td>
+		</tr>
+		
+		<tr>
 			<td width="0%" nowrap="nowrap" align="right">{'common.title'|devblocks_translate|capitalize}:</td>
 			<td width="100%">
 				<input type="text" name="title" size="45" value="" style="width:90%;">
 			</td>
 		</tr>
-		<tr>
-			<td width="0%" nowrap="nowrap" align="right">{'common.organization'|devblocks_translate|capitalize}:</td>
-			<td width="100%">
-				<button type="button" class="chooser-abstract" data-field-name="org_id" data-context="{CerberusContexts::CONTEXT_ORG}" data-single="true" data-query=""><span class="glyphicons glyphicons-search"></span></button>
-				<ul class="bubbles chooser-container"></ul>
-			</td>
-		</tr>
+		
 		<tr>
 			<td width="0%" nowrap="nowrap" align="right">{'common.location'|devblocks_translate|capitalize}:</td>
 			<td width="100%">
 				<input type="text" name="location" size="45" value="" style="width:90%;">
 			</td>
 		</tr>
+		
+		<tr>
+			<td width="0%" nowrap="nowrap" align="right">{'common.language'|devblocks_translate|capitalize}:</td>
+			<td width="100%">
+				<select name="language">
+					<option value=""></option>
+					{foreach from=$languages item=lang key=lang_code}
+					<option value="{$lang_code}">{$lang}</option>
+					{/foreach}
+				</select>
+			</td>
+		</tr>
+	
+		<tr>
+			<td width="0%" nowrap="nowrap" align="right">{'common.timezone'|devblocks_translate|capitalize}:</td>
+			<td width="100%">
+				<select name="timezone">
+					<option value=""></option>
+					{foreach from=$timezones item=tz}
+					<option value="{$tz}">{$tz}</option>
+					{/foreach}
+				</select>
+			</td>
+		</tr>
+		
 		<tr>
 			<td width="0%" nowrap="nowrap" align="right">{'common.gender'|devblocks_translate|capitalize}:</td>
 			<td width="100%">
@@ -51,6 +78,31 @@
 				<button type="button" onclick="this.form.gender.selectedIndex = 2;">{'common.gender.female'|devblocks_translate|lower}</button>
 			</td>
 		</tr>
+		
+		{if $active_worker->hasPriv('core.watchers.assign')}
+		<tr>
+			<td width="0%" nowrap="nowrap" align="right" valign="top">Add watchers:</td>
+			<td width="100%">
+				<div>
+					<button type="button" class="chooser-abstract" data-field-name="do_watcher_add_ids[]" data-context="{CerberusContexts::CONTEXT_WORKER}" data-query="isDisabled:n" data-autocomplete="true"><span class="glyphicons glyphicons-search"></span></button>
+					<ul class="bubbles chooser-container" style="display:block;"></ul>
+				</div>
+			</td>
+		</tr>
+		{/if}
+		
+		{if $active_worker->hasPriv('core.watchers.unassign')}
+		<tr>
+			<td width="0%" nowrap="nowrap" align="right" valign="top">Remove watchers:</td>
+			<td width="100%">
+				<div>
+					<button type="button" class="chooser-abstract" data-field-name="do_watcher_remove_ids[]" data-context="{CerberusContexts::CONTEXT_WORKER}" data-query="isDisabled:n" data-autocomplete="true"><span class="glyphicons glyphicons-search"></span></button>
+					<ul class="bubbles chooser-container" style="display:block;"></ul>
+				</div>
+			</td>
+		</tr>
+		{/if}
+		
 	</table>
 </fieldset>
 
@@ -65,6 +117,10 @@
 
 {include file="devblocks:cerberusweb.core::internal/macros/behavior/bulk.tpl" macros=$macros}
 
+{if $active_worker->hasPriv('context.contact.worklist.broadcast')}
+{include file="devblocks:cerberusweb.core::internal/views/bulk_broadcast.tpl" context=CerberusContexts::CONTEXT_CONTACT}
+{/if}
+
 <button type="button" class="submit"><span class="glyphicons glyphicons-circle-ok" style="color:rgb(0,180,0);"></span> {'common.save_changes'|devblocks_translate|capitalize}</button>
 <br>
 </form>
@@ -72,19 +128,28 @@
 <script type="text/javascript">
 $(function() {
 	var $popup = genericAjaxPopupFind('#formBatchUpdate');
+	$popup.css('overflow', 'inherit');
 	
 	$popup.one('popup_open', function(event,ui) {
 		$popup.dialog('option','title',"{'common.bulk_update'|devblocks_translate|capitalize|escape:'javascript' nofilter}");
 		
-		// Abstract choosers
-		$popup.find('button.chooser-abstract').cerbChooserTrigger();
-		
-		// Submit
 		$popup.find('button.submit').click(function() {
-			genericAjaxPost('formBatchUpdate', 'view{$view_id}', null, function() {
+			genericAjaxPost('formBatchUpdate', '', null, function(json) {
+				if(json.cursor) {
+					// Pull the cursor
+					var $tips = $('#{$view_id}_tips').html('');
+					var $spinner = $('<span class="cerb-ajax-spinner"/>').appendTo($tips);
+					genericAjaxGet($tips, 'c=internal&a=viewBulkUpdateWithCursor&view_id={$view_id}&cursor=' + json.cursor);
+				}
+				
 				genericAjaxPopupClose($popup);
 			});
 		});
+		
+		// Abstract choosers
+		$popup.find('button.chooser-abstract').cerbChooserTrigger();
+		
+		{include file="devblocks:cerberusweb.core::internal/views/bulk_broadcast_jquery.tpl"}
 	});
 });
 </script>

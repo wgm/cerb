@@ -2,17 +2,17 @@
 /***********************************************************************
  | Cerb(tm) developed by Webgroup Media, LLC.
  |-----------------------------------------------------------------------
- | All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
+ | All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
  |   unless specifically noted otherwise.
  |
  | This source code is released under the Devblocks Public License.
  | The latest version of this license can be found here:
- | http://cerberusweb.com/license
+ | http://cerb.io/license
  |
  | By using this software, you acknowledge having read this license
  | and agree to be bound thereby.
  | ______________________________________________________________________
- |	http://www.cerbweb.com	    http://www.webgroupmedia.com/
+ |	http://cerb.io	    http://webgroup.media
  ***********************************************************************/
 
 class DAO_PluginLibrary extends Cerb_ORMHelper {
@@ -152,7 +152,7 @@ class DAO_PluginLibrary extends Cerb_ORMHelper {
 	public static function getSearchQueryComponents($columns, $params, $sortBy=null, $sortAsc=null) {
 		$fields = SearchFields_PluginLibrary::getFields();
 		
-		list($tables,$wheres) = parent::_parseSearchParams($params, $columns, $fields, $sortBy);
+		list($tables,$wheres) = parent::_parseSearchParams($params, $columns, 'SearchFields_PluginLibrary', $sortBy);
 		
 		$select_sql = sprintf("SELECT ".
 			"plugin_library.id as %s, ".
@@ -184,21 +184,8 @@ class DAO_PluginLibrary extends Cerb_ORMHelper {
 		$where_sql = "".
 			(!empty($wheres) ? sprintf("WHERE %s ",implode(' AND ',$wheres)) : "WHERE 1 ");
 			
-		$sort_sql = self::_buildSortClause($sortBy, $sortAsc, $fields);
+		$sort_sql = self::_buildSortClause($sortBy, $sortAsc, $fields, $select_sql, 'SearchFields_PluginLibrary');
 	
-		$args = array(
-			'join_sql' => &$join_sql,
-			'where_sql' => &$where_sql,
-			'tables' => &$tables,
-			'has_multiple_values' => &$has_multiple_values
-		);
-		
-		array_walk_recursive(
-			$params,
-			array('DAO_PluginLibrary', '_translateVirtualParameters'),
-			$args
-		);
-		
 		$result = array(
 			'primary_table' => 'plugin_library',
 			'select' => $select_sql,
@@ -210,41 +197,6 @@ class DAO_PluginLibrary extends Cerb_ORMHelper {
 		
 		return $result; 
 	}
-	
-	private static function _translateVirtualParameters($param, $key, &$args) {
-		if(!is_a($param, 'DevblocksSearchCriteria'))
-			return;
-		
-		$param_key = $param->field;
-		settype($param_key, 'string');
-		
-		$from_index = 'plugin_library.id';
-		
-		switch($param_key) {
-			case SearchFields_PluginLibrary::FULLTEXT_PLUGIN_LIBRARY:
-				$search = Extension_DevblocksSearchSchema::get(Search_PluginLibrary::ID);
-				$query = $search->getQueryFromParam($param);
-				
-				if(false === ($ids = $search->query($query, array()))) {
-					$args['where_sql'] .= 'AND 0 ';
-				
-				} elseif(is_array($ids)) {
-					if(empty($ids))
-						$ids = array(-1);
-					
-					$args['where_sql'] .= sprintf('AND plugin_library.id IN (%s) ',
-						implode(', ', $ids)
-					);
-					
-				} elseif(is_string($ids)) {
-					$args['join_sql'] .= sprintf("INNER JOIN %s ON (%s.id=plugin_library.id) ",
-						$ids,
-						$ids
-					);
-				}
-				break;
-		}
-	}	
 	
 	/**
 	 * Enter description here...
@@ -278,13 +230,18 @@ class DAO_PluginLibrary extends Cerb_ORMHelper {
 			$sort_sql;
 			
 		if($limit > 0) {
-			$rs = $db->SelectLimit($sql,$limit,$page*$limit) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs mysqli_result */
+			if(false == ($rs = $db->SelectLimit($sql,$limit,$page*$limit)))
+				return false;
 		} else {
-			$rs = $db->ExecuteSlave($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs mysqli_result */
+			if(false == ($rs = $db->ExecuteSlave($sql)))
+				return false;
 			$total = mysqli_num_rows($rs);
 		}
 		
 		$results = array();
+		
+		if(!($rs instanceof mysqli_result))
+			return false;
 		
 		while($row = mysqli_fetch_assoc($rs)) {
 			$object_id = intval($row[SearchFields_PluginLibrary::ID]);
@@ -310,7 +267,7 @@ class DAO_PluginLibrary extends Cerb_ORMHelper {
 	}
 
 	static function syncManifestsWithRepository() {
-		$url = 'http://plugins.cerb6.com/plugins/list?version=' . DevblocksPlatform::strVersionToInt(APP_VERSION);
+		$url = 'http://plugins.cerbweb.com/plugins/list?version=' . DevblocksPlatform::strVersionToInt(APP_VERSION);
 		
 		$tables = DevblocksPlatform::getDatabaseTables(true);
 		
@@ -321,12 +278,8 @@ class DAO_PluginLibrary extends Cerb_ORMHelper {
 			if(!extension_loaded("curl"))
 				throw new Exception("The cURL PHP extension is not installed");
 			
-			$ch = curl_init($url);
-			curl_setopt_array($ch, array(
-				CURLOPT_RETURNTRANSFER => true,
-				CURLOPT_FOLLOWLOCATION => true,
-			));
-			$json_data = curl_exec($ch);
+			$ch = DevblocksPlatform::curlInit($url);
+			$json_data = DevblocksPlatform::curlExec($ch, true);
 			
 		} catch(Exception $e) {
 			return false;
@@ -430,19 +383,17 @@ class DAO_PluginLibrary extends Cerb_ORMHelper {
 				continue;
 			}
 			
-			$url = sprintf("http://plugins.cerb6.com/plugins/download?plugin=%s&version=%d",
+			$url = sprintf("http://plugins.cerbweb.com/plugins/download?plugin=%s&version=%d",
 				urlencode($remote_plugin->plugin_id),
 				$remote_plugin->latest_version
 			);
 			
 			// Connect to portal for download URL
-			$ch = curl_init($url);
+			$ch = DevblocksPlatform::curlInit($url);
 			curl_setopt_array($ch, array(
-				CURLOPT_RETURNTRANSFER => true,
-				CURLOPT_FOLLOWLOCATION => true,
 				CURLOPT_SSL_VERIFYPEER => false,
 			));
-			$json_data = curl_exec($ch);
+			$json_data = DevblocksPlatform::curlExec($ch, true);
 			
 			if(false === ($response = json_decode($json_data, true)))
 				continue;
@@ -483,7 +434,7 @@ class DAO_PluginLibrary extends Cerb_ORMHelper {
 	
 };
 
-class SearchFields_PluginLibrary implements IDevblocksSearchFields {
+class SearchFields_PluginLibrary extends DevblocksSearchFields {
 	const ID = 'p_id';
 	const PLUGIN_ID = 'p_plugin_id';
 	const NAME = 'p_name';
@@ -498,10 +449,48 @@ class SearchFields_PluginLibrary implements IDevblocksSearchFields {
 	// Fulltexts
 	const FULLTEXT_PLUGIN_LIBRARY = 'ft_plugin_library';
 	
+	static private $_fields = null;
+	
+	static function getPrimaryKey() {
+		return 'plugin_library.id';
+	}
+	
+	static function getCustomFieldContextKeys() {
+		return array(
+			'' => new DevblocksSearchFieldContextKeys('plugin_library.id', self::ID),
+		);
+	}
+	
+	static function getWhereSQL(DevblocksSearchCriteria $param) {
+		switch($param->field) {
+			case self::FULLTEXT_PLUGIN_LIBRARY:
+				return self::_getWhereSQLFromFulltextField($param, Search_PluginLibrary::ID, self::getPrimaryKey());
+				break;
+			
+			default:
+				if('cf_' == substr($param->field, 0, 3)) {
+					return self::_getWhereSQLFromCustomFields($param);
+				} else {
+					return $param->getWhereSQL(self::getFields(), self::getPrimaryKey());
+				}
+				break;
+		}
+	}
+	
 	/**
 	 * @return DevblocksSearchField[]
 	 */
 	static function getFields() {
+		if(is_null(self::$_fields))
+			self::$_fields = self::_getFields();
+		
+		return self::$_fields;
+	}
+	
+	/**
+	 * @return DevblocksSearchField[]
+	 */
+	static function _getFields() {
 		$translate = DevblocksPlatform::getTranslationService();
 		
 		$columns = array(
@@ -541,7 +530,13 @@ class Search_PluginLibrary extends Extension_DevblocksSearchSchema {
 		return array();
 	}
 	
-	public function query($query, $attributes=array(), $limit=500) {
+	public function getFields() {
+		return array(
+			'content',
+		);
+	}
+	
+	public function query($query, $attributes=array(), $limit=null) {
 		if(false == ($engine = $this->getEngine()))
 			return false;
 		
@@ -618,11 +613,13 @@ class Search_PluginLibrary extends Extension_DevblocksSearchSchema {
 				));
 				
 				$doc = array(
-					'id' => $plugin->plugin_id,
-					'name' => $plugin->name,
-					'author' => $plugin->author,
-					'description' => $plugin->description,
-					'url' => $plugin->link,
+					'content' => implode("\n", array(
+						$plugin->plugin_id,
+						$plugin->name,
+						$plugin->author,
+						$plugin->description,
+						$plugin->link,
+					))
 				);
 				
 				if(false === ($engine->index($this, $id, $doc)))
@@ -713,7 +710,7 @@ class Model_PluginLibrary {
 	}
 };
 
-class View_PluginLibrary extends C4_AbstractView implements IAbstractView_Subtotals, IAbstractView_QuickSearch {
+class View_PluginLibrary extends C4_AbstractView implements IAbstractView_QuickSearch {
 	const DEFAULT_ID = 'plugin_library';
 
 	function __construct() {
@@ -757,6 +754,9 @@ class View_PluginLibrary extends C4_AbstractView implements IAbstractView_Subtot
 			$this->renderSortAsc,
 			$this->renderTotal
 		);
+		
+		$this->_lazyLoadCustomFieldsIntoObjects($objects, 'SearchFields_PluginLibrary');
+		
 		return $objects;
 	}
 	
@@ -764,50 +764,11 @@ class View_PluginLibrary extends C4_AbstractView implements IAbstractView_Subtot
 		return $this->_doGetDataSample('DAO_PluginLibrary', $size);
 	}
 
-	function getSubtotalFields() {
-		$all_fields = $this->getParamsAvailable(true);
-		
-		$fields = array();
-
-		if(is_array($all_fields))
-		foreach($all_fields as $field_key => $field_model) {
-			$pass = false;
-			
-			switch($field_key) {
-				// DAO
-				case SearchFields_PluginLibrary::AUTHOR:
-					$pass = true;
-					break;
-			}
-			
-			if($pass)
-				$fields[$field_key] = $field_model;
-		}
-		
-		return $fields;
-	}
-	
-	function getSubtotalCounts($column) {
-		$counts = array();
-		$fields = $this->getFields();
-
-		if(!isset($fields[$column]))
-			return array();
-		
-		switch($column) {
-			case SearchFields_PluginLibrary::AUTHOR:
-				$counts = $this->_getSubtotalCountForStringColumn('DAO_PluginLibrary', $column);
-				break;
-		}
-		
-		return $counts;
-	}
-	
 	function getQuickSearchFields() {
 		$search_fields = SearchFields_PluginLibrary::getFields();
 		
 		$fields = array(
-			'_fulltext' => 
+			'text' => 
 				array(
 					'type' => DevblocksSearchCriteria::TYPE_FULLTEXT,
 					'options' => array('param_key' => SearchFields_PluginLibrary::FULLTEXT_PLUGIN_LIBRARY),
@@ -817,7 +778,7 @@ class View_PluginLibrary extends C4_AbstractView implements IAbstractView_Subtot
 					'type' => DevblocksSearchCriteria::TYPE_TEXT,
 					'options' => array('param_key' => SearchFields_PluginLibrary::AUTHOR, 'match' => DevblocksSearchCriteria::OPTION_TEXT_PARTIAL),
 				),
-			'description' => 
+			'desc' => 
 				array(
 					'type' => DevblocksSearchCriteria::TYPE_TEXT,
 					'options' => array('param_key' => SearchFields_PluginLibrary::DESCRIPTION, 'match' => DevblocksSearchCriteria::OPTION_TEXT_PARTIAL),
@@ -864,7 +825,7 @@ class View_PluginLibrary extends C4_AbstractView implements IAbstractView_Subtot
 		}
 		
 		if(!empty($ft_examples))
-			$fields['_fulltext']['examples'] = $ft_examples;
+			$fields['text']['examples'] = $ft_examples;
 		
 		// Add is_sortable
 		
@@ -875,38 +836,47 @@ class View_PluginLibrary extends C4_AbstractView implements IAbstractView_Subtot
 		ksort($fields);
 		
 		return $fields;
-	}	
+	}
 	
-	function getParamsFromQuickSearchFields($fields) {
-		$search_fields = $this->getQuickSearchFields();
-		$params = DevblocksSearchCriteria::getParamsFromQueryFields($fields, $search_fields);
-
-		// Handle virtual fields and overrides
-		if(is_array($fields))
-		foreach($fields as $k => $v) {
-			switch($k) {
-				case 'version':
-					$field_keys = array(
-						'version' => SearchFields_PluginLibrary::LATEST_VERSION,
-					);
-					
-					@$field_key = $field_keys[$k];
-					$oper_hint = 0;
-					
-					if(preg_match('#^([\!\=\>\<]+)(.*)#', $v, $matches)) {
-						$oper_hint = trim($matches[1]);
-						$v = trim($matches[2]);
+	function getParamFromQuickSearchFieldTokens($field, $tokens) {
+		switch($field) {
+			case 'version':
+				foreach($tokens as &$token) {
+					switch($token->type) {
+						case 'T_QUOTED_TEXT':
+						case 'T_TEXT':
+							$v = $token->value;
+							
+							if(preg_match('#^([\!\=\>\<]+)(.*)#', $v, $matches)) {
+								$oper_hint = trim($matches[1]);
+								$v = trim($matches[2]);
+								$v = $oper_hint . DevblocksPlatform::strVersionToInt($v, 3);
+								
+							} else if(preg_match('#^(.*)?\.\.\.(.*)#', $v, $matches)) {
+								 $from = DevblocksPlatform::strVersionToInt(trim($matches[1]), 3);
+								 $to = DevblocksPlatform::strVersionToInt(trim($matches[2]), 3);
+								 $v = sprintf("%d...%d", $from, $to);
+							} else {
+								$v = DevblocksPlatform::strVersionToInt($v, 3);
+							}
+							
+							$token->value = $v;
+							break;
 					}
-					
-					$value = $oper_hint . DevblocksPlatform::strVersionToInt($v, 3);
-					
-					if($field_key && false != ($param = DevblocksSearchCriteria::getNumberParamFromQuery($field_key, $value)))
-						$params[$field_key] = $param;
-					break;
-			}
+				}
+				
+				$param = DevblocksSearchCriteria::getNumberParamFromTokens('version', $tokens);
+				$param->field = SearchFields_PluginLibrary::LATEST_VERSION;
+				return $param;
+				break;
+				
+			default:
+				$search_fields = $this->getQuickSearchFields();
+				return DevblocksSearchCriteria::getParamFromQueryFieldTokens($field, $tokens, $search_fields);
+				break;
 		}
 		
-		return $params;
+		return false;
 	}
 	
 	function render() {
@@ -958,8 +928,23 @@ class View_PluginLibrary extends C4_AbstractView implements IAbstractView_Subtot
 
 		switch($field) {
 			case SearchFields_PluginLibrary::LATEST_VERSION:
-				echo DevblocksPlatform::strEscapeHtml(DevblocksPlatform::intVersionToStr($param->value));
+				if(is_array($param->value)) {
+					$sep = ' or ';
+					$strings = array();
+					
+					if($param->operator == DevblocksSearchCriteria::OPER_BETWEEN)
+						$sep = ' and ';
+					
+					foreach($param->value as $value)
+						$strings[] = DevblocksPlatform::strEscapeHtml(DevblocksPlatform::intVersionToStr($value));
+					
+					echo implode($sep, $strings);
+					
+				} else {
+					echo DevblocksPlatform::strEscapeHtml(DevblocksPlatform::intVersionToStr($param->value));
+				}
 				break;
+				
 			default:
 				parent::renderCriteriaParam($param);
 				break;
@@ -1007,69 +992,5 @@ class View_PluginLibrary extends C4_AbstractView implements IAbstractView_Subtot
 			$this->addParam($criteria, $field);
 			$this->renderPage = 0;
 		}
-	}
-		
-	function doBulkUpdate($filter, $do, $ids=array()) {
-		@set_time_limit(600); // 10m
-	
-		$change_fields = array();
-		$custom_fields = array();
-
-		// Make sure we have actions
-		if(empty($do))
-			return;
-
-		// Make sure we have checked items if we want a checked list
-		if(0 == strcasecmp($filter,"checks") && empty($ids))
-			return;
-			
-		if(is_array($do))
-		foreach($do as $k => $v) {
-			switch($k) {
-				// [TODO] Implement actions
-				case 'example':
-					//$change_fields[DAO_PluginLibrary::EXAMPLE] = 'some value';
-					break;
-				/*
-				default:
-					// Custom fields
-					if(substr($k,0,3)=="cf_") {
-						$custom_fields[substr($k,3)] = $v;
-					}
-					break;
-				*/
-			}
-		}
-
-		$pg = 0;
-
-		if(empty($ids))
-		do {
-			list($objects,$null) = DAO_PluginLibrary::search(
-				array(),
-				$this->getParams(),
-				100,
-				$pg++,
-				SearchFields_PluginLibrary::ID,
-				true,
-				false
-			);
-			$ids = array_merge($ids, array_keys($objects));
-			 
-		} while(!empty($objects));
-
-		$batch_total = count($ids);
-		for($x=0;$x<=$batch_total;$x+=100) {
-			$batch_ids = array_slice($ids,$x,100);
-			
-			DAO_PluginLibrary::update($batch_ids, $change_fields);
-
-			// Custom Fields
-			//self::_doBulkSetCustomFields(ChCustomFieldSource_PluginLibrary::ID, $custom_fields, $batch_ids);
-			
-			unset($batch_ids);
-		}
-
-		unset($ids);
 	}
 };

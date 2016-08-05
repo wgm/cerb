@@ -10,15 +10,7 @@
 	 &nbsp;
 	 
 	<b>{'common.status'|devblocks_translate}:</b> 
-	{if $ticket->is_deleted}
-	{'status.deleted'|devblocks_translate|capitalize}
-	{elseif $ticket->is_closed}
-	{'status.resolved'|devblocks_translate|capitalize}
-	{elseif $ticket->is_waiting}
-	{'status.waiting'|devblocks_translate|capitalize}
-	{else}
-	{'status.open'|devblocks_translate|capitalize}
-	{/if}
+	{$ticket->getStatusText()|lower}
 	
 	 &nbsp;
 	  
@@ -71,7 +63,7 @@
 					<b>{'status.resolved'|devblocks_translate|capitalize}:</b>
 				</td>
 				<td>
-					<label><input type="checkbox" name="is_closed" value="1" {if $ticket->is_closed}checked="checked"{/if}> {'common.yes'|devblocks_translate|capitalize}</label>
+					<label><input type="checkbox" name="is_closed" value="1" {if $ticket->status_id == 2}checked="checked"{/if}> {'common.yes'|devblocks_translate|capitalize}</label>
 				</td>
 			</tr>
 			
@@ -100,12 +92,11 @@
 </form>
 
 {* Message History *}
-{$badge_extensions = DevblocksPlatform::getExtensions('cerberusweb.support_center.message.badge', true)}
 {foreach from=$messages item=message key=message_id}
 	{$headers = $message->getHeaders()}
 	{$sender = $message->getSender()}
 	{$sender_contact = $sender->getContact()}
-	{$sender_worker = DAO_Worker::get($message->worker_id)}
+	{$sender_worker = $message->getWorker()}
 	
 	<div class="message {if $message->is_outgoing}outbound_message{else}inbound_message{/if}" style="overflow:auto;">
 

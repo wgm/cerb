@@ -2,17 +2,17 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
 | The latest version of this license can be found here:
-| http://cerberusweb.com/license
+| http://cerb.io/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://www.cerbweb.com	    http://www.webgroupmedia.com/
+|	http://cerb.io	    http://webgroup.media
 ***********************************************************************/
 
 class DAO_Comment extends Cerb_ORMHelper {
@@ -199,6 +199,9 @@ class DAO_Comment extends Cerb_ORMHelper {
 	static private function _getObjectsFromResult($rs) {
 		$objects = array();
 		
+		if(!($rs instanceof mysqli_result))
+			return false;
+		
 		while($row = mysqli_fetch_assoc($rs)) {
 			$object = new Model_Comment();
 			$object->id = intval($row['id']);
@@ -287,7 +290,7 @@ class DAO_Comment extends Cerb_ORMHelper {
 	public static function getSearchQueryComponents($columns, $params, $sortBy=null, $sortAsc=null) {
 		$fields = SearchFields_Comment::getFields();
 		
-		list($tables,$wheres) = parent::_parseSearchParams($params, $columns, $fields, $sortBy);
+		list($tables,$wheres) = parent::_parseSearchParams($params, $columns, 'SearchFields_Comment', $sortBy);
 		
 		$select_sql = sprintf("SELECT ".
 			"comment.id as %s, ".
@@ -313,7 +316,7 @@ class DAO_Comment extends Cerb_ORMHelper {
 		$where_sql = "".
 			(!empty($wheres) ? sprintf("WHERE %s ",implode(' AND ',$wheres)) : "WHERE 1 ");
 			
-		$sort_sql = self::_buildSortClause($sortBy, $sortAsc, $fields);
+		$sort_sql = self::_buildSortClause($sortBy, $sortAsc, $fields, $select_sql, 'SearchFields_Comment');
 		
 		// Virtuals
 		
@@ -353,38 +356,6 @@ class DAO_Comment extends Cerb_ORMHelper {
 		settype($param_key, 'string');
 		
 		switch($param_key) {
-			case SearchFields_Comment::FULLTEXT_COMMENT_CONTENT:
-				$search = Extension_DevblocksSearchSchema::get(Search_CommentContent::ID);
-				$query = $search->getQueryFromParam($param);
-				
-				if(false === ($ids = $search->query($query))) {
-					$args['where_sql'] .= 'AND 0 ';
-					
-				} elseif(is_array($ids)) {
-					$args['where_sql'] .= sprintf('AND %s IN (%s) ',
-						$from_index,
-						implode(', ', (!empty($ids) ? $ids : array(-1)))
-					);
-					
-				} elseif(is_string($ids)) {
-					$db = DevblocksPlatform::getDatabaseService();
-					$temp_table = sprintf("_tmp_%s", uniqid());
-					
-					$db->ExecuteSlave(sprintf("CREATE TEMPORARY TABLE %s (PRIMARY KEY (id)) SELECT DISTINCT id FROM comment INNER JOIN %s ON (%s.id=%s)",
-						$temp_table,
-						$ids,
-						$ids,
-						$from_index
-					));
-					
-					$args['join_sql'] .= sprintf("INNER JOIN %s ON (%s.id=%s) ",
-						$temp_table,
-						$temp_table,
-						$from_index
-					);
-				}
-				break;
-			
 			case SearchFields_Comment::VIRTUAL_OWNER:
 				if(!is_array($param->value))
 					break;
@@ -481,13 +452,18 @@ class DAO_Comment extends Cerb_ORMHelper {
 			$sort_sql;
 			
 		if($limit > 0) {
-			$rs = $db->SelectLimit($sql,$limit,$page*$limit) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs mysqli_result */
+			if(false == ($rs = $db->SelectLimit($sql,$limit,$page*$limit)))
+				return false;
 		} else {
-			$rs = $db->ExecuteSlave($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs mysqli_result */
+			if(false == ($rs = $db->ExecuteSlave($sql)))
+				return false;
 			$total = mysqli_num_rows($rs);
 		}
 		
 		$results = array();
+		
+		if(!($rs instanceof mysqli_result))
+			return false;
 		
 		while($row = mysqli_fetch_assoc($rs)) {
 			$object_id = intval($row[SearchFields_Comment::ID]);
@@ -538,7 +514,7 @@ class DAO_Comment extends Cerb_ORMHelper {
 	}
 };
 
-class SearchFields_Comment implements IDevblocksSearchFields {
+class SearchFields_Comment extends DevblocksSearchFields {
 	const ID = 'c_id';
 	const CONTEXT = 'c_context';
 	const CONTEXT_ID = 'c_context_id';
@@ -553,10 +529,48 @@ class SearchFields_Comment implements IDevblocksSearchFields {
 	const VIRTUAL_OWNER = '*_owner';
 	const VIRTUAL_TARGET = '*_target';
 	
+	static private $_fields = null;
+	
+	static function getPrimaryKey() {
+		return 'comment.id';
+	}
+	
+	static function getCustomFieldContextKeys() {
+		return array(
+			CerberusContexts::CONTEXT_COMMENT => new DevblocksSearchFieldContextKeys('comment.id', self::ID),
+		);
+	}
+	
+	static function getWhereSQL(DevblocksSearchCriteria $param) {
+		switch($param->field) {
+			case self::FULLTEXT_COMMENT_CONTENT:
+				return self::_getWhereSQLFromFulltextField($param, Search_CommentContent::ID, self::getPrimaryKey());
+				break;
+			
+			default:
+				if('cf_' == substr($param->field, 0, 3)) {
+					return self::_getWhereSQLFromCustomFields($param);
+				} else {
+					return $param->getWhereSQL(self::getFields(), self::getPrimaryKey());
+				}
+				break;
+		}
+	}
+	
 	/**
 	 * @return DevblocksSearchField[]
 	 */
 	static function getFields() {
+		if(is_null(self::$_fields))
+			self::$_fields = self::_getFields();
+		
+		return self::$_fields;
+	}
+	
+	/**
+	 * @return DevblocksSearchField[]
+	 */
+	static function _getFields() {
 		$translate = DevblocksPlatform::getTranslationService();
 		
 		$columns = array(
@@ -592,6 +606,12 @@ class Search_CommentContent extends Extension_DevblocksSearchSchema {
 	public function getAttributes() {
 		return array(
 			'context_crc32' => 'uint4',
+		);
+	}
+	
+	public function getFields() {
+		return array(
+			'content',
 		);
 	}
 	
@@ -634,7 +654,7 @@ class Search_CommentContent extends Extension_DevblocksSearchSchema {
 		}
 	}
 	
-	public function query($query, $attributes=array(), $limit=500) {
+	public function query($query, $attributes=array(), $limit=null) {
 		if(false == ($engine = $this->getEngine()))
 			return false;
 		
@@ -675,7 +695,7 @@ class Search_CommentContent extends Extension_DevblocksSearchSchema {
 				$content = $comment->comment;
 				
 				if(!empty($content)) {
-					$content = $engine->truncateOnWhitespace($content, 10000);
+					$content = $engine->truncateOnWhitespace($content, 5000);
 					
 					$doc = array(
 						'content' => $content,
@@ -781,6 +801,9 @@ class View_Comment extends C4_AbstractView implements IAbstractView_Subtotals, I
 			$this->renderSortAsc,
 			$this->renderTotal
 		);
+		
+		$this->_lazyLoadCustomFieldsIntoObjects($objects, 'SearchFields_Comment');
+		
 		return $objects;
 	}
 	
@@ -826,21 +849,22 @@ class View_Comment extends C4_AbstractView implements IAbstractView_Subtotals, I
 	function getSubtotalCounts($column) {
 		$counts = array();
 		$fields = $this->getFields();
+		$context = CerberusContexts::CONTEXT_COMMENT;
 
 		if(!isset($fields[$column]))
 			return array();
 		
 		switch($column) {
 			case SearchFields_Comment::VIRTUAL_HAS_FIELDSET:
-				$counts = $this->_getSubtotalCountForHasFieldsetColumn('DAO_Comment', CerberusContexts::CONTEXT_COMMENT, $column);
+				$counts = $this->_getSubtotalCountForHasFieldsetColumn($context, $column);
 				break;
 				
 			case SearchFields_Comment::VIRTUAL_OWNER:
-				$counts = $this->_getSubtotalCountForContextAndIdColumns('DAO_Comment', CerberusContexts::CONTEXT_COMMENT, $column, DAO_Comment::OWNER_CONTEXT, DAO_Comment::OWNER_CONTEXT_ID, 'owner_context[]');
+				$counts = $this->_getSubtotalCountForContextAndIdColumns($context, $column, DAO_Comment::OWNER_CONTEXT, DAO_Comment::OWNER_CONTEXT_ID, 'owner_context[]');
 				break;
 				
 			case SearchFields_Comment::VIRTUAL_TARGET:
-				$counts = $this->_getSubtotalCountForContextAndIdColumns('DAO_Comment', CerberusContexts::CONTEXT_COMMENT, $column, DAO_Comment::CONTEXT, DAO_Comment::CONTEXT_ID, 'context_link[]');
+				$counts = $this->_getSubtotalCountForContextAndIdColumns($context, $column, DAO_Comment::CONTEXT, DAO_Comment::CONTEXT_ID, 'context_link[]');
 				break;
 		}
 		
@@ -851,7 +875,7 @@ class View_Comment extends C4_AbstractView implements IAbstractView_Subtotals, I
 		$search_fields = SearchFields_Comment::getFields();
 		
 		$fields = array(
-			'_fulltext' => 
+			'text' => 
 				array(
 					'type' => DevblocksSearchCriteria::TYPE_FULLTEXT,
 					'options' => array('param_key' => SearchFields_Comment::FULLTEXT_COMMENT_CONTENT),
@@ -893,7 +917,7 @@ class View_Comment extends C4_AbstractView implements IAbstractView_Subtotals, I
 		}
 		
 		if(!empty($ft_examples)) {
-			$fields['_fulltext']['examples'] = $ft_examples;
+			$fields['text']['examples'] = $ft_examples;
 			$fields['comment']['examples'] = $ft_examples;
 		}
 		
@@ -908,20 +932,16 @@ class View_Comment extends C4_AbstractView implements IAbstractView_Subtotals, I
 		return $fields;
 	}	
 	
-	function getParamsFromQuickSearchFields($fields) {
-		$search_fields = $this->getQuickSearchFields();
-		$params = DevblocksSearchCriteria::getParamsFromQueryFields($fields, $search_fields);
-
-		// Handle virtual fields and overrides
-		if(is_array($fields))
-		foreach($fields as $k => $v) {
-			switch($k) {
-				// ...
-			}
+	function getParamFromQuickSearchFieldTokens($field, $tokens) {
+		switch($field) {
+			default:
+				$search_fields = $this->getQuickSearchFields();
+				return DevblocksSearchCriteria::getParamFromQueryFieldTokens($field, $tokens, $search_fields);
+				break;
 		}
 		
-		return $params;
-	}	
+		return false;
+	}
 	
 	function render() {
 		$this->_sanitize();
@@ -1095,70 +1115,6 @@ class View_Comment extends C4_AbstractView implements IAbstractView_Subtotals, I
 			$this->addParam($criteria, $field);
 			$this->renderPage = 0;
 		}
-	}
-		
-	function doBulkUpdate($filter, $do, $ids=array()) {
-		@set_time_limit(600); // 10m
-	
-		$change_fields = array();
-		$custom_fields = array();
-
-		// Make sure we have actions
-		if(empty($do))
-			return;
-
-		// Make sure we have checked items if we want a checked list
-		if(0 == strcasecmp($filter,"checks") && empty($ids))
-			return;
-			
-		if(is_array($do))
-		foreach($do as $k => $v) {
-			switch($k) {
-				case 'example':
-					//$change_fields[DAO_Comment::EXAMPLE] = 'some value';
-					break;
-					
-				default:
-					// Custom fields
-					if(substr($k,0,3)=="cf_") {
-						$custom_fields[substr($k,3)] = $v;
-					}
-					break;
-			}
-		}
-
-		$pg = 0;
-
-		if(empty($ids))
-		do {
-			list($objects,$null) = DAO_Comment::search(
-				array(),
-				$this->getParams(),
-				100,
-				$pg++,
-				SearchFields_Comment::ID,
-				true,
-				false
-			);
-			$ids = array_merge($ids, array_keys($objects));
-			 
-		} while(!empty($objects));
-
-		$batch_total = count($ids);
-		for($x=0;$x<=$batch_total;$x+=100) {
-			$batch_ids = array_slice($ids,$x,100);
-			
-			if(!empty($change_fields)) {
-				DAO_Comment::update($batch_ids, $change_fields);
-			}
-
-			// Custom Fields
-			self::_doBulkSetCustomFields(CerberusContexts::CONTEXT_COMMENT, $custom_fields, $batch_ids);
-			
-			unset($batch_ids);
-		}
-
-		unset($ids);
 	}
 };
 

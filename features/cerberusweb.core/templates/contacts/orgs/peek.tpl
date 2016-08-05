@@ -1,4 +1,5 @@
 {$div_id = "peek{uniqid()}"}
+{$peek_context = CerberusContexts::CONTEXT_ORG}
 
 {capture name="mailing_address"}
 {if $dict->street}<div>{$dict->street|escape:'html'|nl2br nofilter}</div>{/if}
@@ -27,12 +28,13 @@
 		
 		<div style="margin-top:5px;">
 			{if !empty($dict->id)}
-				{$object_watchers = DAO_ContextLink::getContextLinks(CerberusContexts::CONTEXT_ORG, array($dict->id), CerberusContexts::CONTEXT_WORKER)}
-				{include file="devblocks:cerberusweb.core::internal/watchers/context_follow_button.tpl" context=CerberusContexts::CONTEXT_ORG context_id=$dict->id full=true}
+				{$object_watchers = DAO_ContextLink::getContextLinks($peek_context, array($dict->id), CerberusContexts::CONTEXT_WORKER)}
+				{include file="devblocks:cerberusweb.core::internal/watchers/context_follow_button.tpl" context=$peek_context context_id=$dict->id full=true}
 			{/if}
 			
-			<button type="button" class="cerb-peek-edit" data-context="{CerberusContexts::CONTEXT_ORG}" data-context-id="{$dict->id}" data-edit="true"><span class="glyphicons glyphicons-cogwheel"></span> {'common.edit'|devblocks_translate|capitalize}</button>
+			<button type="button" class="cerb-peek-edit" data-context="{$peek_context}" data-context-id="{$dict->id}" data-edit="true"><span class="glyphicons glyphicons-cogwheel"></span> {'common.edit'|devblocks_translate|capitalize}</button>
 			{if $dict->id}<button type="button" class="cerb-peek-profile"><span class="glyphicons glyphicons-nameplate"></span> {'common.profile'|devblocks_translate|capitalize}</button>{/if}
+			<button type="button" class="cerb-peek-comments-add" data-context="{$peek_context}" data-context-id="{$dict->id}"><span class="glyphicons glyphicons-conversation"></span> {'common.comment'|devblocks_translate|capitalize}</button>
 		</div>
 	</div>
 </div>
@@ -71,15 +73,17 @@
 	<legend>{'common.tickets'|devblocks_translate|capitalize}</legend>
 
 	<div>
-		<button type="button" class="cerb-search-trigger" data-context="{CerberusContexts::CONTEXT_TICKET}" data-query="org.id:{$dict->id} status:o,w,c"><div class="badge-count">{$activity_counts.tickets.total|default:0}</div> {'common.all'|devblocks_translate|capitalize}</button>
+		<button type="button" class="cerb-search-trigger" data-context="{CerberusContexts::CONTEXT_TICKET}" data-query="org.id:{$dict->id} status:[o,w,c]"><div class="badge-count">{$activity_counts.tickets.total|default:0}</div> {'common.all'|devblocks_translate|capitalize}</button>
 		<button type="button" class="cerb-search-trigger" data-context="{CerberusContexts::CONTEXT_TICKET}" data-query="org.id:{$dict->id} status:o"><div class="badge-count">{$activity_counts.tickets.open|default:0}</div> {'status.open'|devblocks_translate|capitalize}</button>
 		<button type="button" class="cerb-search-trigger" data-context="{CerberusContexts::CONTEXT_TICKET}" data-query="org.id:{$dict->id} status:w"><div class="badge-count">{$activity_counts.tickets.waiting|default:0}</div> {'status.waiting'|devblocks_translate|capitalize}</button>
 		<button type="button" class="cerb-search-trigger" data-context="{CerberusContexts::CONTEXT_TICKET}" data-query="org.id:{$dict->id} status:c"><div class="badge-count">{$activity_counts.tickets.closed|default:0}</div> {'status.closed'|devblocks_translate|capitalize}</button>
+		<button type="button" class="cerb-peek-trigger" data-context="{CerberusContexts::CONTEXT_TICKET}" data-context-id="0" data-edit="org.id:{$dict->id}">{'mail.send_mail'|devblocks_translate|capitalize}</button>
 	</div>
 </fieldset>
 
 {include file="devblocks:cerberusweb.core::internal/peek/peek_links.tpl" links=$links}
 
+{include file="devblocks:cerberusweb.core::internal/peek/card_timeline_pager.tpl"}
 
 <script type="text/javascript">
 $(function() {
@@ -87,6 +91,8 @@ $(function() {
 	var $popup = genericAjaxPopupFind($div);
 	var $layer = $popup.attr('data-layer');
 
+	var $timeline = {$timeline_json|default:'{}' nofilter};
+	
 	$popup.one('popup_open',function(event,ui) {
 		$popup.dialog('option','title', "{'common.organization'|devblocks_translate|capitalize|escape:'javascript' nofilter}");
 		
@@ -97,16 +103,29 @@ $(function() {
 		$popup.find('button.cerb-peek-edit')
 			.cerbPeekTrigger({ 'view_id': '{$view_id}' })
 			.on('cerb-peek-saved', function(e) {
-				genericAjaxPopup($layer,'c=internal&a=showPeekPopup&context={CerberusContexts::CONTEXT_ORG}&context_id={$dict->id}&view_id={$view_id}','reuse',false,'50%');
+				genericAjaxPopup($layer,'c=internal&a=showPeekPopup&context={$peek_context}&context_id={$dict->id}&view_id={$view_id}','reuse',false,'50%');
 			})
 			.on('cerb-peek-deleted', function(e) {
 				genericAjaxPopupClose($layer);
 			})
 			;
 		
+		// Comments
+		$popup.find('button.cerb-peek-comments-add')
+			.cerbCommentTrigger()
+			.on('cerb-comment-saved', function() {
+				genericAjaxPopup($layer,'c=internal&a=showPeekPopup&context={$peek_context}&context_id={$dict->id}&view_id={$view_id}','reuse',false,'50%');
+			})
+			;
+		
 		// Searches
 		$popup.find('button.cerb-search-trigger')
 			.cerbSearchTrigger()
+			;
+		
+		// Peeks
+		$popup.find('.cerb-peek-trigger')
+			.cerbPeekTrigger()
 			;
 		
 		// View profile
@@ -118,6 +137,9 @@ $(function() {
 				document.location='{devblocks_url}c=profiles&type=org&id={$dict->id}-{$dict->name|devblocks_permalink}{/devblocks_url}';
 			}
 		});
+		
+		// Timeline
+		{include file="devblocks:cerberusweb.core::internal/peek/card_timeline_script.tpl"}
 	});
 });
 </script>

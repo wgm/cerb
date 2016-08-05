@@ -83,8 +83,11 @@ class DAO_ContextAvatar extends Cerb_ORMHelper {
 				$content_type = 'image/png';
 				
 				// Decode it to binary
-				if(false == ($imagedata = base64_decode(substr($imagedata,17))))
+				if(false == ($imagedata = base64_decode(substr($imagedata, 17))))
 					return false;
+				
+				// [TODO] Verify the "magic bytes"
+				// [TODO] 89 50 4E 47 0D 0A 1A 0A
 				
 			// If we don't know what it is, fail.
 			} else {
@@ -177,7 +180,7 @@ class DAO_ContextAvatar extends Cerb_ORMHelper {
 		;
 		
 		if($options & Cerb_ORMHelper::OPT_GET_MASTER_ONLY) {
-			$rs = $db->ExecuteMaster($sql);
+			$rs = $db->ExecuteMaster($sql, _DevblocksDatabaseManager::OPT_NO_READ_AFTER_WRITE);
 		} else {
 			$rs = $db->ExecuteSlave($sql);
 		}
@@ -193,8 +196,11 @@ class DAO_ContextAvatar extends Cerb_ORMHelper {
 	static function getAll($nocache=false) {
 		//$cache = DevblocksPlatform::getCacheService();
 		//if($nocache || null === ($objects = $cache->load(self::_CACHE_ALL))) {
-			$objects = self::getWhere(null, DAO_ContextAvatar
-::NAME, true, null, Cerb_ORMHelper::OPT_GET_MASTER_ONLY);
+			$objects = self::getWhere(null, DAO_ContextAvatar::NAME, true, null, Cerb_ORMHelper::OPT_GET_MASTER_ONLY);
+			
+			// if(!is_array($objects))
+			//	return false;
+			
 			//$cache->save($buckets, self::_CACHE_ALL);
 		//}
 		
@@ -262,6 +268,9 @@ class DAO_ContextAvatar extends Cerb_ORMHelper {
 	 */
 	static private function _getObjectsFromResult($rs) {
 		$objects = array();
+		
+		if(!($rs instanceof mysqli_result))
+			return false;
 		
 		while($row = mysqli_fetch_assoc($rs)) {
 			$object = new Model_ContextAvatar();
@@ -355,7 +364,7 @@ class DAO_ContextAvatar extends Cerb_ORMHelper {
 	public static function getSearchQueryComponents($columns, $params, $sortBy=null, $sortAsc=null) {
 		$fields = SearchFields_ContextAvatar::getFields();
 		
-		list($tables,$wheres) = parent::_parseSearchParams($params, $columns, $fields, $sortBy);
+		list($tables,$wheres) = parent::_parseSearchParams($params, $columns, 'SearchFields_ContextAvatar', $sortBy);
 		
 		$select_sql = sprintf("SELECT ".
 			"context_avatar.id as %s, ".
@@ -384,19 +393,10 @@ class DAO_ContextAvatar extends Cerb_ORMHelper {
 			(isset($tables['context_link']) ? sprintf("INNER JOIN context_link ON (context_link.to_context = %s AND context_link.to_context_id = context_avatar.id) ", Cerb_ORMHelper::qstr('cerberusweb.contexts.context.avatar')) : " ").
 			'';
 		
-		// Custom field joins
-		list($select_sql, $join_sql, $has_multiple_values) = self::_appendSelectJoinSqlForCustomFieldTables(
-			$tables,
-			$params,
-			'context_avatar.id',
-			$select_sql,
-			$join_sql
-		);
-				
 		$where_sql = "".
 			(!empty($wheres) ? sprintf("WHERE %s ",implode(' AND ',$wheres)) : "WHERE 1 ");
 			
-		$sort_sql = self::_buildSortClause($sortBy, $sortAsc, $fields);
+		$sort_sql = self::_buildSortClause($sortBy, $sortAsc, $fields, $select_sql, 'SearchFields_ContextAvatar');
 	
 		// Virtuals
 		
@@ -442,11 +442,6 @@ class DAO_ContextAvatar extends Cerb_ORMHelper {
 			case SearchFields_ContextAvatar::VIRTUAL_HAS_FIELDSET:
 				self::_searchComponentsVirtualHasFieldset($param, $from_context, $from_index, $args['join_sql'], $args['where_sql']);
 				break;
-		
-			case SearchFields_ContextAvatar::VIRTUAL_WATCHERS:
-				$args['has_multiple_values'] = true;
-				self::_searchComponentsVirtualWatchers($param, $from_context, $from_index, $args['join_sql'], $args['where_sql'], $args['tables']);
-				break;
 		}
 	}
 	
@@ -482,13 +477,18 @@ class DAO_ContextAvatar extends Cerb_ORMHelper {
 			$sort_sql;
 			
 		if($limit > 0) {
-			$rs = $db->SelectLimit($sql,$limit,$page*$limit) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs mysqli_result */
+			if(false == ($rs = $db->SelectLimit($sql,$limit,$page*$limit)))
+				return false;
 		} else {
-			$rs = $db->ExecuteSlave($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs mysqli_result */
+			if(false == ($rs = $db->ExecuteSlave($sql)))
+				return false;
 			$total = mysqli_num_rows($rs);
 		}
 		
 		$results = array();
+		
+		if(!($rs instanceof mysqli_result))
+			return false;
 		
 		while($row = mysqli_fetch_assoc($rs)) {
 			$object_id = intval($row[SearchFields_ContextAvatar::ID]);
@@ -515,7 +515,7 @@ class DAO_ContextAvatar extends Cerb_ORMHelper {
 
 };
 
-class SearchFields_ContextAvatar implements IDevblocksSearchFields {
+class SearchFields_ContextAvatar extends DevblocksSearchFields {
 	const ID = 'c_id';
 	const CONTEXT = 'c_context';
 	const CONTEXT_ID = 'c_context_id';
@@ -534,10 +534,48 @@ class SearchFields_ContextAvatar implements IDevblocksSearchFields {
 	const CONTEXT_LINK = 'cl_context_from';
 	const CONTEXT_LINK_ID = 'cl_context_from_id';
 	
+	static private $_fields = null;
+	
+	static function getPrimaryKey() {
+		return 'context_avatar.id';
+	}
+	
+	static function getCustomFieldContextKeys() {
+		return array(
+			CerberusContexts::CONTEXT_CONTEXT_AVATAR => new DevblocksSearchFieldContextKeys('context_avatar.id', self::ID),
+		);
+	}
+	
+	static function getWhereSQL(DevblocksSearchCriteria $param) {
+		switch($param->field) {
+			case self::VIRTUAL_WATCHERS:
+				return self::_getWhereSQLFromWatchersField($param, CerberusContexts::CONTEXT_CONTEXT_AVATAR, self::getPrimaryKey());
+				break;
+			
+			default:
+				if('cf_' == substr($param->field, 0, 3)) {
+					return self::_getWhereSQLFromCustomFields($param);
+				} else {
+					return $param->getWhereSQL(self::getFields(), self::getPrimaryKey());
+				}
+				break;
+		}
+	}
+		
 	/**
 	 * @return DevblocksSearchField[]
 	 */
 	static function getFields() {
+		if(is_null(self::$_fields))
+			self::$_fields = self::_getFields();
+		
+		return self::$_fields;
+	}
+	
+	/**
+	 * @return DevblocksSearchField[]
+	 */
+	static function _getFields() {
 		$translate = DevblocksPlatform::getTranslationService();
 		
 		$columns = array(
@@ -561,9 +599,7 @@ class SearchFields_ContextAvatar implements IDevblocksSearchFields {
 		);
 		
 		// Custom Fields
-		$custom_columns = DevblocksSearchField::getCustomSearchFieldsByContexts(array(
-			'cerberusweb.contexts.context.avatar',
-		));
+		$custom_columns = DevblocksSearchField::getCustomSearchFieldsByContexts(array_keys(self::getCustomFieldContextKeys()));
 		
 		if(!empty($custom_columns))
 			$columns = array_merge($columns, $custom_columns);
@@ -674,18 +710,17 @@ class Storage_ContextAvatar extends Extension_DevblocksStorageSchema {
 
 		$storage = DevblocksPlatform::getStorageService($profile);
 
-		// Save to storage
-		if(false === ($storage_key = $storage->put('context_avatar', $id, $contents)))
-			return false;
-			
 		if(is_resource($contents)) {
 			$stats = fstat($contents);
 			$storage_size = $stats['size'];
 		} else {
 			$storage_size = strlen($contents);
-			unset($contents);
 		}
 		
+		// Save to storage
+		if(false === ($storage_key = $storage->put('context_avatar', $id, $contents)))
+			return false;
+			
 		// Update storage key
 		DAO_ContextAvatar::update($id, array(
 			DAO_ContextAvatar::STORAGE_EXTENSION => $storage->manifest->id,
@@ -704,7 +739,12 @@ class Storage_ContextAvatar extends Extension_DevblocksStorageSchema {
 		$db = DevblocksPlatform::getDatabaseService();
 		
 		$sql = sprintf("SELECT storage_extension, storage_key, storage_profile_id FROM context_avatar WHERE id IN (%s)", implode(',',$ids));
-		$rs = $db->ExecuteSlave($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
+		
+		if(false == ($rs = $db->ExecuteSlave($sql)))
+			return false;
+		
+		if(!($rs instanceof mysqli_result))
+			return false;
 		
 		// Delete the physical files
 		
@@ -766,14 +806,19 @@ class Storage_ContextAvatar extends Extension_DevblocksStorageSchema {
 		// Find inactive avatars
 		$sql = sprintf("SELECT id, storage_extension, storage_key, storage_profile_id, storage_size ".
 			"FROM context_avatar ".
-			"WHERE updated < %d ".
+			"WHERE updated_at < %d ".
 			"AND (storage_extension = %s AND storage_profile_id = %d) ".
 			"ORDER BY id ASC ",
 				time()-(86400*$archive_after_days),
 				$db->qstr($src_profile->extension_id),
 				$src_profile->id
 		);
-		$rs = $db->ExecuteSlave($sql);
+
+		if(false == ($rs = $db->ExecuteSlave($sql)))
+			return false;
+		
+		if(!($rs instanceof mysqli_result))
+			return false;
 		
 		while($row = mysqli_fetch_assoc($rs)) {
 			self::_migrate($dst_profile, $row);
@@ -871,7 +916,8 @@ class Storage_ContextAvatar extends Extension_DevblocksStorageSchema {
 					$src_id,
 					$dst_profile->extension_id
 				));
-				fclose($fp_in);
+				if(is_resource($fp_in))
+					fclose($fp_in);
 				return;
 			}
 		}
@@ -888,7 +934,8 @@ class Storage_ContextAvatar extends Extension_DevblocksStorageSchema {
 			unset($data);
 		} else {
 			@unlink(DevblocksPlatform::getTempFileInfo($fp_in));
-			fclose($fp_in);
+			if(is_resource($fp_in))
+				fclose($fp_in);
 		}
 		
 		$src_engine->delete($ns, $src_key);

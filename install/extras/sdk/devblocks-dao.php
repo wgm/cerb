@@ -132,7 +132,7 @@ foreach($fields as $field_name => $field_type) {
 		;
 		
 		if($options & Cerb_ORMHelper::OPT_GET_MASTER_ONLY) {
-			$rs = $db->ExecuteMaster($sql);
+			$rs = $db->ExecuteMaster($sql, _DevblocksDatabaseManager::OPT_NO_READ_AFTER_WRITE);
 		} else {
 			$rs = $db->ExecuteSlave($sql);
 		}
@@ -149,7 +149,11 @@ foreach($fields as $field_name => $field_type) {
 		//$cache = DevblocksPlatform::getCacheService();
 		//if($nocache || null === ($objects = $cache->load(self::_CACHE_ALL))) {
 			$objects = self::getWhere(null, DAO_<?php echo $class_name,"\n"; ?>::NAME, true, null, Cerb_ORMHelper::OPT_GET_MASTER_ONLY);
-			//$cache->save($buckets, self::_CACHE_ALL);
+			
+			//if(!is_array($objects))
+			//	return false;
+				
+			//$cache->save($objects, self::_CACHE_ALL);
 		//}
 		
 		return $objects;
@@ -217,6 +221,9 @@ foreach($fields as $field_name => $field_type) {
 	static private function _getObjectsFromResult($rs) {
 		$objects = array();
 		
+		if(!($rs instanceof mysqli_result))
+			return false;
+		
 		while($row = mysqli_fetch_assoc($rs)) {
 			$object = new Model_<?php echo $class_name; ?>();
 <?php
@@ -268,7 +275,7 @@ foreach($fields as $field_name => $field_type) {
 	public static function getSearchQueryComponents($columns, $params, $sortBy=null, $sortAsc=null) {
 		$fields = SearchFields_<?php echo $class_name; ?>::getFields();
 		
-		list($tables,$wheres) = parent::_parseSearchParams($params, $columns, $fields, $sortBy);
+		list($tables,$wheres) = parent::_parseSearchParams($params, $columns, 'SearchFields_<?php echo $class_name; ?>', $sortBy);
 		
 		$select_sql = sprintf("SELECT ".
 <?php
@@ -297,19 +304,10 @@ foreach($fields as $field_name => $field_type) {
 			(isset($tables['context_link']) ? sprintf("INNER JOIN context_link ON (context_link.to_context = %s AND context_link.to_context_id = <?php echo $table_name; ?>.id) ", Cerb_ORMHelper::qstr('<?php echo $ctx_ext_id; ?>')) : " ").
 			'';
 		
-		// Custom field joins
-		list($select_sql, $join_sql, $has_multiple_values) = self::_appendSelectJoinSqlForCustomFieldTables(
-			$tables,
-			$params,
-			'<?php echo $table_name; ?>.id',
-			$select_sql,
-			$join_sql
-		);
-				
 		$where_sql = "".
 			(!empty($wheres) ? sprintf("WHERE %s ",implode(' AND ',$wheres)) : "WHERE 1 ");
 			
-		$sort_sql = self::_buildSortClause($sortBy, $sortAsc, $fields);
+		$sort_sql = self::_buildSortClause($sortBy, $sortAsc, $fields, $select_sql, 'SearchFields_<?php echo $class_name; ?>');
 	
 		// Virtuals
 		
@@ -355,11 +353,6 @@ foreach($fields as $field_name => $field_type) {
 			case SearchFields_<?php echo $class_name; ?>::VIRTUAL_HAS_FIELDSET:
 				self::_searchComponentsVirtualHasFieldset($param, $from_context, $from_index, $args['join_sql'], $args['where_sql']);
 				break;
-		
-			case SearchFields_<?php echo $class_name; ?>::VIRTUAL_WATCHERS:
-				$args['has_multiple_values'] = true;
-				self::_searchComponentsVirtualWatchers($param, $from_context, $from_index, $args['join_sql'], $args['where_sql'], $args['tables']);
-				break;
 		}
 	}
 	
@@ -395,11 +388,16 @@ foreach($fields as $field_name => $field_type) {
 			$sort_sql;
 			
 		if($limit > 0) {
-			$rs = $db->SelectLimit($sql,$limit,$page*$limit) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs mysqli_result */
+			if(false == ($rs = $db->SelectLimit($sql,$limit,$page*$limit)))
+				return false;
 		} else {
-			$rs = $db->ExecuteSlave($sql) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg()); /* @var $rs mysqli_result */
+			if(false == ($rs = $db->ExecuteSlave($sql)))
+				return false;
 			$total = mysqli_num_rows($rs);
 		}
+		
+		if(!($rs instanceof mysqli_result))
+			return false;
 		
 		$results = array();
 		
@@ -430,7 +428,7 @@ foreach($fields as $field_name => $field_type) {
 </textarea>
 
 <textarea style="width:98%;height:200px;">
-class SearchFields_<?php echo $class_name; ?> implements IDevblocksSearchFields {
+class SearchFields_<?php echo $class_name; ?> extends DevblocksSearchFields {
 <?php
 foreach($fields as $field_name => $field_type) {
 	printf("\tconst %s = '%s_%s';\n",
@@ -448,10 +446,51 @@ foreach($fields as $field_name => $field_type) {
 	const CONTEXT_LINK = 'cl_context_from';
 	const CONTEXT_LINK_ID = 'cl_context_from_id';
 	
+	static private $_fields = null;
+	
+	static function getPrimaryKey() {
+		return '<?php echo $table_name; ?>.id';
+	}
+	
+	static function getCustomFieldContextKeys() {
+		// [TODO] Context
+		return array(
+			'' => new DevblocksSearchFieldContextKeys('<?php echo $table_name; ?>.id', self::ID),
+		);
+	}
+	
+	static function getWhereSQL(DevblocksSearchCriteria $param) {
+		switch($param->field) {
+			/*
+			case self::VIRTUAL_WATCHERS:
+				return self::_getWhereSQLFromWatchersField($param, '', self::getPrimaryKey());
+				break;
+			*/
+			
+			default:
+				if('cf_' == substr($param->field, 0, 3)) {
+					return self::_getWhereSQLFromCustomFields($param);
+				} else {
+					return $param->getWhereSQL(self::getFields(), self::getPrimaryKey());
+				}
+				break;
+		}
+	}
+	
 	/**
 	 * @return DevblocksSearchField[]
 	 */
 	static function getFields() {
+		if(is_null(self::$_fields))
+			self::$_fields = self::_getFields();
+		
+		return self::$_fields;
+	}
+	
+	/**
+	 * @return DevblocksSearchField[]
+	 */
+	static function _getFields() {
 		$translate = DevblocksPlatform::getTranslationService();
 		
 		$columns = array(
@@ -477,9 +516,7 @@ foreach($fields as $field_name => $field_type) {
 		);
 		
 		// Custom Fields
-		$custom_columns = DevblocksSearchField::getCustomSearchFieldsByContexts(array(
-			'<?php echo $ctx_ext_id; ?>',
-		));
+		$custom_columns = DevblocksSearchField::getCustomSearchFieldsByContexts(array_keys(self::getCustomFieldContextKeys()));
 		
 		if(!empty($custom_columns))
 			$columns = array_merge($columns, $custom_columns);
@@ -552,6 +589,9 @@ foreach($fields as $field_name => $field_type) {
 			$this->renderSortAsc,
 			$this->renderTotal
 		);
+		
+		$this->_lazyLoadCustomFieldsIntoObjects($objects, 'SearchFields_<?php echo $class_name; ?>');
+		
 		return $objects;
 	}
 	
@@ -602,35 +642,36 @@ foreach($fields as $field_name => $field_type) {
 	function getSubtotalCounts($column) {
 		$counts = array();
 		$fields = $this->getFields();
+		$context = '<?php echo $ctx_ext_id; ?>';
 
 		if(!isset($fields[$column]))
 			return array();
 		
 		switch($column) {
 //			case SearchFields_<?php echo $class_name; ?>::EXAMPLE_BOOL:
-//				$counts = $this->_getSubtotalCountForBooleanColumn('DAO_<?php echo $class_name; ?>', $column);
+//				$counts = $this->_getSubtotalCountForBooleanColumn($context, $column);
 //				break;
 
 //			case SearchFields_<?php echo $class_name; ?>::EXAMPLE_STRING:
-//				$counts = $this->_getSubtotalCountForStringColumn('DAO_<?php echo $class_name; ?>', $column);
+//				$counts = $this->_getSubtotalCountForStringColumn($context, $column);
 //				break;
 				
 			case SearchFields_<?php echo $class_name; ?>::VIRTUAL_CONTEXT_LINK:
-				$counts = $this->_getSubtotalCountForContextLinkColumn('DAO_<?php echo $class_name; ?>', '<?php echo $ctx_ext_id; ?>', $column);
+				$counts = $this->_getSubtotalCountForContextLinkColumn($context, $column);
 				break;
 
 			case SearchFields_<?php echo $class_name; ?>::VIRTUAL_HAS_FIELDSET:
-				$counts = $this->_getSubtotalCountForHasFieldsetColumn('DAO_<?php echo $class_name; ?>', '<?php echo $ctx_ext_id; ?>', $column);
+				$counts = $this->_getSubtotalCountForHasFieldsetColumn($context, $column);
 				break;
 				
 			case SearchFields_<?php echo $class_name; ?>::VIRTUAL_WATCHERS:
-				$counts = $this->_getSubtotalCountForWatcherColumn('DAO_<?php echo $class_name; ?>', $column);
+				$counts = $this->_getSubtotalCountForWatcherColumn($context, $column);
 				break;
 			
 			default:
 				// Custom fields
 				if('cf_' == substr($column,0,3)) {
-					$counts = $this->_getSubtotalCountForCustomColumn('DAO_<?php echo $class_name; ?>', $column, '<?php echo $table_name; ?>.id');
+					$counts = $this->_getSubtotalCountForCustomColumn($context, $column);
 				}
 				
 				break;
@@ -645,7 +686,7 @@ foreach($fields as $field_name => $field_type) {
 	
 		/*
 		$fields = array(
-			'_fulltext' => 
+			'text' => 
 				array(
 					'type' => DevblocksSearchCriteria::TYPE_TEXT,
 					'options' => array('param_key' => SearchFields_<?php echo $class_name; ?>::NAME, 'match' => DevblocksSearchCriteria::OPTION_TEXT_PARTIAL),
@@ -688,19 +729,15 @@ foreach($fields as $field_name => $field_type) {
 	}	
 	
 	// [TODO] Implement quick search fields
-	function getParamsFromQuickSearchFields($fields) {
-		$search_fields = $this->getQuickSearchFields();
-		$params = DevblocksSearchCriteria::getParamsFromQueryFields($fields, $search_fields);
-
-		// Handle virtual fields and overrides
-		if(is_array($fields))
-		foreach($fields as $k => $v) {
-			switch($k) {
-				// ...
-			}
+	function getParamFromQuickSearchFieldTokens($field, $tokens) {
+		switch($field) {
+			default:
+				$search_fields = $this->getQuickSearchFields();
+				return DevblocksSearchCriteria::getParamFromQueryFieldTokens($field, $tokens, $search_fields);
+				break;
 		}
 		
-		return $params;
+		return false;
 	}
 	
 	function render() {
@@ -866,71 +903,6 @@ foreach($fields as $field_name => $field_type) {
 			$this->renderPage = 0;
 		}
 	}
-		
-	function doBulkUpdate($filter, $do, $ids=array()) {
-		@set_time_limit(600); // 10m
-	
-		$change_fields = array();
-		$custom_fields = array();
-
-		// Make sure we have actions
-		if(empty($do))
-			return;
-
-		// Make sure we have checked items if we want a checked list
-		if(0 == strcasecmp($filter,"checks") && empty($ids))
-			return;
-			
-		if(is_array($do))
-		foreach($do as $k => $v) {
-			switch($k) {
-				// [TODO] Implement actions
-				case 'example':
-					//$change_fields[DAO_<?php echo $class_name; ?>::EXAMPLE] = 'some value';
-					break;
-					
-				default:
-					// Custom fields
-					if(substr($k,0,3)=="cf_") {
-						$custom_fields[substr($k,3)] = $v;
-					}
-					break;
-			}
-		}
-
-		$pg = 0;
-
-		if(empty($ids))
-		do {
-			list($objects,$null) = DAO_<?php echo $class_name; ?>::search(
-				array(),
-				$this->getParams(),
-				100,
-				$pg++,
-				SearchFields_<?php echo $class_name; ?>::ID,
-				true,
-				false
-			);
-			$ids = array_merge($ids, array_keys($objects));
-			 
-		} while(!empty($objects));
-
-		$batch_total = count($ids);
-		for($x=0;$x<=$batch_total;$x+=100) {
-			$batch_ids = array_slice($ids,$x,100);
-			
-			if(!empty($change_fields)) {
-				DAO_<?php echo $class_name; ?>::update($batch_ids, $change_fields);
-			}
-
-			// Custom Fields
-			self::_doBulkSetCustomFields('<?php echo $ctx_ext_id; ?>', $custom_fields, $batch_ids);
-			
-			unset($batch_ids);
-		}
-
-		unset($ids);
-	}
 };
 </textarea>
 
@@ -1021,7 +993,6 @@ class Context_<?php echo $class_name;?> extends Extension_DevblocksContext imple
 		);
 	}
 	
-	// [TODO] Interface
 	function getDefaultProperties() {
 		return array(
 			'updated_at',
@@ -1384,9 +1355,9 @@ $field_prefix = strtolower(substr($table_name,0,1));
 <textarea style="width:98%;height:200px;">
 {$view_context = '<?php echo $ctx_ext_id; ?>'}
 {$view_fields = $view->getColumnsAvailable()}
-{assign var=results value=$view->getData()}
-{assign var=total value=$results[1]}
-{assign var=data value=$results[0]}
+{$results = $view->getData()}
+{$total = $results[1]}
+{$data = $results[0]}
 
 {include file="devblocks:cerberusweb.core::internal/views/view_marquee.tpl" view=$view}
 
@@ -1453,13 +1424,13 @@ $field_prefix = strtolower(substr($table_name,0,1));
 	{foreach from=$data item=result key=idx name=results}
 
 	{if $smarty.foreach.results.iteration % 2}
-		{assign var=tableRowClass value="even"}
+		{$tableRowClass = "even"}
 	{else}
-		{assign var=tableRowClass value="odd"}
+		{$tableRowClass = "odd"}
 	{/if}
 	<tbody style="cursor:pointer;">
 		<tr class="{$tableRowClass}">
-			<td align="center" rowspan="2" nowrap="nowrap" style="padding:5px;">
+			<td data-column="*_watchers" align="center" rowspan="2" nowrap="nowrap" style="padding:5px;">
 				{include file="devblocks:cerberusweb.core::internal/watchers/context_follow_button.tpl" context=$view_context context_id=$result.<?php echo $field_prefix; ?>_id}
 			</td>
 		</tr>
@@ -1471,7 +1442,7 @@ $field_prefix = strtolower(substr($table_name,0,1));
 			<td>
 				<input type="checkbox" name="row_id[]" value="{$result.<?php echo $field_prefix; ?>_id}" style="display:none;">
 				<a href="{devblocks_url}c=profiles&type=<?php echo $table_name; ?>&id={$result.<?php echo $field_prefix; ?>_id}-{$result.<?php echo $field_prefix; ?>_name|devblocks_permalink}{/devblocks_url}" class="subject">{$result.<?php echo $field_prefix; ?>_name}</a>
-				<button type="button" class="peek" onclick="genericAjaxPopup('peek','c=internal&a=showPeekPopup&context={$view_context}&context_id={$result.<?php echo $field_prefix; ?>_id}&view_id={$view->id}',null,false,'550');"><span class="glyphicons glyphicons-new-window-alt" style="margin-left:2px" title="{$translate->_('views.peek')}"></span></button>
+				<button type="button" class="peek" onclick="genericAjaxPopup('peek','c=internal&a=showPeekPopup&context={$view_context}&context_id={$result.<?php echo $field_prefix; ?>_id}&view_id={$view->id}',null,false,'50%');"><span class="glyphicons glyphicons-new-window-alt" style="margin-left:2px" title="{$translate->_('views.peek')}"></span></button>
 			</td>
 			{elseif $column == "<?php echo $field_prefix; ?>_updated_at"}
 				<td title="{$result.$column|devblocks_date}">
@@ -1480,7 +1451,7 @@ $field_prefix = strtolower(substr($table_name,0,1));
 					{/if}
 				</td>
 			{else}
-				<td>{$result.$column}</td>
+				<td data-column="{$column}">{$result.$column}</td>
 			{/if}
 		{/foreach}
 		</tr>
@@ -1515,7 +1486,7 @@ $field_prefix = strtolower(substr($table_name,0,1));
 	<div style="float:left;" id="{$view->id}_actions">
 		<button type="button" class="action-always-show action-explore" onclick="this.form.explore_from.value=$(this).closest('form').find('tbody input:checkbox:checked:first').val();this.form.action.value='viewExplore';this.form.submit();"><span class="glyphicons glyphicons-play-button"></span> {'common.explore'|devblocks_translate|lower}</button>
 		{*
-		{if $active_worker->hasPriv('calls.actions.update_all')}<button type="button" class="action-always-show action-bulkupdate" onclick="genericAjaxPopup('peek','c=profiles&a=handleSectionAction&section=<?php echo $table_name; ?>&action=showBulkPanel&view_id={$view->id}&ids=' + Devblocks.getFormEnabledCheckboxValues('viewForm{$view->id}','row_id[]'),null,false,'500');"><span class="glyphicons glyphicons-folder-closed"></span> {'common.bulk_update'|devblocks_translate|lower}</button>{/if}
+		{if $active_worker->hasPriv('calls.actions.update_all')}<button type="button" class="action-always-show action-bulkupdate" onclick="genericAjaxPopup('peek','c=profiles&a=handleSectionAction&section=<?php echo $table_name; ?>&action=showBulkPanel&view_id={$view->id}&ids=' + Devblocks.getFormEnabledCheckboxValues('viewForm{$view->id}','row_id[]'),null,false,'50%');"><span class="glyphicons glyphicons-folder-closed"></span> {'common.bulk_update'|devblocks_translate|lower}</button>{/if}
 		*}
 	</div>
 	{/if}
@@ -1604,12 +1575,12 @@ $frm.bind('keyboard_shortcut',function(event) {
 |
 | This source code is released under the Devblocks Public License.
 | The latest version of this license can be found here:
-| http://cerberusweb.com/license
+| http://cerb.io/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://www.cerbweb.com	    http://www.webgroupmedia.com/
+|	http://cerb.io	    http://webgroup.media
 ***********************************************************************/
 
 class PageSection_Profiles<?php echo $class_name; ?> extends Extension_PageSection {
@@ -1952,7 +1923,7 @@ $(function() {
 	var tabs = $("#<?php echo $table_name; ?>Tabs").tabs(tabOptions);
 	
 	$('#btnDisplay<?php echo $class_name; ?>Edit').bind('click', function() {
-		$popup = genericAjaxPopup('peek','c=internal&a=showPeekPopup&context={$page_context}&context_id={$page_context_id}',null,false,'550');
+		$popup = genericAjaxPopup('peek','c=internal&a=showPeekPopup&context={$page_context}&context_id={$page_context_id}',null,false,'50%');
 		$popup.one('<?php echo $table_name; ?>_save', function(event) {
 			event.stopPropagation();
 			document.location.reload();

@@ -2,17 +2,17 @@
 /***********************************************************************
  | Cerb(tm) developed by Webgroup Media, LLC.
  |-----------------------------------------------------------------------
- | All source code & content (c) Copyright 2002-2015, Webgroup Media LLC
+ | All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
  |   unless specifically noted otherwise.
  |
  | This source code is released under the Devblocks Public License.
  | The latest version of this license can be found here:
- | http://cerberusweb.com/license
+ | http://cerb.io/license
  |
  | By using this software, you acknowledge having read this license
  | and agree to be bound thereby.
  | ______________________________________________________________________
- |	http://www.cerbweb.com	    http://www.webgroupmedia.com/
+ |	http://cerb.io	    http://webgroup.media
  ***********************************************************************/
 
 class DAO_CrmOpportunity extends Cerb_ORMHelper {
@@ -97,6 +97,94 @@ class DAO_CrmOpportunity extends Cerb_ORMHelper {
 				DevblocksPlatform::markContextChanged(CerberusContexts::CONTEXT_OPPORTUNITY, $batch_ids);
 			}
 		}
+	}
+	
+	/**
+	 * @param Model_ContextBulkUpdate $update
+	 * @return boolean
+	 */
+	static function bulkUpdate(Model_ContextBulkUpdate $update) {
+		$do = $update->actions;
+		$ids = $update->context_ids;
+
+		// Make sure we have actions
+		if(empty($ids) || empty($do))
+			return false;
+		
+		$update->markInProgress();
+		
+		$change_fields = array();
+		$custom_fields = array();
+		$deleted = false;
+
+		if(is_array($do))
+		foreach($do as $k => $v) {
+			switch($k) {
+				case 'status':
+					switch(strtolower($v)) {
+						case 'open':
+							$change_fields[DAO_CrmOpportunity::IS_CLOSED] = 0;
+							$change_fields[DAO_CrmOpportunity::IS_WON] = 0;
+							$change_fields[DAO_CrmOpportunity::CLOSED_DATE] = 0;
+							break;
+							
+						case 'won':
+							$change_fields[DAO_CrmOpportunity::IS_CLOSED] = 1;
+							$change_fields[DAO_CrmOpportunity::IS_WON] = 1;
+							$change_fields[DAO_CrmOpportunity::CLOSED_DATE] = time();
+							break;
+							
+						case 'lost':
+							$change_fields[DAO_CrmOpportunity::IS_CLOSED] = 1;
+							$change_fields[DAO_CrmOpportunity::IS_WON] = 0;
+							$change_fields[DAO_CrmOpportunity::CLOSED_DATE] = time();
+							break;
+							
+						case 'deleted':
+							$deleted = true;
+							break;
+					}
+					break;
+					
+				case 'closed_date':
+					$change_fields[DAO_CrmOpportunity::CLOSED_DATE] = intval($v);
+					break;
+					
+				default:
+					// Custom fields
+					if(substr($k,0,3)=="cf_") {
+						$custom_fields[substr($k,3)] = $v;
+					}
+			}
+		}
+		
+		if(!$deleted) {
+			// Fields
+			if(!empty($change_fields))
+				DAO_CrmOpportunity::update($ids, $change_fields);
+			
+			// Custom Fields
+			if(!empty($custom_fields))
+				C4_AbstractView::_doBulkSetCustomFields(CerberusContexts::CONTEXT_OPPORTUNITY, $custom_fields, $ids);
+			
+			// Scheduled behavior
+			if(isset($do['behavior']))
+				C4_AbstractView::_doBulkScheduleBehavior(CerberusContexts::CONTEXT_OPPORTUNITY, $do['behavior'], $ids);
+			
+			// Watchers
+			if(isset($do['watchers']))
+				C4_AbstractView::_doBulkChangeWatchers(CerberusContexts::CONTEXT_OPPORTUNITY, $do['watchers'], $ids);
+			
+			// Broadcast
+			if(isset($do['broadcast']))
+				C4_AbstractView::_doBulkBroadcast(CerberusContexts::CONTEXT_OPPORTUNITY, $do['broadcast'], $ids, 'email_address');
+			
+		} else {
+			DAO_CrmOpportunity::delete($ids);
+		}
+		
+		$update->markCompleted();
+		return true;
 	}
 	
 	static function _processUpdateEvents($ids, $change_fields) {
@@ -226,6 +314,9 @@ class DAO_CrmOpportunity extends Cerb_ORMHelper {
 	static private function _getObjectsFromResult($rs) {
 		$objects = array();
 		
+		if(!($rs instanceof mysqli_result))
+			return false;
+		
 		while($row = mysqli_fetch_assoc($rs)) {
 			$object = new Model_CrmOpportunity();
 			$object->id = intval($row['id']);
@@ -296,7 +387,7 @@ class DAO_CrmOpportunity extends Cerb_ORMHelper {
 	public static function getSearchQueryComponents($columns, $params, $sortBy=null, $sortAsc=null) {
 		$fields = SearchFields_CrmOpportunity::getFields();
 		
-		list($tables,$wheres) = parent::_parseSearchParams($params, $columns, $fields,$sortBy);
+		list($tables,$wheres) = parent::_parseSearchParams($params, $columns, 'SearchFields_CrmOpportunity', $sortBy);
 		
 		$select_sql = sprintf("SELECT ".
 			"o.id as %s, ".
@@ -338,25 +429,10 @@ class DAO_CrmOpportunity extends Cerb_ORMHelper {
 			(isset($tables['context_link']) ? "INNER JOIN context_link ON (context_link.to_context = 'cerberusweb.contexts.opportunity' AND context_link.to_context_id = o.id) " : " ")
 			;
 			
-		$cfield_index_map = array(
-			CerberusContexts::CONTEXT_OPPORTUNITY => 'o.id',
-			CerberusContexts::CONTEXT_ADDRESS => 'a.id',
-			CerberusContexts::CONTEXT_ORG => 'a.contact_org_id',
-		);
-			
-		// Custom field joins
-		list($select_sql, $join_sql, $has_multiple_values) = self::_appendSelectJoinSqlForCustomFieldTables(
-			$tables,
-			$params,
-			$cfield_index_map,
-			$select_sql,
-			$join_sql
-		);
-		
 		$where_sql = "".
 			(!empty($wheres) ? sprintf("WHERE %s ",implode(' AND ',$wheres)) : "WHERE 1 ");
 		
-		$sort_sql = self::_buildSortClause($sortBy, $sortAsc, $fields);
+		$sort_sql = self::_buildSortClause($sortBy, $sortAsc, $fields, $select_sql, 'SearchFields_CrmOpportunity');
 
 		// Translate virtual fields
 		
@@ -396,39 +472,6 @@ class DAO_CrmOpportunity extends Cerb_ORMHelper {
 		settype($param_key, 'string');
 		
 		switch($param_key) {
-			case SearchFields_CrmOpportunity::FULLTEXT_COMMENT_CONTENT:
-				$search = Extension_DevblocksSearchSchema::get(Search_CommentContent::ID);
-				$query = $search->getQueryFromParam($param);
-				
-				if(false === ($ids = $search->query($query, array('context_crc32' => sprintf("%u", crc32($from_context)))))) {
-					$args['where_sql'] .= 'AND 0 ';
-				
-				} elseif(is_array($ids)) {
-					$from_ids = DAO_Comment::getContextIdsByContextAndIds($from_context, $ids);
-					
-					$args['where_sql'] .= sprintf('AND %s IN (%s) ',
-						$from_index,
-						implode(', ', (!empty($from_ids) ? $from_ids : array(-1)))
-					);
-					
-				} elseif(is_string($ids)) {
-					$db = DevblocksPlatform::getDatabaseService();
-					$temp_table = sprintf("_tmp_%s", uniqid());
-					
-					$db->ExecuteSlave(sprintf("CREATE TEMPORARY TABLE %s SELECT DISTINCT context_id AS id FROM comment INNER JOIN %s ON (%s.id=comment.id)",
-						$temp_table,
-						$ids,
-						$ids
-					));
-					
-					$args['join_sql'] .= sprintf("INNER JOIN %s ON (%s.id=o.id) ",
-						$temp_table,
-						$temp_table
-					);
-				}
-				
-				break;
-			
 			case SearchFields_CrmOpportunity::VIRTUAL_CONTEXT_LINK:
 				$args['has_multiple_values'] = true;
 				self::_searchComponentsVirtualContextLinks($param, $from_context, $from_index, $args['join_sql'], $args['where_sql']);
@@ -436,11 +479,6 @@ class DAO_CrmOpportunity extends Cerb_ORMHelper {
 			
 			case SearchFields_CrmOpportunity::VIRTUAL_HAS_FIELDSET:
 				self::_searchComponentsVirtualHasFieldset($param, $from_context, $from_index, $args['join_sql'], $args['where_sql']);
-				break;
-				
-			case SearchFields_CrmOpportunity::VIRTUAL_WATCHERS:
-				$args['has_multiple_values'] = true;
-				self::_searchComponentsVirtualWatchers($param, $from_context, $from_index, $args['join_sql'], $args['where_sql'], $args['tables']);
 				break;
 		}
 	}
@@ -475,9 +513,13 @@ class DAO_CrmOpportunity extends Cerb_ORMHelper {
 			($has_multiple_values ? 'GROUP BY o.id ' : '').
 			$sort_sql;
 		
-		$rs = $db->SelectLimit($sql,$limit,$page*$limit) or die(__CLASS__ . '('.__LINE__.')'. ':' . $db->ErrorMsg());
+		if(false == ($rs = $db->SelectLimit($sql,$limit,$page*$limit)))
+			return false;
 		
 		$results = array();
+		
+		if(!($rs instanceof mysqli_result))
+			return false;
 		
 		while($row = mysqli_fetch_assoc($rs)) {
 			$id = intval($row[SearchFields_CrmOpportunity::ID]);
@@ -503,7 +545,7 @@ class DAO_CrmOpportunity extends Cerb_ORMHelper {
 	}
 };
 
-class SearchFields_CrmOpportunity implements IDevblocksSearchFields {
+class SearchFields_CrmOpportunity extends DevblocksSearchFields {
 	// Table
 	const ID = 'o_id';
 	const PRIMARY_EMAIL_ID = 'o_primary_email_id';
@@ -535,10 +577,54 @@ class SearchFields_CrmOpportunity implements IDevblocksSearchFields {
 	const VIRTUAL_HAS_FIELDSET = '*_has_fieldset';
 	const VIRTUAL_WATCHERS = '*_workers';
 	
+	static private $_fields = null;
+	
+	static function getPrimaryKey() {
+		return 'o.id';
+	}
+	
+	static function getCustomFieldContextKeys() {
+		return array(
+			CerberusContexts::CONTEXT_OPPORTUNITY => new DevblocksSearchFieldContextKeys('o.id', self::ID),
+			CerberusContexts::CONTEXT_ADDRESS => new DevblocksSearchFieldContextKeys('o.primary_email_id', self::PRIMARY_EMAIL_ID),
+			CerberusContexts::CONTEXT_ORG => new DevblocksSearchFieldContextKeys('a.contact_org_id', self::ORG_ID),
+		);
+	}
+	
+	static function getWhereSQL(DevblocksSearchCriteria $param) {
+		switch($param->field) {
+			case self::FULLTEXT_COMMENT_CONTENT:
+				return self::_getWhereSQLFromCommentFulltextField($param, Search_CommentContent::ID, CerberusContexts::CONTEXT_OPPORTUNITY, self::getPrimaryKey());
+				break;
+				
+			case self::VIRTUAL_WATCHERS:
+				return self::_getWhereSQLFromWatchersField($param, CerberusContexts::CONTEXT_OPPORTUNITY, self::getPrimaryKey());
+				break;
+			
+			default:
+				if('cf_' == substr($param->field, 0, 3)) {
+					return self::_getWhereSQLFromCustomFields($param);
+				} else {
+					return $param->getWhereSQL(self::getFields(), self::getPrimaryKey());
+				}
+				break;
+		}
+	}
+	
 	/**
 	 * @return DevblocksSearchField[]
 	 */
 	static function getFields() {
+		if(is_null(self::$_fields))
+			self::$_fields = self::_getFields();
+		
+		return self::$_fields;
+	}
+	
+	/**
+	 * @return DevblocksSearchField[]
+	 */
+	static function _getFields() {
 		$translate = DevblocksPlatform::getTranslationService();
 		
 		$columns = array(
@@ -577,11 +663,7 @@ class SearchFields_CrmOpportunity implements IDevblocksSearchFields {
 		
 		// Custom fields with fieldsets
 		
-		$custom_columns = DevblocksSearchField::getCustomSearchFieldsByContexts(array(
-			CerberusContexts::CONTEXT_OPPORTUNITY,
-			CerberusContexts::CONTEXT_ADDRESS,
-			CerberusContexts::CONTEXT_ORG,
-		));
+		$custom_columns = DevblocksSearchField::getCustomSearchFieldsByContexts(array_keys(self::getCustomFieldContextKeys()));
 		
 		if(is_array($custom_columns))
 			$columns = array_merge($columns, $custom_columns);
@@ -658,6 +740,9 @@ class View_CrmOpportunity extends C4_AbstractView implements IAbstractView_Subto
 			$this->renderSortAsc,
 			$this->renderTotal
 		);
+		
+		$this->_lazyLoadCustomFieldsIntoObjects($objects, 'SearchFields_CrmOpportunity');
+		
 		return $objects;
 	}
 	
@@ -711,6 +796,7 @@ class View_CrmOpportunity extends C4_AbstractView implements IAbstractView_Subto
 	function getSubtotalCounts($column) {
 		$counts = array();
 		$fields = $this->getFields();
+		$context = CerberusContexts::CONTEXT_OPPORTUNITY;
 
 		if(!isset($fields[$column]))
 			return array();
@@ -718,31 +804,31 @@ class View_CrmOpportunity extends C4_AbstractView implements IAbstractView_Subto
 		switch($column) {
 			case SearchFields_CrmOpportunity::EMAIL_ADDRESS:
 			case SearchFields_CrmOpportunity::ORG_NAME:
-				$counts = $this->_getSubtotalCountForStringColumn('DAO_CrmOpportunity', $column);
+				$counts = $this->_getSubtotalCountForStringColumn($context, $column);
 				break;
 				
 			case SearchFields_CrmOpportunity::IS_CLOSED:
 			case SearchFields_CrmOpportunity::EMAIL_IS_DEFUNCT:
 			case SearchFields_CrmOpportunity::IS_WON:
-				$counts = $this->_getSubtotalCountForBooleanColumn('DAO_CrmOpportunity', $column);
+				$counts = $this->_getSubtotalCountForBooleanColumn($context, $column);
 				break;
 			
 			case SearchFields_CrmOpportunity::VIRTUAL_CONTEXT_LINK:
-				$counts = $this->_getSubtotalCountForContextLinkColumn('DAO_CrmOpportunity', CerberusContexts::CONTEXT_OPPORTUNITY, $column);
+				$counts = $this->_getSubtotalCountForContextLinkColumn($context, $column);
 				break;
 				
 			case SearchFields_CrmOpportunity::VIRTUAL_HAS_FIELDSET:
-				$counts = $this->_getSubtotalCountForHasFieldsetColumn('DAO_CrmOpportunity', CerberusContexts::CONTEXT_OPPORTUNITY, $column);
+				$counts = $this->_getSubtotalCountForHasFieldsetColumn($context, $column);
 				break;
 				
 			case SearchFields_CrmOpportunity::VIRTUAL_WATCHERS:
-				$counts = $this->_getSubtotalCountForWatcherColumn('DAO_CrmOpportunity', $column);
+				$counts = $this->_getSubtotalCountForWatcherColumn($context, $column);
 				break;
 				
 			default:
 				// Custom fields
 				if('cf_' == substr($column,0,3)) {
-					$counts = $this->_getSubtotalCountForCustomColumn('DAO_CrmOpportunity', $column, 'o.id');
+					$counts = $this->_getSubtotalCountForCustomColumn($context, $column);
 				}
 				
 				break;
@@ -755,7 +841,7 @@ class View_CrmOpportunity extends C4_AbstractView implements IAbstractView_Subto
 		$search_fields = SearchFields_CrmOpportunity::getFields();
 		
 		$fields = array(
-			'_fulltext' => 
+			'text' => 
 				array(
 					'type' => DevblocksSearchCriteria::TYPE_TEXT,
 					'options' => array('param_key' => SearchFields_CrmOpportunity::NAME, 'match' => DevblocksSearchCriteria::OPTION_TEXT_PARTIAL),
@@ -863,21 +949,17 @@ class View_CrmOpportunity extends C4_AbstractView implements IAbstractView_Subto
 		ksort($fields);
 		
 		return $fields;
-	}	
+	}
 	
-	function getParamsFromQuickSearchFields($fields) {
-		$search_fields = $this->getQuickSearchFields();
-		$params = DevblocksSearchCriteria::getParamsFromQueryFields($fields, $search_fields);
-
-		// Handle virtual fields and overrides
-		if(is_array($fields))
-		foreach($fields as $k => $v) {
-			switch($k) {
-				// ...
-			}
+	function getParamFromQuickSearchFieldTokens($field, $tokens) {
+		switch($field) {
+			default:
+				$search_fields = $this->getQuickSearchFields();
+				return DevblocksSearchCriteria::getParamFromQueryFieldTokens($field, $tokens, $search_fields);
+				break;
 		}
 		
-		return $params;
+		return false;
 	}
 	
 	function render() {
@@ -1066,209 +1148,21 @@ class View_CrmOpportunity extends C4_AbstractView implements IAbstractView_Subto
 			$this->renderPage = 0;
 		}
 	}
-	
-	function doBulkUpdate($filter, $do, $ids=array()) {
-		@set_time_limit(600); // 10m
-		
-		$active_worker = CerberusApplication::getActiveWorker();
-		
-		$change_fields = array();
-		$custom_fields = array();
-		$deleted = false;
-
-		// Make sure we have actions
-		if(empty($do))
-			return;
-
-		// Make sure we have checked items if we want a checked list
-		if(0 == strcasecmp($filter,"checks") && empty($ids))
-			return;
-			
-		if(is_array($do))
-		foreach($do as $k => $v) {
-			switch($k) {
-				case 'status':
-					switch(strtolower($v)) {
-						case 'open':
-							$change_fields[DAO_CrmOpportunity::IS_CLOSED] = 0;
-							$change_fields[DAO_CrmOpportunity::IS_WON] = 0;
-							$change_fields[DAO_CrmOpportunity::CLOSED_DATE] = 0;
-							break;
-						case 'won':
-							$change_fields[DAO_CrmOpportunity::IS_CLOSED] = 1;
-							$change_fields[DAO_CrmOpportunity::IS_WON] = 1;
-							$change_fields[DAO_CrmOpportunity::CLOSED_DATE] = time();
-							break;
-						case 'lost':
-							$change_fields[DAO_CrmOpportunity::IS_CLOSED] = 1;
-							$change_fields[DAO_CrmOpportunity::IS_WON] = 0;
-							$change_fields[DAO_CrmOpportunity::CLOSED_DATE] = time();
-							break;
-						case 'deleted':
-							if($active_worker->hasPriv('crm.opp.actions.delete'))
-								$deleted = true;
-							break;
-					}
-					break;
-				case 'closed_date':
-					$change_fields[DAO_CrmOpportunity::CLOSED_DATE] = intval($v);
-					break;
-//				case 'worker_id':
-//					$change_fields[DAO_CrmOpportunity::WORKER_ID] = intval($v);
-//					break;
-				default:
-					// Custom fields
-					if(substr($k,0,3)=="cf_") {
-						$custom_fields[substr($k,3)] = $v;
-					}
-			}
-		}
-
-		$pg = 0;
-
-		if(empty($ids))
-		do {
-			list($objects, $null) = DAO_CrmOpportunity::search(
-				array(),
-				$this->getParams(),
-				100,
-				$pg++,
-				SearchFields_CrmOpportunity::ID,
-				true,
-				false
-			);
-			$ids = array_merge($ids, array_keys($objects));
-			
-		} while(!empty($objects));
-
-		// Broadcast?
-		if(isset($do['broadcast'])) {
-			try {
-				$tpl_builder = DevblocksPlatform::getTemplateBuilder();
-				
-				$params = $do['broadcast'];
-				if(
-					!isset($params['worker_id'])
-					|| empty($params['worker_id'])
-					|| !isset($params['subject'])
-					|| empty($params['subject'])
-					|| !isset($params['message'])
-					|| empty($params['message'])
-					)
-					throw new Exception("Missing parameters for broadcast.");
-	
-				$is_queued = (isset($params['is_queued']) && $params['is_queued']) ? true : false;
-				$next_is_closed = (isset($params['next_is_closed'])) ? intval($params['next_is_closed']) : 0;
-				
-				if(is_array($ids))
-				foreach($ids as $opp_id) {
-					try {
-						CerberusContexts::getContext(CerberusContexts::CONTEXT_OPPORTUNITY, $opp_id, $tpl_labels, $tpl_tokens);
-						
-						$tpl_dict = new DevblocksDictionaryDelegate($tpl_tokens);
-	
-						if($tpl_dict->email_is_defunct)
-							continue;
-						
-						$subject = $tpl_builder->build($params['subject'], $tpl_dict);
-						$body = $tpl_builder->build($params['message'], $tpl_dict);
-						
-						$json_params = array(
-							'to' => $tpl_dict->email_address,
-							'group_id' => $params['group_id'],
-							'next_is_closed' => $next_is_closed,
-							'is_broadcast' => 1,
-							'context_links' => array(
-								array(CerberusContexts::CONTEXT_OPPORTUNITY, $opp_id),
-							),
-						);
-						
-						if(isset($params['format']))
-							$json_params['format'] = $params['format'];
-						
-						if(isset($params['html_template_id']))
-							$json_params['html_template_id'] = intval($params['html_template_id']);
-						
-						if(isset($params['file_ids']))
-							$json_params['file_ids'] = $params['file_ids'];
-						
-						$fields = array(
-							DAO_MailQueue::TYPE => Model_MailQueue::TYPE_COMPOSE,
-							DAO_MailQueue::TICKET_ID => 0,
-							DAO_MailQueue::WORKER_ID => $params['worker_id'],
-							DAO_MailQueue::UPDATED => time(),
-							DAO_MailQueue::HINT_TO => $tpl_dict->email_address,
-							DAO_MailQueue::SUBJECT => $subject,
-							DAO_MailQueue::BODY => $body,
-							DAO_MailQueue::PARAMS_JSON => json_encode($json_params),
-						);
-						
-						if($is_queued) {
-							$fields[DAO_MailQueue::IS_QUEUED] = 1;
-						}
-						
-						$draft_id = DAO_MailQueue::create($fields);
-						
-					} catch (Exception $e) {
-						// [TODO] ...
-					}
-				}
-			} catch (Exception $e) {
-				
-			}
-		}
-		
-		$batch_total = count($ids);
-		for($x=0;$x<=$batch_total;$x+=100) {
-			$batch_ids = array_slice($ids,$x,100);
-			
-			if(!$deleted) {
-				DAO_CrmOpportunity::update($batch_ids, $change_fields);
-				
-				// Custom Fields
-				self::_doBulkSetCustomFields(CerberusContexts::CONTEXT_OPPORTUNITY, $custom_fields, $batch_ids);
-				
-				// Scheduled behavior
-				if(isset($do['behavior']) && is_array($do['behavior'])) {
-					$behavior_id = $do['behavior']['id'];
-					@$behavior_when = strtotime($do['behavior']['when']) or time();
-					@$behavior_params = isset($do['behavior']['params']) ? $do['behavior']['params'] : array();
-					
-					if(!empty($batch_ids) && !empty($behavior_id))
-					foreach($batch_ids as $batch_id) {
-						DAO_ContextScheduledBehavior::create(array(
-							DAO_ContextScheduledBehavior::BEHAVIOR_ID => $behavior_id,
-							DAO_ContextScheduledBehavior::CONTEXT => CerberusContexts::CONTEXT_OPPORTUNITY,
-							DAO_ContextScheduledBehavior::CONTEXT_ID => $batch_id,
-							DAO_ContextScheduledBehavior::RUN_DATE => $behavior_when,
-							DAO_ContextScheduledBehavior::VARIABLES_JSON => json_encode($behavior_params),
-						));
-					}
-				}
-				
-				// Watchers
-				if(isset($do['watchers']) && is_array($do['watchers'])) {
-					$watcher_params = $do['watchers'];
-					foreach($batch_ids as $batch_id) {
-						if(isset($watcher_params['add']) && is_array($watcher_params['add']))
-							CerberusContexts::addWatchers(CerberusContexts::CONTEXT_OPPORTUNITY, $batch_id, $watcher_params['add']);
-						if(isset($watcher_params['remove']) && is_array($watcher_params['remove']))
-							CerberusContexts::removeWatchers(CerberusContexts::CONTEXT_OPPORTUNITY, $batch_id, $watcher_params['remove']);
-					}
-				}
-				
-			} else {
-				DAO_CrmOpportunity::delete($batch_ids);
-			}
-			
-			unset($batch_ids);
-		}
-
-		unset($ids);
-	}
 };
 
 class Context_Opportunity extends Extension_DevblocksContext implements IDevblocksContextProfile, IDevblocksContextPeek, IDevblocksContextImport {
+	function getDaoClass() {
+		return 'DAO_CrmOpportunity';
+	}
+	
+	function getSearchClass() {
+		return 'SearchFields_CrmOpportunity';
+	}
+	
+	function getViewClass() {
+		return 'View_CrmOpportunity';
+	}
+	
 	function getRandom() {
 		return DAO_CrmOpportunity::random();
 	}
@@ -1323,7 +1217,6 @@ class Context_Opportunity extends Extension_DevblocksContext implements IDevbloc
 		return $labels;
 	}
 	
-	// [TODO] Interface
 	function getDefaultProperties() {
 		return array(
 			'status',
