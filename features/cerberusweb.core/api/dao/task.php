@@ -178,6 +178,7 @@ class DAO_Task extends Cerb_ORMHelper {
 					if(substr($k,0,3)=="cf_") {
 						$custom_fields[substr($k,3)] = $v;
 					}
+					break;
 			}
 		}
 		
@@ -1351,6 +1352,7 @@ class Context_Task extends Extension_DevblocksContext implements IDevblocksConte
 	
 	function renderPeekPopup($context_id=0, $view_id='', $edit=false) {
 		$tpl = DevblocksPlatform::getTemplateService();
+		$tpl->assign('view_id', $view_id);
 		
 		if(!empty($context_id)) {
 			$task = DAO_Task::get($context_id);

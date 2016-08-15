@@ -163,6 +163,229 @@ class PageSection_ProfilesOpportunity extends Extension_PageSection {
 		$tpl->display('devblocks:cerberusweb.crm::crm/opps/profile.tpl');
 	}
 	
+	function savePeekJsonAction() {
+		@$view_id = DevblocksPlatform::importGPC($_REQUEST['view_id'],'string','');
+		
+		@$id = DevblocksPlatform::importGPC($_REQUEST['opp_id'],'integer',0);
+		@$name = DevblocksPlatform::importGPC($_REQUEST['name'],'string','');
+		@$status = DevblocksPlatform::importGPC($_REQUEST['status'],'integer',0);
+		@$amount = DevblocksPlatform::importGPC($_REQUEST['amount'],'string','0.00');
+		@$email_id = DevblocksPlatform::importGPC($_REQUEST['email_id'],'integer',0);
+		@$comment = DevblocksPlatform::importGPC($_REQUEST['comment'],'string','');
+		@$created_date_str = DevblocksPlatform::importGPC($_REQUEST['created_date'],'string','');
+		@$closed_date_str = DevblocksPlatform::importGPC($_REQUEST['closed_date'],'string','');
+		@$do_delete = DevblocksPlatform::importGPC($_REQUEST['do_delete'],'integer',0);
+		
+		// State
+		$is_closed = (0==$status) ? 0 : 1;
+		$is_won = (1==$status) ? 1 : 0;
+		
+		// Strip currency formatting symbols
+		$amount = floatval(str_replace(array(',','$','¢','£','€'),'',$amount));
+		
+		// Dates
+		if(false === ($created_date = strtotime($created_date_str)))
+			$created_date = time();
+			
+		if(false === ($closed_date = strtotime($closed_date_str)))
+			$closed_date = ($is_closed) ? time() : 0;
+
+		if(!$is_closed)
+			$closed_date = 0;
+			
+		// Worker
+		$active_worker = CerberusApplication::getActiveWorker();
+		
+		header('Content-Type: application/json; charset=' . LANG_CHARSET_CODE);
+
+		try {
+			if(!empty($id) && !empty($do_delete)) { // delete
+				// [TODO] Delete ACL
+				if(!$active_worker->hasPriv('crm.opp.actions.create'))
+					throw new Exception_DevblocksAjaxValidationError("You don't have permission to delete this record.");
+				
+				if(false == ($opp = DAO_CrmOpportunity::get($id)))
+					throw new Exception_DevblocksAjaxValidationError("Failed to delete the record.");
+				
+				DAO_CrmOpportunity::delete($id);
+				
+				echo json_encode(array(
+					'status' => true,
+					'id' => $id,
+					'view_id' => $view_id,
+				));
+				return;
+				
+			// Create/Edit
+			} else {
+				// Load the existing model
+				if($id && false == ($opp = DAO_CrmOpportunity::get($id)))
+					throw new Exception_DevblocksAjaxValidationError("There was an unexpected error when loading this record.");
+				
+				if(empty($name))
+					throw new Exception_DevblocksAjaxValidationError("'Title' is required", 'name');
+				
+				if(false == ($address = DAO_Address::get($email_id)))
+					throw new Exception_DevblocksAjaxValidationError("Invalid email address.");
+			
+				$fields = array(
+					DAO_CrmOpportunity::NAME => $name,
+					DAO_CrmOpportunity::AMOUNT => $amount,
+					DAO_CrmOpportunity::PRIMARY_EMAIL_ID => $address->id,
+					DAO_CrmOpportunity::CREATED_DATE => intval($created_date),
+					DAO_CrmOpportunity::UPDATED_DATE => time(),
+					DAO_CrmOpportunity::CLOSED_DATE => intval($closed_date),
+					DAO_CrmOpportunity::IS_CLOSED => $is_closed,
+					DAO_CrmOpportunity::IS_WON => $is_won,
+				);
+				
+				// Create
+				if(empty($id)) {
+					if(empty($id) && !$active_worker->hasPriv('crm.opp.actions.create'))
+						throw new Exception_DevblocksAjaxValidationError("You don't have permission to create this record.");
+					
+					$id = DAO_CrmOpportunity::create($fields);
+					
+					// Context Link (if given)
+					// [TODO]
+					@$link_context = DevblocksPlatform::importGPC($_REQUEST['link_context'],'string','');
+					@$link_context_id = DevblocksPlatform::importGPC($_REQUEST['link_context_id'],'integer','');
+					if(!empty($id) && !empty($link_context) && !empty($link_context_id)) {
+						DAO_ContextLink::setLink(CerberusContexts::CONTEXT_OPPORTUNITY, $id, $link_context, $link_context_id);
+					}
+					
+					// View marquee
+					if(!empty($id) && !empty($view_id)) {
+						C4_AbstractView::setMarqueeContextCreated($view_id, CerberusContexts::CONTEXT_OPPORTUNITY, $id);
+					}
+					
+				// Update
+				} else {
+					if(empty($id) && !$active_worker->hasPriv('crm.opp.actions.update_all'))
+						throw new Exception_DevblocksAjaxValidationError("You don't have permission to modify this record.");
+					
+					DAO_CrmOpportunity::update($id, $fields);
+				}
+				
+				if($id) {
+					// Custom fields
+					@$field_ids = DevblocksPlatform::importGPC($_REQUEST['field_ids'], 'array', array());
+					DAO_CustomFieldValue::handleFormPost(CerberusContexts::CONTEXT_OPPORTUNITY, $id, $field_ids);
+					
+					// If we're adding a comment
+					if(!empty($comment)) {
+						$also_notify_worker_ids = array_keys(CerberusApplication::getWorkersByAtMentionsText($comment));
+						
+						$fields = array(
+							DAO_Comment::CREATED => time(),
+							DAO_Comment::CONTEXT => CerberusContexts::CONTEXT_OPPORTUNITY,
+							DAO_Comment::CONTEXT_ID => $id,
+							DAO_Comment::COMMENT => $comment,
+							DAO_Comment::OWNER_CONTEXT => CerberusContexts::CONTEXT_WORKER,
+							DAO_Comment::OWNER_CONTEXT_ID => $active_worker->id,
+						);
+						$comment_id = DAO_Comment::create($fields, $also_notify_worker_ids);
+					}
+				}
+			
+				echo json_encode(array(
+					'status' => true,
+					'id' => $id,
+					'label' => $name,
+					'view_id' => $view_id,
+				));
+				return;
+			}
+				
+		} catch (Exception_DevblocksAjaxValidationError $e) {
+			echo json_encode(array(
+				'status' => false,
+				'error' => $e->getMessage(),
+				'field' => $e->getFieldName(),
+			));
+			return;
+			
+		} catch (Exception $e) {
+			echo json_encode(array(
+				'status' => false,
+				'error' => 'An error occurred.',
+			));
+			return;
+		}
+		
+	}
+	
+	function viewExploreAction() {
+		@$view_id = DevblocksPlatform::importGPC($_REQUEST['view_id'],'string');
+		
+		$active_worker = CerberusApplication::getActiveWorker();
+		$url_writer = DevblocksPlatform::getUrlService();
+		
+		// Generate hash
+		$hash = md5($view_id.$active_worker->id.time());
+		
+		// Loop through view and get IDs
+		$view = C4_AbstractViewLoader::getView($view_id);
+		$view->setAutoPersist(false);
+
+		// Page start
+		@$explore_from = DevblocksPlatform::importGPC($_REQUEST['explore_from'],'integer',0);
+		if(empty($explore_from)) {
+			$orig_pos = 1+($view->renderPage * $view->renderLimit);
+		} else {
+			$orig_pos = 1;
+		}
+
+		$view->renderPage = 0;
+		$view->renderLimit = 250;
+		$pos = 0;
+		
+		do {
+			$models = array();
+			list($results, $total) = $view->getData();
+
+			// Summary row
+			if(0==$view->renderPage) {
+				$model = new Model_ExplorerSet();
+				$model->hash = $hash;
+				$model->pos = $pos++;
+				$model->params = array(
+					'title' => $view->name,
+					'created' => time(),
+//					'worker_id' => $active_worker->id,
+					'total' => $total,
+					'return_url' => isset($_SERVER['HTTP_REFERER']) ? $_SERVER['HTTP_REFERER'] : $url_writer->writeNoProxy('c=search&type=opportunity', true),
+//					'toolbar_extension_id' => 'cerberusweb.explorer.toolbar.',
+				);
+				$models[] = $model;
+				
+				$view->renderTotal = false; // speed up subsequent pages
+			}
+			
+			if(is_array($results))
+			foreach($results as $opp_id => $row) {
+				if($opp_id==$explore_from)
+					$orig_pos = $pos;
+				
+				$model = new Model_ExplorerSet();
+				$model->hash = $hash;
+				$model->pos = $pos++;
+				$model->params = array(
+					'id' => $row[SearchFields_CrmOpportunity::ID],
+					'url' => $url_writer->writeNoProxy(sprintf("c=profiles&tab=opportunity&id=%d-%s", $row[SearchFields_CrmOpportunity::ID], DevblocksPlatform::strToPermalink($row[SearchFields_CrmOpportunity::NAME])), true),
+				);
+				$models[] = $model;
+			}
+			
+			DAO_ExplorerSet::createFromModels($models);
+			
+			$view->renderPage++;
+			
+		} while(!empty($results));
+		
+		DevblocksPlatform::redirect(new DevblocksHttpResponse(array('explore',$hash,$orig_pos)));
+	}
+	
 	function showBulkPopupAction() {
 		@$ids = DevblocksPlatform::importGPC($_REQUEST['ids']);
 		@$view_id = DevblocksPlatform::importGPC($_REQUEST['view_id']);

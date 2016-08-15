@@ -913,46 +913,67 @@ class DAO_Ticket extends Cerb_ORMHelper {
 		$change_fields = array();
 		$custom_fields = array();
 		$worker_dict = null;
-		$do_merge = false;
 		
+		// If merging, do that first, then run subsequent actions on the lone destination ticket
+		if(isset($do['merge'])) {
+			if(null != ($merged_into_id = DAO_Ticket::merge($ids))) {
+				$ids = array($merged_into_id);
+			}
+		}
+		
+		// Actions
 		if(is_array($do))
 		foreach($do as $k => $v) {
 			switch($k) {
-				case 'merge':
-					$do_merge = true;
-					break;
-				case 'move':
-					$change_fields[DAO_Ticket::GROUP_ID] = $v['group_id'];
-					$change_fields[DAO_Ticket::BUCKET_ID] = $v['bucket_id'];
-					break;
 				case 'importance':
-					$change_fields[DAO_Ticket::IMPORTANCE] = $v['importance'];
+					$v = DevblocksPlatform::intClamp($v, 0, 100);
+					$change_fields[DAO_Ticket::IMPORTANCE] = $v;
 					break;
-				case 'owner':
-					$change_fields[DAO_Ticket::OWNER_ID] = intval($v['worker_id']);
+					
+				case 'move':
+					if(!isset($v['group_id']) || isset($v['bucket_id']))
+						break;
+						
+					$change_fields[DAO_Ticket::GROUP_ID] = intval($v['group_id']);
+					$change_fields[DAO_Ticket::BUCKET_ID] = intval($v['bucket_id']);
 					break;
+					
 				case 'org':
-					$change_fields[DAO_Ticket::ORG_ID] = intval($v['org_id']);
+					$change_fields[DAO_Ticket::ORG_ID] = intval($v);
 					break;
+					
+				case 'owner':
+					$change_fields[DAO_Ticket::OWNER_ID] = intval($v);
+					break;
+					
+				case 'spam':
+					if(!empty($v)) {
+						foreach($ids as $batch_id)
+							CerberusBayes::markTicketAsSpam($batch_id);
+					} else {
+						foreach($ids as $batch_id)
+							CerberusBayes::markTicketAsNotSpam($batch_id);
+					}
+					break;
+					
 				case 'status':
+					if(!isset($v['status_id']))
+						break;
+					
 					$change_fields[DAO_Ticket::STATUS_ID] = intval($v['status_id']);
+					
+					if(isset($v['reopen_at'])) {
+						@$date = strtotime($v['reopen_at']);
+						$change_fields[DAO_Ticket::REOPEN_AT] = intval($date);
+					}
 					break;
-				case 'reopen':
-					@$date = strtotime($v['date']);
-					$change_fields[DAO_Ticket::REOPEN_AT] = intval($date);
-					break;
+					
 				default:
 					// Custom fields
 					if(substr($k,0,3)=="cf_") {
 						$custom_fields[substr($k,3)] = $v;
 					}
-			}
-		}
-		
-		// If merging, do that first, then run subsequent actions on the lone destination ticket
-		if($do_merge) {
-			if(null != ($merged_into_id = DAO_Ticket::merge($ids))) {
-				$ids = array($merged_into_id);
+					break;
 			}
 		}
 		
@@ -965,24 +986,13 @@ class DAO_Ticket extends Cerb_ORMHelper {
 		// Custom Fields
 		C4_AbstractView::_doBulkSetCustomFields(CerberusContexts::CONTEXT_TICKET, $custom_fields, $ids);
 		
-		// Spam
-		if(isset($do['spam'])) {
-			if(!empty($do['spam']['is_spam'])) {
-				foreach($ids as $batch_id)
-					CerberusBayes::markTicketAsSpam($batch_id);
-			} else {
-				foreach($ids as $batch_id)
-					CerberusBayes::markTicketAsNotSpam($batch_id);
-			}
-		}
+		// Watchers
+		if(isset($do['watchers']))
+			C4_AbstractView::_doBulkChangeWatchers(CerberusContexts::CONTEXT_TICKET, $do['watchers'], $ids);
 		
 		// Scheduled behavior
 		if(isset($do['behavior']))
 			C4_AbstractView::_doBulkScheduleBehavior(CerberusContexts::CONTEXT_TICKET, $do['behavior'], $ids);
-		
-		// Watchers
-		if(isset($do['watchers']))
-			C4_AbstractView::_doBulkChangeWatchers(CerberusContexts::CONTEXT_TICKET, $do['watchers'], $ids);
 		
 		if(isset($do['broadcast'])) {
 			try {
@@ -3151,12 +3161,17 @@ class View_Ticket extends C4_AbstractView implements IAbstractView_Subtotals, IA
 				$bucket_ids = array();
 				
 				foreach($terms as $term) {
-					foreach($buckets as $bucket_id => $bucket) {
-						if(isset($bucket_ids[$bucket_id]))
-							continue;
+					if(is_numeric($term) && isset($buckets[$term])) {
+						$bucket_ids[intval($term)] = true;
 						
-						if(false !== stristr($bucket->name, $term)) {
-							$bucket_ids[$bucket_id] = true;
+					} else {
+						foreach($buckets as $bucket_id => $bucket) {
+							if(isset($bucket_ids[$bucket_id]))
+								continue;
+							
+							if(false !== stristr($bucket->name, $term)) {
+								$bucket_ids[$bucket_id] = true;
+							}
 						}
 					}
 				}
@@ -3186,12 +3201,17 @@ class View_Ticket extends C4_AbstractView implements IAbstractView_Subtotals, IA
 				$group_ids = array();
 				
 				foreach($terms as $term) {
-					foreach($groups as $group_id => $group) {
-						if(isset($group_ids[$group_id]))
-							continue;
+					if(is_numeric($term) && isset($groups[$term])) {
+						$group_ids[intval($term)] = true;
 						
-						if(false !== stristr($group->name, $term)) {
-							$group_ids[$group_id] = true;
+					} else {
+						foreach($groups as $group_id => $group) {
+							if(isset($group_ids[$group_id]))
+								continue;
+							
+							if(false !== stristr($group->name, $term)) {
+								$group_ids[$group_id] = true;
+							}
 						}
 					}
 				}

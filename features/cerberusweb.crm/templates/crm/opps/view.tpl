@@ -10,11 +10,11 @@
 	<tr>
 		<td nowrap="nowrap"><span class="title">{$view->name}</span></td>
 		<td nowrap="nowrap" align="right" class="title-toolbar">
-			<a href="javascript:;" title="{'common.add'|devblocks_translate|capitalize}" class="minimal" onclick="genericAjaxPopup('peek','c=internal&a=showPeekPopup&context={$view_context}&context_id=0&view_id={$view->id}',null,false,'500');"><span class="glyphicons glyphicons-circle-plus"></span></a>
+			<a href="javascript:;" title="{'common.add'|devblocks_translate|capitalize}" class="minimal" onclick="genericAjaxPopup('peek','c=internal&a=showPeekPopup&context={$view_context}&context_id=0&view_id={$view->id}',null,false,'50%');"><span class="glyphicons glyphicons-circle-plus"></span></a>
 			<a href="javascript:;" title="{'common.search'|devblocks_translate|capitalize}" class="minimal" onclick="genericAjaxPopup('search','c=internal&a=viewShowQuickSearchPopup&view_id={$view->id}',null,false,'400');"><span class="glyphicons glyphicons-search"></span></a>
 			<a href="javascript:;" title="{'common.customize'|devblocks_translate|capitalize}" class="minimal" onclick="genericAjaxGet('customize{$view->id}','c=internal&a=viewCustomize&id={$view->id}');toggleDiv('customize{$view->id}','block');"><span class="glyphicons glyphicons-cogwheel"></span></a>
 			<a href="javascript:;" title="{'common.subtotals'|devblocks_translate|capitalize}" class="subtotals minimal"><span class="glyphicons glyphicons-signal"></span></a>
-			<a href="javascript:;" title="{'common.import'|devblocks_translate|capitalize}" onclick="genericAjaxPopup('import','c=internal&a=showImportPopup&context={$view_context}&view_id={$view->id}',null,false,'500');"><span class="glyphicons glyphicons-file-import"></span></a>
+			<a href="javascript:;" title="{'common.import'|devblocks_translate|capitalize}" onclick="genericAjaxPopup('import','c=internal&a=showImportPopup&context={$view_context}&view_id={$view->id}',null,false,'50%');"><span class="glyphicons glyphicons-file-import"></span></a>
 			<a href="javascript:;" title="{'common.export'|devblocks_translate|capitalize}" class="minimal" onclick="genericAjaxGet('{$view->id}_tips','c=internal&a=viewShowExport&id={$view->id}');toggleDiv('{$view->id}_tips','block');"><span class="glyphicons glyphicons-file-export"></span></a>
 			<a href="javascript:;" title="{'common.copy'|devblocks_translate|capitalize}" onclick="genericAjaxGet('{$view->id}_tips','c=internal&a=viewShowCopy&view_id={$view->id}');toggleDiv('{$view->id}_tips','block');"><span class="glyphicons glyphicons-duplicate"></span></a>
 			<a href="javascript:;" title="{'common.refresh'|devblocks_translate|capitalize}" class="minimal" onclick="genericAjaxGet('view{$view->id}','c=internal&a=viewRefresh&id={$view->id}');"><span class="glyphicons glyphicons-refresh"></span></a>
@@ -29,8 +29,10 @@
 <input type="hidden" name="view_id" value="{$view->id}">
 <input type="hidden" name="context_id" value="{$view_context}">
 <input type="hidden" name="id" value="{$view->id}">
-<input type="hidden" name="c" value="crm">
-<input type="hidden" name="a" value="">
+<input type="hidden" name="c" value="profiles">
+<input type="hidden" name="a" value="handleSectionAction">
+<input type="hidden" name="section" value="opportunity">
+<input type="hidden" name="action" value="viewExplore">
 <input type="hidden" name="explore_from" value="0">
 <input type="hidden" name="_csrf_token" value="{$session.csrf_token}">
 
@@ -83,7 +85,7 @@
 				{if $result.o_is_closed && $result.o_is_won}<span style="color:rgb(0,120,0);font-weight:bold;"><span class="glyphicons glyphicons-up-arrow" title="Won" style="line-height:16px;"></span></span> 
 				{elseif $result.o_is_closed && !$result.o_is_won}<span style="color:rgb(150,0,0);font-weight:bold;"><span class="glyphicons glyphicons-down-arrow" title="Lost" style="line-height:16px;"></span></span> {/if}
 				<a href="{devblocks_url}c=profiles&d=opportunity&id={$result.o_id}-{$result.o_name|devblocks_permalink}{/devblocks_url}" class="subject">{if !empty($result.o_name)}{$result.o_name}{else}{'common.no_title'|devblocks_translate}{/if}</a> 
-				<button type="button" class="peek" onclick="genericAjaxPopup('peek','c=internal&a=showPeekPopup&context={$view_context}&context_id={$result.o_id}&view_id={$view->id}',null,false,'600');"><span class="glyphicons glyphicons-new-window-alt"></span></button>
+				<button type="button" class="peek" onclick="genericAjaxPopup('peek','c=internal&a=showPeekPopup&context={$view_context}&context_id={$result.o_id}&view_id={$view->id}',null,false,'50%');"><span class="glyphicons glyphicons-new-window-alt"></span></button>
 			</td>
 		</tr>
 		<tr class="{$tableRowClass}">
@@ -95,7 +97,7 @@
 			{elseif $column=="org_name"}
 				<td>
 					{if !empty($result.org_id)}
-						<a href="javascript:;" onclick="genericAjaxPopup('peek','c=internal&a=showPeekPopup&context={CerberusContexts::CONTEXT_ORG}&context_id={$result.org_id}&view_id={$view->id}',null,false,'500');">{$result.org_name}</a>&nbsp;
+						<a href="javascript:;" onclick="genericAjaxPopup('peek','c=internal&a=showPeekPopup&context={CerberusContexts::CONTEXT_ORG}&context_id={$result.org_id}&view_id={$view->id}',null,false,'50%');">{$result.org_name}</a>&nbsp;
 					{/if}
 				</td>
 			{elseif $column=="o_amount"}
@@ -103,7 +105,7 @@
 			{elseif $column=="a_email"}
 				<td data-column="{$column}">
 					{if !empty($result.a_email)}
-						<a href="javascript:;" onclick="genericAjaxPopup('peek','c=internal&a=showPeekPopup&context={CerberusContexts::CONTEXT_ADDRESS}&email={$result.a_email|escape:'url'}&view_id={$view->id}',null,false,'500');" title="{$result.a_email}">{$result.a_email}</a>&nbsp;
+						<a href="javascript:;" onclick="genericAjaxPopup('peek','c=internal&a=showPeekPopup&context={CerberusContexts::CONTEXT_ADDRESS}&email={$result.a_email|escape:'url'}&view_id={$view->id}',null,false,'50%');" title="{$result.a_email}">{$result.a_email}</a>&nbsp;
 					{else}
 						<!-- [<a href="javascript:;">assign</a>]  -->
 					{/if}
@@ -155,7 +157,7 @@
 	
 	{if $total}
 	<div style="float:left;" id="{$view->id}_actions">
-		<button type="button" class="action-always-show action-explore" onclick="this.form.explore_from.value=$(this).closest('form').find('tbody input:checkbox:checked:first').val();this.form.a.value='viewOppsExplore';this.form.submit();"><span class="glyphicons glyphicons-play-button"></span> {'common.explore'|devblocks_translate|lower}</button>
+		<button type="button" class="action-always-show action-explore" onclick="var $frm = $(this).closest('form'); $frm.find('input:hidden[name=explore_from]').val($frm.find('tbody input:checkbox:checked:first').val());$frm.submit();"><span class="glyphicons glyphicons-play-button"></span> {'common.explore'|devblocks_translate|lower}</button>
 		{if $active_worker->hasPriv('crm.opp.actions.update_all')}<button type="button" class="action-always-show action-bulkupdate" onclick="genericAjaxPopup('peek','c=profiles&a=handleSectionAction&section=opportunity&action=showBulkPopup&view_id={$view->id}&ids=' + Devblocks.getFormEnabledCheckboxValues('viewForm{$view->id}','row_id[]'), { my: 'top', at: 'top' }, false, '50%');"><span class="glyphicons glyphicons-folder-closed"></span> {'common.bulk_update'|devblocks_translate|lower}</button>{/if}
 	</div>
 	{/if}
