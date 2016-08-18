@@ -705,8 +705,6 @@ class Model_Message {
 	private $_sender_object = null;
 	private $_headers_raw = null;
 
-	function Model_Message() {}
-
 	function getContent(&$fp=null) {
 		if(empty($this->storage_extension) || empty($this->storage_key))
 			return '';
@@ -2233,7 +2231,10 @@ class Context_Message extends Extension_DevblocksContext implements IDevblocksCo
 			if(null == ($ticket = DAO_Ticket::get($message->ticket_id)))
 				throw new Exception();
 			
-			return $worker->isGroupMember($ticket->group_id);
+			if(null == ($group = $ticket->getGroup()))
+				throw new Exception();
+			
+			return !$group->is_private || $worker->isGroupMember($ticket->group_id);
 				
 		} catch (Exception $e) {
 			// Fail

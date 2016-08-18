@@ -23,6 +23,11 @@ class DAO_CommunityTool extends Cerb_ORMHelper {
 	const CODE = 'code';
 	const EXTENSION_ID = 'extension_id';
 	
+	static function clearCache() {
+		$cache = DevblocksPlatform::getCacheService();
+		$cache->remove(self::_CACHE_ALL);
+	}
+	
 	public static function create($fields) {
 		$db = DevblocksPlatform::getDatabaseService();
 		
@@ -57,6 +62,7 @@ class DAO_CommunityTool extends Cerb_ORMHelper {
 	
 	public static function update($id, $fields) {
 		self::_update($id, 'community_tool', $fields);
+		self::clearCache();
 	}
 	
 	/**
@@ -182,31 +188,29 @@ class DAO_CommunityTool extends Cerb_ORMHelper {
 	}
 	
 	public static function delete($ids) {
-		if(!is_array($ids)) $ids = array($ids);
+		if(!is_array($ids))
+			$ids = array($ids);
+		
 		$db = DevblocksPlatform::getDatabaseService();
 		
-		foreach($ids as $id) {
-			@$tool = DAO_CommunityTool::get($id);
-			if(empty($tool)) continue;
-
-			/**
-			 * [TODO] [JAS] Deleting a community tool needs to run a hook first so the
-			 * tool has a chance to clean up its own DB tables abstractly.
-			 *
-			 * e.g. Knowledgebase instances which store data outside the tool property table
-			 *
-			 * After this is done, a future DB patch for those plugins should clean up any
-			 * orphaned data.
-			 */
-			
-			$sql = sprintf("DELETE FROM community_tool WHERE id = %d", $id);
-			if(false == ($db->ExecuteMaster($sql)))
-				return false;
-			
-			$sql = sprintf("DELETE FROM community_tool_property WHERE tool_code = '%s'", $tool->code);
-			if(false == ($db->ExecuteMaster($sql)))
-				return false;
-		}
+		$ids = DevblocksPlatform::sanitizeArray($ids, 'int');
+		
+		if(empty($ids))
+			return false;
+		
+		$ids_string = implode(',', $ids);
+		
+		// Nuke portals
+		$sql = sprintf("DELETE FROM community_tool WHERE id IN (%s)", $ids_string);
+		if(false == ($db->ExecuteMaster($sql)))
+			return false;
+		
+		// Nuke portal config
+		$sql = "DELETE FROM community_tool_property WHERE tool_code NOT IN (SELECT code FROM community_tool)";
+		if(false == ($db->ExecuteMaster($sql)))
+			return false;
+		
+		self::clearCache();
 	}
 
 	public static function getSearchQueryComponents($columns, $params, $sortBy=null, $sortAsc=null) {
