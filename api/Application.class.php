@@ -39,7 +39,7 @@
  * - Jeff Standen and Dan Hildebrandt
  *	 Founders at Webgroup Media LLC; Developers of Cerb
  */
-define("APP_BUILD", 2016081801);
+define("APP_BUILD", 2016082301);
 define("APP_VERSION", '7.2.2');
 
 define("APP_MAIL_PATH", APP_STORAGE_PATH . '/mail/');
@@ -1974,7 +1974,7 @@ class CerberusContexts {
 		return $models;
 	}
 
-	static function shutdown() {
+	static function flush() {
 		if(empty(self::$_context_checkpoints))
 			return;
 
@@ -2003,6 +2003,7 @@ class CerberusContexts {
 			}
 		}
 
+		self::$_context_checkpoints = array();
 	}
 };
 

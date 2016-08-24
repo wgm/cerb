@@ -1394,6 +1394,8 @@ class View_Message extends C4_AbstractView implements IAbstractView_Subtotals, I
 				case SearchFields_Message::IS_NOT_SENT:
 				case SearchFields_Message::IS_OUTGOING:
 				case SearchFields_Message::TICKET_GROUP_ID:
+				case SearchFields_Message::TICKET_ID:
+				case SearchFields_Message::TICKET_MASK:
 				case SearchFields_Message::WORKER_ID:
 				case SearchFields_Message::VIRTUAL_TICKET_STATUS:
 					$pass = true;
@@ -1432,6 +1434,14 @@ class View_Message extends C4_AbstractView implements IAbstractView_Subtotals, I
 				foreach($groups as $group_id => $group)
 					$label_map[$group_id] = $group->name;
 				$counts = $this->_getSubtotalCountForStringColumn($context, $column, $label_map, 'in', 'group_id[]');
+				break;
+				
+			case SearchFields_Message::TICKET_ID:
+				$counts = $this->_getSubtotalCountForNumberColumn($context, $column, array(), '=', 'value');
+				break;
+				
+			case SearchFields_Message::TICKET_MASK:
+				$counts = $this->_getSubtotalCountForStringColumn($context, $column, array(), '=', 'value');
 				break;
 				
 			case SearchFields_Message::WORKER_ID:
@@ -2018,7 +2028,7 @@ class View_Message extends C4_AbstractView implements IAbstractView_Subtotals, I
 				$tpl->display('devblocks:cerberusweb.core::internal/views/criteria/__string.tpl');
 				break;
 				
-			case '_placeholder_number':
+			case SearchFields_Message::TICKET_ID:
 				$tpl->display('devblocks:cerberusweb.core::internal/views/criteria/__number.tpl');
 				break;
 				
@@ -2148,6 +2158,10 @@ class View_Message extends C4_AbstractView implements IAbstractView_Subtotals, I
 			case SearchFields_Message::TICKET_MASK:
 			case SearchFields_Message::TICKET_SUBJECT:
 				$criteria = $this->_doSetCriteriaString($field, $oper, $value);
+				break;
+				
+			case SearchFields_Message::TICKET_ID:
+				$criteria = new DevblocksSearchCriteria($field,$oper,$value);
 				break;
 				
 			case SearchFields_Message::RESPONSE_TIME:
