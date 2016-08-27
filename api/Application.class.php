@@ -39,7 +39,7 @@
  * - Jeff Standen and Dan Hildebrandt
  *	 Founders at Webgroup Media LLC; Developers of Cerb
  */
-define("APP_BUILD", 2016082301);
+define("APP_BUILD", 2016082601);
 define("APP_VERSION", '7.2.2');
 
 define("APP_MAIL_PATH", APP_STORAGE_PATH . '/mail/');
@@ -950,24 +950,29 @@ class CerberusContexts {
 			default:
 				// Migrated
 
-				if(null != ($ctx = Extension_DevblocksContext::get($context))) {
+				if(false != ($ctx = Extension_DevblocksContext::get($context))) {
 					// If blank, check the cache for a prebuilt context object
 					if(is_null($context_object)) {
 						$cache = DevblocksPlatform::getCacheService();
 
-						$hash = md5(serialize(array($context, $prefix, $nested)));
+						$stack = CerberusContexts::getStack();
+						array_pop($stack);
+						
+						// Hash with the parent we're loading from
+						$hash = md5(json_encode(array($context, end($stack), $prefix)));
 						$cache_key = sprintf("cerb:ctx:%s", $hash);
 
 						// Cache hit
 						if(null !== ($data = $cache->load($cache_key, false, true))) {
 							$loaded_labels = $data['labels'];
 							$loaded_values = $data['values'];
+							unset($data);
 
 						// Cache miss
 						} else {
 							$loaded_labels = array();
 							$loaded_values = array();
-							$ctx->getContext($context_object, $loaded_labels, $loaded_values, $prefix);
+							$ctx->getContext(null, $loaded_labels, $loaded_values, $prefix);
 
 							$cache->save(array('labels' => $loaded_labels, 'values' => $loaded_values), $cache_key, array(), 0, true);
 						}
@@ -989,7 +994,7 @@ class CerberusContexts {
 							if(is_numeric($hash_context_id))
 								$hash_context_id = intval($hash_context_id);
 
-							$hash = md5(serialize(array($context, $hash_context_id, $prefix, $nested)));
+							$hash = md5(json_encode(array($context, $hash_context_id, $prefix, $nested)));
 
 							if(isset(self::$_cache_loads[$hash])) {
 								$values = self::$_cache_loads[$hash];

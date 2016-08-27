@@ -217,6 +217,11 @@
 				<seg>Access denied.</seg>
 			</tuv>
 		</tu>
+		<tu tuid="common.action">
+			<tuv xml:lang="en_US">
+				<seg>Action</seg>
+			</tuv>
+		</tu>
 		<tu tuid="common.actions">
 			<tuv xml:lang="en_US">
 				<seg>Actions</seg>
@@ -405,6 +410,16 @@
 		<tu tuid="common.comments">
 			<tuv xml:lang="en_US">
 				<seg>comments</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.condition">
+			<tuv xml:lang="en_US">
+				<seg>condition</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.conditions">
+			<tuv xml:lang="en_US">
+				<seg>conditions</seg>
 			</tuv>
 		</tu>
 		<tu tuid="common.contact">

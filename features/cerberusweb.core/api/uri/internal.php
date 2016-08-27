@@ -1193,6 +1193,8 @@ class ChInternalController extends DevblocksControllerExtension {
 		@$callback = DevblocksPlatform::importGPC($_REQUEST['callback'],'string','');
 		@$context = DevblocksPlatform::importGPC($_REQUEST['context'],'string','');
 		@$term = DevblocksPlatform::importGPC($_REQUEST['term'],'string','');
+		
+		header('Content-Type: application/javascript');
 
 		$active_worker = CerberusApplication::getActiveWorker();
 		$url_writer = DevblocksPlatform::getUrlService();
@@ -2305,7 +2307,7 @@ class ChInternalController extends DevblocksControllerExtension {
 		$tpl->assign('view', $view);
 
 		$context_ext = Extension_DevblocksContext::getByViewClass(get_class($view), true);
-		$tpl->assign('tokens', $context_ext->getDefaultProperties());
+		$tpl->assign('tokens', $context_ext->getCardProperties());
 		
 		$labels = array();
 		$values = array();
@@ -3519,8 +3521,20 @@ class ChInternalController extends DevblocksControllerExtension {
 				break;
 				
 			case 'outcome':
-				if(null != ($evt = $trigger->getEvent()))
-					$tpl->assign('conditions', $evt->getConditions($trigger));
+				if(null != ($evt = $trigger->getEvent())) {
+					$conditions = $evt->getConditions($trigger);
+					$tpl->assign('conditions', $conditions);
+					
+					// [TODO] Cache this
+					$map = array();
+					array_walk($conditions, function($v, $k) use (&$map) {
+						if(is_array($v) && isset($v['label']))
+							$map[$k] = $v['label'];
+					});
+					
+					$conditions_menu = Extension_DevblocksContext::getPlaceholderTree($map);
+					$tpl->assign('conditions_menu', $conditions_menu);
+				}
 				
 				// Action labels
 				$labels = $evt->getLabels($trigger);
@@ -3536,8 +3550,20 @@ class ChInternalController extends DevblocksControllerExtension {
 				break;
 				
 			case 'action':
-				if(null != ($evt = $trigger->getEvent()))
-					$tpl->assign('actions', $evt->getActions($trigger));
+				if(null != ($evt = $trigger->getEvent())) {
+					$actions = $evt->getActions($trigger);
+					$tpl->assign('actions', $actions);
+					
+					// [TODO] Cache this
+					$map = array();
+					array_walk($actions, function($v, $k) use (&$map) {
+						if(is_array($v) && isset($v['label']))
+							$map[$k] = $v['label'];
+					});
+					
+					$actions_menu = Extension_DevblocksContext::getPlaceholderTree($map);
+					$tpl->assign('actions_menu', $actions_menu);
+				}
 					
 				// Workers
 				$tpl->assign('workers', DAO_Worker::getAll());
@@ -3669,7 +3695,7 @@ class ChInternalController extends DevblocksControllerExtension {
 		$tpl = DevblocksPlatform::getTemplateService();
 		$logger = DevblocksPlatform::getConsoleLog('Attendant');
 		
-		$logger->setLogLevel(7);
+		$logger->setLogLevel(6);
 		
 		ob_start();
 		

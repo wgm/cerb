@@ -92,7 +92,7 @@ interface IDevblocksContextAutocomplete {
 	function autocomplete($term);
 }
 
-class DevblocksPlaceholderMenuItem {
+class DevblocksMenuItemPlaceholder {
 	var $label = null;
 	var $key = null;
 	var $l = null;
@@ -288,7 +288,7 @@ abstract class Extension_DevblocksContext extends DevblocksExtension {
 
 		if(!isset($contexts[$context])) {
 			if(null == ($ext = DevblocksPlatform::getExtension($context, true)))
-				return;
+				return null;
 
 			$contexts[$context] = $ext;
 			return $ext;
@@ -296,12 +296,11 @@ abstract class Extension_DevblocksContext extends DevblocksExtension {
 	}
 	
 	static function getPlaceholderTree($labels) {
-		$keys = new DevblocksPlaceholderMenuItem();
+		$keys = new DevblocksMenuItemPlaceholder();
 		
 		// Tokenize the placeholders
 		foreach($labels as $k => &$label) {
 			$label = trim($label);
-			
 			
 			$parts = explode(' ', $label);
 			
@@ -309,7 +308,7 @@ abstract class Extension_DevblocksContext extends DevblocksExtension {
 			
 			while($part = array_shift($parts)) {
 				if(!isset($ptr[$part])) {
-					$ptr[$part] = new DevblocksPlaceholderMenuItem();
+					$ptr[$part] = new DevblocksMenuItemPlaceholder();
 				}
 				
 				$ptr =& $ptr[''.$part]->children;
@@ -344,7 +343,7 @@ abstract class Extension_DevblocksContext extends DevblocksExtension {
 		
 		$condense = function(&$node, $key=null, &$parent=null) use (&$condense) {
 			// If this node has exactly one child
-			if(is_array($node->children) && 1 == count($node->children) && $parent) {
+			if(is_array($node->children) && 1 == count($node->children) && $parent && is_null($node->label)) {
 				reset($node->children);
 				
 				// Replace the current node with its only child
@@ -976,11 +975,11 @@ abstract class Extension_DevblocksEvent extends DevblocksExtension {
 		}
 		
 		$conditions = array(
-			'_calendar_availability' => array('label' => '(Calendar availability)', 'type' => ''),
-			'_custom_script' => array('label' => '(Custom script)', 'type' => ''),
-			'_month_of_year' => array('label' => '(Month of year)', 'type' => ''),
-			'_day_of_week' => array('label' => '(Day of week)', 'type' => ''),
-			'_time_of_day' => array('label' => '(Time of day)', 'type' => ''),
+			'_calendar_availability' => array('label' => 'Calendar availability', 'type' => ''),
+			'_month_of_year' => array('label' => 'Calendar month of year', 'type' => ''),
+			'_day_of_week' => array('label' => 'Calendar day of week', 'type' => ''),
+			'_time_of_day' => array('label' => 'Calendar time of day', 'type' => ''),
+			'_custom_script' => array('label' => 'Custom script', 'type' => ''),
 		);
 		$custom = $this->getConditionExtensions($trigger);
 
@@ -1501,12 +1500,12 @@ abstract class Extension_DevblocksEvent extends DevblocksExtension {
 	function getActions($trigger) { /* @var $trigger Model_TriggerEvent */
 		$actions = array(
 			'_create_calendar_event' => array('label' => 'Create calendar event'),
-			'_get_links' => array('label' => '(Get links)'),
-			'_run_behavior' => array('label' => '(Run behavior)'),
-			'_schedule_behavior' => array('label' => '(Schedule behavior)'),
-			'_set_custom_var' => array('label' => '(Set a custom placeholder)'),
-			'_set_custom_var_snippet' => array('label' => '(Set a custom placeholder using a snippet)'),
-			'_unschedule_behavior' => array('label' => '(Unschedule behavior)'),
+			'_get_links' => array('label' => 'Get links'),
+			'_run_behavior' => array('label' => 'Behavior run'),
+			'_schedule_behavior' => array('label' => 'Behavior schedule'),
+			'_set_custom_var' => array('label' => 'Set custom placeholder'),
+			'_set_custom_var_snippet' => array('label' => 'Set custom placeholder using a snippet'),
+			'_unschedule_behavior' => array('label' => 'Behavior unschedule'),
 		);
 		$custom = $this->getActionExtensions($trigger);
 
