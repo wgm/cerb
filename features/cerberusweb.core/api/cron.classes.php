@@ -717,7 +717,7 @@ class ImportCron extends CerberusCronPageExtension {
 				$iIsOutgoing = (integer) $eMessage->is_outgoing;
 				
 				$eHeaders =& $eMessage->headers; /* @var $eHeaders SimpleXMLElement */
-				$rawHeaders = (string) $eHeaders;
+				$rawHeaders = trim((string) $eHeaders);
 				
 				// If we only have itemized headers, convert them back into raw
 				if(empty($rawHeaders)) {
@@ -1381,8 +1381,9 @@ class StorageCron extends CerberusCronPageExtension {
 				? $pending_profile['storage_profile_id']
 				: $pending_profile['storage_extension']
 				;
-				
-			$storage = DevblocksPlatform::getStorageService($engine);
+			
+			if(false == ($storage = DevblocksPlatform::getStorageService($engine)))
+				continue;
 			
 			// Get one page of 500 pending delete keys for this profile
 			$keys = DAO_DevblocksStorageQueue::getKeys($pending_profile['storage_namespace'], $pending_profile['storage_extension'], $pending_profile['storage_profile_id'], 500);

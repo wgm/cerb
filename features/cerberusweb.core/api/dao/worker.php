@@ -132,8 +132,9 @@ class DAO_Worker extends Cerb_ORMHelper {
 				continue;
 			
 			$worker = $workers[$worker_id];
+			$worker_idle_time = time() - $last_activity;
 			
-			if(time() - $last_activity > $idle_limit) {
+			if($worker_idle_time > $idle_limit) {
 				unset($workers_by_last_activity[$worker_id]);
 				
 				// If we're still clearing seats
@@ -155,6 +156,7 @@ class DAO_Worker extends Cerb_ORMHelper {
 						'message' => 'activities.worker.seat_expired',
 						'variables' => array(
 								'target' => $worker->getName(),
+								'idle_time' => $worker_idle_time,
 							),
 						'urls' => array(
 								'target' => sprintf("ctx://cerberusweb.contexts.worker:%d/%s", $worker->id, DevblocksPlatform::strToPermalink($worker->getName())),
@@ -691,6 +693,16 @@ class DAO_Worker extends Cerb_ORMHelper {
 		);
 		
 		$db = DevblocksPlatform::getDatabaseService();
+		
+		// Clear their task assignments
+		$sql = sprintf("UPDATE task SET owner_id = 0 WHERE owner_id = %d", $id);
+		if(false == ($db->ExecuteMaster($sql)))
+			return false;
+		
+		// Clear their ticket assignments
+		$sql = sprintf("UPDATE ticket SET owner_id = 0 WHERE owner_id = %d", $id);
+		if(false == ($db->ExecuteMaster($sql)))
+			return false;
 		
 		$sql = sprintf("DELETE FROM worker WHERE id = %d", $id);
 		if(false == ($db->ExecuteMaster($sql)))
