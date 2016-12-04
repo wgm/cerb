@@ -1654,10 +1654,6 @@ class DAO_Ticket extends Cerb_ORMHelper {
 			$args
 		);
 		
-		// Fulltext has multiple values
-		if(isset($tables['ftmc']))
-			$has_multiple_values = true;
-
 		$result = array(
 			'primary_table' => 't',
 			'select' => $select_sql,
@@ -1684,7 +1680,6 @@ class DAO_Ticket extends Cerb_ORMHelper {
 		
 		switch($param_key) {
 			case SearchFields_Ticket::VIRTUAL_CONTEXT_LINK:
-				$args['has_multiple_values'] = true;
 				self::_searchComponentsVirtualContextLinks($param, $from_context, $from_index, $args['join_sql'], $args['where_sql']);
 				break;
 				
@@ -3048,7 +3043,7 @@ class View_Ticket extends C4_AbstractView implements IAbstractView_Subtotals, IA
 			'participant' =>
 				array(
 					'type' => DevblocksSearchCriteria::TYPE_TEXT,
-					'options' => array('param_key' => SearchFields_Ticket::REQUESTER_ADDRESS, 'match' => DevblocksSearchCriteria::OPTION_TEXT_PREFIX),
+					'options' => array('param_key' => SearchFields_Ticket::REQUESTER_ADDRESS),
 				),
 			'participant.id' =>
 				array(
@@ -3074,7 +3069,7 @@ class View_Ticket extends C4_AbstractView implements IAbstractView_Subtotals, IA
 			'sender' =>
 				array(
 					'type' => DevblocksSearchCriteria::TYPE_TEXT,
-					'options' => array('param_key' => SearchFields_Ticket::TICKET_FIRST_WROTE, 'match' => DevblocksSearchCriteria::OPTION_TEXT_PREFIX),
+					'options' => array('param_key' => SearchFields_Ticket::TICKET_FIRST_WROTE),
 				),
 			'spam.score' =>
 				array(
