@@ -39,8 +39,8 @@
  * - Jeff Standen and Dan Hildebrandt
  *	 Founders at Webgroup Media LLC; Developers of Cerb
  */
-define("APP_BUILD", 2016120401);
-define("APP_VERSION", '7.2.4');
+define("APP_BUILD", 2016122701);
+define("APP_VERSION", '7.2.5');
 
 define("APP_MAIL_PATH", APP_STORAGE_PATH . '/mail/');
 
@@ -2375,7 +2375,7 @@ class Cerb_DevblocksSessionHandler implements IDevblocksHandler_Session {
 
 		if(0==$db->Affected_Rows()) {
 			// Insert
-			$sql = sprintf("INSERT INTO devblocks_session (session_key, created, updated, refreshed_at, user_id, user_ip, user_agent, session_data) ".
+			$sql = sprintf("INSERT IGNORE INTO devblocks_session (session_key, created, updated, refreshed_at, user_id, user_ip, user_agent, session_data) ".
 				"VALUES (%s, %d, %d, %d, %d, %s, %s, %s)",
 				$db->qstr($id),
 				time(),

@@ -1302,7 +1302,7 @@ class Search_Worker extends Extension_DevblocksSearchSchema {
 		
 		$doc = array(
 			'content' => implode("\n", array(
-				$dict->__label,
+				$dict->_label,
 				$dict->address_email,
 				$dict->title,
 				$dict->at_mention_name,
@@ -1866,6 +1866,11 @@ class View_Worker extends C4_AbstractView implements IAbstractView_Subtotals, IA
 					'type' => DevblocksSearchCriteria::TYPE_VIRTUAL,
 					'options' => array('param_key' => SearchFields_Worker::VIRTUAL_GROUPS),
 					'examples' => array_slice($group_names, 0, 15),
+				),
+			'id' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_NUMBER,
+					'options' => array('param_key' => SearchFields_Worker::ID),
 				),
 			'isAdmin' => 
 				array(
