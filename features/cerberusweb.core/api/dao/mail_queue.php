@@ -2,17 +2,17 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2017, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
 | The latest version of this license can be found here:
-| http://cerb.io/license
+| http://cerb.ai/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://cerb.io	    http://webgroup.media
+|	http://cerb.ai	    http://webgroup.media
 ***********************************************************************/
 
 class DAO_MailQueue extends Cerb_ORMHelper {
@@ -282,7 +282,6 @@ class DAO_MailQueue extends Cerb_ORMHelper {
 			'select' => $select_sql,
 			'join' => $join_sql,
 			'where' => $where_sql,
-			'has_multiple_values' => false,
 			'sort' => $sort_sql,
 		);
 		
@@ -310,14 +309,12 @@ class DAO_MailQueue extends Cerb_ORMHelper {
 		$select_sql = $query_parts['select'];
 		$join_sql = $query_parts['join'];
 		$where_sql = $query_parts['where'];
-		$has_multiple_values = $query_parts['has_multiple_values'];
 		$sort_sql = $query_parts['sort'];
 		
 		$sql =
 			$select_sql.
 			$join_sql.
 			$where_sql.
-			($has_multiple_values ? 'GROUP BY mail_queue.id ' : '').
 			$sort_sql;
 			
 		// [TODO] Could push the select logic down a level too
@@ -346,7 +343,7 @@ class DAO_MailQueue extends Cerb_ORMHelper {
 			// We can skip counting if we have a less-than-full single page
 			if(!(0 == $page && $total < $limit)) {
 				$count_sql =
-					($has_multiple_values ? "SELECT COUNT(DISTINCT mail_queue.id) " : "SELECT COUNT(mail_queue.id) ").
+					"SELECT COUNT(mail_queue.id) ".
 					$join_sql.
 					$where_sql;
 				$total = $db->GetOneSlave($count_sql);
@@ -371,6 +368,8 @@ class SearchFields_MailQueue extends DevblocksSearchFields {
 	const QUEUE_DELIVERY_DATE = 'm_queue_delivery_date';
 	const QUEUE_FAILS = 'm_queue_fails';
 	
+	const VIRTUAL_WORKER_SEARCH = '*_worker_search';
+	
 	static private $_fields = null;
 	
 	static function getPrimaryKey() {
@@ -386,10 +385,18 @@ class SearchFields_MailQueue extends DevblocksSearchFields {
 	}
 	
 	static function getWhereSQL(DevblocksSearchCriteria $param) {
-		if('cf_' == substr($param->field, 0, 3)) {
-			return self::_getWhereSQLFromCustomFields($param);
-		} else {
-			return $param->getWhereSQL(self::getFields(), self::getPrimaryKey());
+		switch($param->field) {
+			case self::VIRTUAL_WORKER_SEARCH:
+				return self::_getWhereSQLFromVirtualSearchField($param, CerberusContexts::CONTEXT_WORKER, 'mail_queue.worker_id');
+				break;
+			
+			default:
+				if('cf_' == substr($param->field, 0, 3)) {
+					return self::_getWhereSQLFromCustomFields($param);
+				} else {
+					return $param->getWhereSQL(self::getFields(), self::getPrimaryKey());
+				}
+				break;
 		}
 	}
 	
@@ -420,6 +427,8 @@ class SearchFields_MailQueue extends DevblocksSearchFields {
 			self::IS_QUEUED => new DevblocksSearchField(self::IS_QUEUED, 'mail_queue', 'is_queued', $translate->_('mail_queue.is_queued'), null, true),
 			self::QUEUE_DELIVERY_DATE => new DevblocksSearchField(self::QUEUE_DELIVERY_DATE, 'mail_queue', 'queue_delivery_date', $translate->_('mail_queue.queue_delivery_date'), null, true),
 			self::QUEUE_FAILS => new DevblocksSearchField(self::QUEUE_FAILS, 'mail_queue', 'queue_fails', $translate->_('mail_queue.queue_fails'), null, true),
+				
+			self::VIRTUAL_WORKER_SEARCH => new DevblocksSearchField(self::VIRTUAL_WORKER_SEARCH, '*', 'worker_search', null, null, true),
 		);
 		
 		// Sort by label (translation-conscious)
@@ -646,11 +655,13 @@ class View_MailQueue extends C4_AbstractView implements IAbstractView_Subtotals,
 		
 		$this->addColumnsHidden(array(
 			SearchFields_MailQueue::TICKET_ID,
+			SearchFields_MailQueue::VIRTUAL_WORKER_SEARCH,
 		));
 		
 		$this->addParamsHidden(array(
 			SearchFields_MailQueue::ID,
 			SearchFields_MailQueue::TICKET_ID,
+			SearchFields_MailQueue::VIRTUAL_WORKER_SEARCH,
 		));
 		
 		$this->doResetCriteria();
@@ -756,6 +767,14 @@ class View_MailQueue extends C4_AbstractView implements IAbstractView_Subtotals,
 					'type' => DevblocksSearchCriteria::TYPE_TEXT,
 					'options' => array('param_key' => SearchFields_MailQueue::SUBJECT, 'match' => DevblocksSearchCriteria::OPTION_TEXT_PARTIAL),
 				),
+			'id' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_NUMBER,
+					'options' => array('param_key' => SearchFields_MailQueue::ID),
+					'examples' => [
+						['type' => 'chooser', 'context' => CerberusContexts::CONTEXT_DRAFT, 'q' => ''],
+					]
+				),
 			'subject' => 
 				array(
 					'type' => DevblocksSearchCriteria::TYPE_TEXT,
@@ -773,8 +792,11 @@ class View_MailQueue extends C4_AbstractView implements IAbstractView_Subtotals,
 				),
 			'worker' => 
 				array(
-					'type' => DevblocksSearchCriteria::TYPE_WORKER,
-					'options' => array('param_key' => SearchFields_MailQueue::WORKER_ID),
+					'type' => DevblocksSearchCriteria::TYPE_VIRTUAL,
+					'options' => array('param_key' => SearchFields_MailQueue::VIRTUAL_WORKER_SEARCH),
+					'examples' => [
+						['type' => 'search', 'context' => CerberusContexts::CONTEXT_WORKER, 'q' => ''],
+					]
 				),
 		);
 		
@@ -795,6 +817,10 @@ class View_MailQueue extends C4_AbstractView implements IAbstractView_Subtotals,
 	
 	function getParamFromQuickSearchFieldTokens($field, $tokens) {
 		switch($field) {
+			case 'worker':
+				return DevblocksSearchCriteria::getVirtualQuickSearchParamFromTokens($field, $tokens, SearchFields_MailQueue::VIRTUAL_WORKER_SEARCH);
+				break;
+			
 			default:
 				$search_fields = $this->getQuickSearchFields();
 				return DevblocksSearchCriteria::getParamFromQueryFieldTokens($field, $tokens, $search_fields);
@@ -880,6 +906,21 @@ class View_MailQueue extends C4_AbstractView implements IAbstractView_Subtotals,
 				break;
 		}
 	}
+	
+	function renderVirtualCriteria($param) {
+		$key = $param->field;
+		
+		$translate = DevblocksPlatform::getTranslationService();
+		
+		switch($key) {
+			case SearchFields_MailQueue::VIRTUAL_WORKER_SEARCH:
+				echo sprintf("%s matches <b>%s</b>",
+					DevblocksPlatform::strEscapeHtml(DevblocksPlatform::translateCapitalized('common.worker')),
+					DevblocksPlatform::strEscapeHtml($param->value)
+				);
+				break;
+		}
+	}
 
 	function getFields() {
 		return SearchFields_MailQueue::getFields();
@@ -925,6 +966,42 @@ class View_MailQueue extends C4_AbstractView implements IAbstractView_Subtotals,
 };
 
 class Context_Draft extends Extension_DevblocksContext {
+	static function isReadableByActor($models, $actor) {
+		// Everyone can read
+		return CerberusContexts::allowEveryone($models);
+	}
+	
+	static function isWriteableByActor($models, $actor) {
+		// Admins and owner can modify
+		
+		if(false == ($actor = CerberusContexts::polymorphActorToDictionary($actor)))
+			CerberusContexts::denyEverything($models);
+		
+		// Admins can do whatever they want
+		if(CerberusContexts::isActorAnAdmin($actor))
+			return CerberusContexts::allowEverything($models);
+		
+		if(false == ($dicts = CerberusContexts::polymorphModelsToDictionaries($models, CerberusContexts::CONTEXT_DRAFT)))
+			return CerberusContexts::denyEverything($models);
+		
+		$results = [];
+		
+		foreach($dicts as $id => $dict) {
+			$is_writeable = false;
+			
+			if($actor->_context == CerberusContexts::CONTEXT_WORKER && $actor->id == $dict->worker_id)
+				$is_writeable = true;
+			
+			$results[$id] = $is_writeable;
+		}
+		
+		if(is_array($models)) {
+			return $results;
+		} else {
+			return array_shift($results);
+		}
+	}
+	
 	function getDaoClass() {
 		return 'DAO_MailQueue';
 	}
@@ -1042,10 +1119,26 @@ class Context_Draft extends Extension_DevblocksContext {
 			$token_values['to'] = $object->hint_to;
 			$token_values['updated'] = $object->updated;
 			
+			$token_values['worker_id'] = $object->worker_id;
+			
 			// Custom fields
 			$token_values = $this->_importModelCustomFieldsAsValues($object, $token_values);
 		}
+		
+		// Worker
+		$merge_token_labels = array();
+		$merge_token_values = array();
+		CerberusContexts::getContext(CerberusContexts::CONTEXT_WORKER, null, $merge_token_labels, $merge_token_values, '', true);
 
+		CerberusContexts::merge(
+			'worker_',
+			$prefix.'Worker:',
+			$merge_token_labels,
+			$merge_token_values,
+			$token_labels,
+			$token_values
+		);
+		
 		return true;
 	}
 
@@ -1061,7 +1154,7 @@ class Context_Draft extends Extension_DevblocksContext {
 		
 		if(!$is_loaded) {
 			$labels = array();
-			CerberusContexts::getContext($context, $context_id, $labels, $values, null, true);
+			CerberusContexts::getContext($context, $context_id, $labels, $values, null, true, true);
 		}
 		
 		switch($token) {

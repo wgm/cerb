@@ -8,10 +8,6 @@
 <input type="hidden" name="action" value="savePeekJson">
 <input type="hidden" name="opp_id" value="{$opp->id}">
 <input type="hidden" name="view_id" value="{$view_id}">
-{if !empty($link_context)}
-<input type="hidden" name="link_context" value="{$link_context}">
-<input type="hidden" name="link_context_id" value="{$link_context_id}">
-{/if}
 <input type="hidden" name="do_delete" value="0">
 <input type="hidden" name="_csrf_token" value="{$session.csrf_token}">
 
@@ -28,7 +24,7 @@
 		<tr>
 			<td width="0%" nowrap="nowrap" align="right" valign="top">{'common.email'|devblocks_translate|capitalize}: </td>
 			<td width="100%">
-				<button type="button" class="chooser-abstract" data-field-name="email_id" data-context="{CerberusContexts::CONTEXT_ADDRESS}" data-single="true" data-autocomplete="if-null" data-create="if-null"><span class="glyphicons glyphicons-search"></span></button>
+				<button type="button" class="chooser-abstract" data-field-name="email_id" data-context="{CerberusContexts::CONTEXT_ADDRESS}" data-single="true" data-autocomplete="" data-autocomplete-if-empty="true" data-create="if-null"><span class="glyphicons glyphicons-search"></span></button>
 				
 				<ul class="bubbles chooser-container">
 					{if $address}
@@ -76,9 +72,6 @@
 {/if}
 
 {include file="devblocks:cerberusweb.core::internal/custom_fieldsets/peek_custom_fieldsets.tpl" context=CerberusContexts::CONTEXT_OPPORTUNITY context_id=$opp->id}
-
-{* Comments *}
-{include file="devblocks:cerberusweb.core::internal/peek/peek_comments_pager.tpl" comments=$comments}
 
 <fieldset class="peek">
 	<legend>{'common.comment'|devblocks_translate|capitalize}</legend>

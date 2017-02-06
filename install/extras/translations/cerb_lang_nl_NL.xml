@@ -23,11 +23,6 @@
 				<seg>[Call logging] Kan call lijsten exporteren naar CSV/XML</seg>
 			</tuv>
 		</tu>
-		<tu tuid="acl.core.addybook">
-			<tuv xml:lang="nl_NL">
-				<seg>[Adressenbestand] Kan het adressenbestand inzien</seg>
-			</tuv>
-		</tu>
 		<tu tuid="acl.core.addybook.addy.actions.update">
 			<tuv xml:lang="nl_NL">
 				<seg>[Adressenbestand] Kan e-mailadressen aanpassen</seg>
@@ -76,11 +71,6 @@
 		<tu tuid="acl.core.display.actions.attachments.download">
 			<tuv xml:lang="nl_NL">
 				<seg>[Toon ticket] Kan ticket bijlages downloaden</seg>
-			</tuv>
-		</tu>
-		<tu tuid="acl.core.display.actions.comment">
-			<tuv xml:lang="nl_NL">
-				<seg>[Toon ticket] Kan commentaar geven op tickets</seg>
 			</tuv>
 		</tu>
 		<tu tuid="acl.core.display.actions.forward">
@@ -303,7 +293,7 @@
 				<seg>[Rapportage Groep] Kan de 'Ticket-rapportage' groep inzien</seg>
 			</tuv>
 		</tu>
-		<tu tuid="acl.reports.group.virtual_attendants">
+		<tu tuid="acl.reports.group.bots">
 			<tuv xml:lang="nl_NL">
 				<seg/>
 			</tuv>
@@ -583,11 +573,6 @@
 				<seg>Geregistreerde contactpersonen</seg>
 			</tuv>
 		</tu>
-		<tu tuid="attachment.display_name">
-			<tuv xml:lang="nl_NL">
-				<seg>Bestandsnaam</seg>
-			</tuv>
-		</tu>
 		<tu tuid="attachment.id">
 			<tuv xml:lang="nl_NL">
 				<seg>Bijlage ID</seg>
@@ -616,11 +601,6 @@
 		<tu tuid="attachment.storage_sha1hash">
 			<tuv xml:lang="nl_NL">
 				<seg/>
-			</tuv>
-		</tu>
-		<tu tuid="attachment.storage_size">
-			<tuv xml:lang="nl_NL">
-				<seg>Groote (bytes)</seg>
 			</tuv>
 		</tu>
 		<tu tuid="calls.activity.tab">
@@ -771,6 +751,11 @@
 		<tu tuid="common.attachments">
 			<tuv xml:lang="nl_NL">
 				<seg>Bijlages</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.author">
+			<tuv xml:lang="nl_NL">
+				<seg/>
 			</tuv>
 		</tu>
 		<tu tuid="common.availability">
@@ -1560,7 +1545,7 @@
 		</tu>
 		<tu tuid="common.size">
 			<tuv xml:lang="nl_NL">
-				<seg/>
+				<seg>Groote</seg>
 			</tuv>
 		</tu>
 		<tu tuid="common.snippets">
@@ -1953,11 +1938,6 @@
 				<seg/>
 			</tuv>
 		</tu>
-		<tu tuid="dao.cerb_plugin.author">
-			<tuv xml:lang="nl_NL">
-				<seg/>
-			</tuv>
-		</tu>
 		<tu tuid="dao.cerb_plugin.description">
 			<tuv xml:lang="nl_NL">
 				<seg/>
@@ -2059,11 +2039,6 @@
 			</tuv>
 		</tu>
 		<tu tuid="dao.decision_node.node_type">
-			<tuv xml:lang="nl_NL">
-				<seg/>
-			</tuv>
-		</tu>
-		<tu tuid="dao.decision_node.params">
 			<tuv xml:lang="nl_NL">
 				<seg/>
 			</tuv>
@@ -2239,36 +2214,6 @@
 			</tuv>
 		</tu>
 		<tu tuid="dao.trigger_event.is_disabled">
-			<tuv xml:lang="nl_NL">
-				<seg/>
-			</tuv>
-		</tu>
-		<tu tuid="dao.trigger_event.owner_context">
-			<tuv xml:lang="nl_NL">
-				<seg/>
-			</tuv>
-		</tu>
-		<tu tuid="dao.trigger_event.owner_context_id">
-			<tuv xml:lang="nl_NL">
-				<seg/>
-			</tuv>
-		</tu>
-		<tu tuid="dao.twitter_account.last_synced_at">
-			<tuv xml:lang="nl_NL">
-				<seg/>
-			</tuv>
-		</tu>
-		<tu tuid="dao.twitter_account.last_synced_msgid">
-			<tuv xml:lang="nl_NL">
-				<seg/>
-			</tuv>
-		</tu>
-		<tu tuid="dao.twitter_account.oauth_token">
-			<tuv xml:lang="nl_NL">
-				<seg/>
-			</tuv>
-		</tu>
-		<tu tuid="dao.twitter_account.screen_name">
 			<tuv xml:lang="nl_NL">
 				<seg/>
 			</tuv>
@@ -3188,11 +3133,6 @@
 				<seg>In wachtrij</seg>
 			</tuv>
 		</tu>
-		<tu tuid="mail_queue.params_json">
-			<tuv xml:lang="nl_NL">
-				<seg>Parameters</seg>
-			</tuv>
-		</tu>
 		<tu tuid="mail_queue.queue_delivery_date">
 			<tuv xml:lang="nl_NL">
 				<seg/>
@@ -3410,7 +3350,7 @@
 		</tu>
 		<tu tuid="portal.cfg.installation_instructions">
 			<tuv xml:lang="nl_NL">
-				<seg>Plaats het index.php bestand in een nieuwe directory op een publieke website. Deze directory mag elke naam hebben maar heeft meestal een beschrijvende naam. &lt;br /&gt; Bijvoorbeeld: http://www.cerberusweb.com/support/</seg>
+				<seg>Plaats het index.php bestand in een nieuwe directory op een publieke website. Deze directory mag elke naam hebben maar heeft meestal een beschrijvende naam. &lt;br /&gt; Bijvoorbeeld: https://cerb.ai/contact/</seg>
 			</tuv>
 		</tu>
 		<tu tuid="portal.cfg.language">
@@ -4139,7 +4079,7 @@
 				<seg>Rapportage tickets</seg>
 			</tuv>
 		</tu>
-		<tu tuid="reports.ui.group.virtual_attendant">
+		<tu tuid="reports.ui.group.bot">
 			<tuv xml:lang="nl_NL">
 				<seg/>
 			</tuv>
@@ -4279,7 +4219,7 @@
 				<seg>per organisatie</seg>
 			</tuv>
 		</tu>
-		<tu tuid="reports.ui.virtual_attendant.usage">
+		<tu tuid="reports.ui.bot.usage">
 			<tuv xml:lang="nl_NL">
 				<seg/>
 			</tuv>

@@ -260,7 +260,7 @@ abstract class DevblocksORMHelper {
 				$where = $search_class::getWhereSQL($param);
 			}
 			
-			if(!empty($where)) {
+			if(0 != strlen($where)) {
 				$wheres[$param_key] = $where;
 			}
 		}
@@ -523,6 +523,16 @@ class DAO_DevblocksSetting extends DevblocksORMHelper {
 		
 		return $settings;
 	}
+	
+	static function delete($plugin_id, array $keys=[]) {
+		if(false == ($db = DevblocksPlatform::getDatabaseService()))
+			return;
+		
+		return $db->ExecuteMaster(sprintf("DELETE FROM devblocks_setting WHERE plugin_id = %s AND setting IN (%s)",
+			$db->qstr($plugin_id),
+			implode(',', $db->qstrArray($keys))
+		));
+	}
 };
 
 class DAO_DevblocksExtensionPropertyStore extends DevblocksORMHelper {
@@ -537,7 +547,7 @@ class DAO_DevblocksExtensionPropertyStore extends DevblocksORMHelper {
 	}
 	
 	static function getAll() {
-		$extensions = DevblocksPlatform::getExtensionRegistry(true);
+		$extensions = DevblocksPlatform::getExtensionRegistry();
 		$cache = DevblocksPlatform::getCacheService();
 		
 		if(null == ($params = $cache->load(self::_CACHE_ALL))) {
@@ -913,7 +923,6 @@ class DAO_Translation extends DevblocksORMHelper {
 			'select' => $select_sql,
 			'join' => $join_sql,
 			'where' => $where_sql,
-			'has_multiple_values' => false,
 			'sort' => $sort_sql,
 		);
 		
@@ -940,14 +949,12 @@ class DAO_Translation extends DevblocksORMHelper {
 		$select_sql = $query_parts['select'];
 		$join_sql = $query_parts['join'];
 		$where_sql = $query_parts['where'];
-		$has_multiple_values = $query_parts['has_multiple_values'];
 		$sort_sql = $query_parts['sort'];
 		
 		$sql =
 			$select_sql.
 			$join_sql.
 			$where_sql.
-			($has_multiple_values ? 'GROUP BY a.id ' : '').
 			$sort_sql;
 		
 		$rs = $db->SelectLimit($sql,$limit,$page*$limit);
@@ -1248,7 +1255,6 @@ class DAO_DevblocksStorageProfile extends DevblocksORMHelper {
 			'select' => $select_sql,
 			'join' => $join_sql,
 			'where' => $where_sql,
-			'has_multiple_values' => false,
 			'sort' => $sort_sql,
 		);
 		
@@ -1276,14 +1282,12 @@ class DAO_DevblocksStorageProfile extends DevblocksORMHelper {
 		$select_sql = $query_parts['select'];
 		$join_sql = $query_parts['join'];
 		$where_sql = $query_parts['where'];
-		$has_multiple_values = $query_parts['has_multiple_values'];
 		$sort_sql = $query_parts['sort'];
 		
 		$sql =
 			$select_sql.
 			$join_sql.
 			$where_sql.
-			($has_multiple_values ? 'GROUP BY devblocks_storage_profile.id ' : '').
 			$sort_sql;
 			
 		// [TODO] Could push the select logic down a level too
@@ -1312,7 +1316,7 @@ class DAO_DevblocksStorageProfile extends DevblocksORMHelper {
 			// We can skip counting if we have a less-than-full single page
 			if(!(0 == $page && $total < $limit)) {
 				$count_sql =
-					($has_multiple_values ? "SELECT COUNT(DISTINCT devblocks_storage_profile.id) " : "SELECT COUNT(devblocks_storage_profile.id) ").
+					"SELECT COUNT(devblocks_storage_profile.id) ".
 					$join_sql.
 					$where_sql;
 				$total = $db->GetOneSlave($count_sql);

@@ -4,14 +4,14 @@
 	<name>Knowledgebase</name>
 	<description>Create and categorize articles to share knowledge between workers or your community.</description>
 	<author>Webgroup Media, LLC.</author>
-	<version>7.2.4</version>
+	<version>7.3.0</version>
 	<link>http://wiki.cerbweb.com/Features:Knowledgebase</link>
 	<image>plugin.png</image>
 	
 	<!-- Requirements -->
 
 	<requires>
-		<app_version min="7.2" max="7.2.99" />
+		<app_version min="7.3" max="7.3.99" />
 	</requires>
 	
 	<!-- Plugin Dependencies -->
@@ -104,6 +104,17 @@
 				<name>Context_KbArticle</name>
 			</class>
 			<params>
+				<param key="names">
+					<value>
+						<data key="knowledgebase article" value="singular" />
+						<data key="knowledgebase articles" value="plural" />
+						<data key="article" value="singular short" />
+						<data key="articles" value="plural short" />
+						<data key="kb" value="singular short" />
+						<data key="kb article" value="singular short" />
+						<data key="kb articles" value="plural short" />
+					</value>
+				</param>
 				<param key="alias" value="kb_article" />
 				<param key="dao_class" value="DAO_KbArticle" />
 				<param key="view_class" value="View_KbArticle" />
@@ -111,7 +122,8 @@
 					<value>
 						<data key="create" />
 						<data key="custom_fields" />
-						<data key="find" />
+						<data key="links" />
+						<data key="search" />
 						<data key="snippets" />
 						<data key="va_variable" />
 						<data key="workspace" />
@@ -128,6 +140,16 @@
 				<name>Context_KbCategory</name>
 			</class>
 			<params>
+				<param key="names">
+					<value>
+						<data key="knowledgebase category" value="singular" />
+						<data key="knowledgebase categories" value="plural" />
+						<data key="kb category" value="singular short" />
+						<data key="kb categories" value="plural short" />
+						<data key="kb cat" value="singular short" />
+						<data key="kb cats" value="singular short" />
+					</value>
+				</param>
 				<param key="alias" value="kb_category" />
 				<param key="dao_class" value="DAO_KbCategory" />
 				<param key="view_class" value="View_KbCategory" />
@@ -135,7 +157,8 @@
 					<!--
 					<value>
 						<data key="create" />
-						<data key="find" />
+						<data key="links" />
+						<data key="search" />
 						<data key="snippets" />
 						<data key="workspace" />
 					</value>

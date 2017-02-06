@@ -2,17 +2,17 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2017, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
 | The latest version of this license can be found here:
-| http://cerb.io/license
+| http://cerb.ai/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://cerb.io	    http://webgroup.media
+|	http://cerb.ai	    http://webgroup.media
 ***********************************************************************/
 /*
  * IMPORTANT LICENSING NOTE from your friends at Cerb
@@ -201,7 +201,7 @@ class CerberusMail {
 						if(false !== ($fp = DevblocksPlatform::getTempFile())) {
 							if(false !== $attachment->getFileContents($fp)) {
 								$attach = Swift_Attachment::fromPath(DevblocksPlatform::getTempFileInfo($fp), $attachment->mime_type);
-								$attach->setFilename($attachment->display_name);
+								$attach->setFilename($attachment->name);
 								$mail->attach($attach);
 								fclose($fp);
 							}
@@ -403,7 +403,7 @@ class CerberusMail {
 						if(false !== ($fp = DevblocksPlatform::getTempFile())) {
 							if(false !== $attachment->getFileContents($fp)) {
 								$attach = Swift_Attachment::fromPath(DevblocksPlatform::getTempFileInfo($fp), $attachment->mime_type);
-								$attach->setFilename($attachment->display_name);
+								$attach->setFilename($attachment->name);
 								$email->attach($attach);
 								fclose($fp);
 							}
@@ -533,7 +533,7 @@ class CerberusMail {
 				
 				if(false == ($file_id = DAO_Attachment::getBySha1Hash($sha1_hash, $files['name'][$idx]))) {
 					$fields = array(
-						DAO_Attachment::DISPLAY_NAME => $files['name'][$idx],
+						DAO_Attachment::NAME => $files['name'][$idx],
 						DAO_Attachment::MIME_TYPE => $files['type'][$idx],
 						DAO_Attachment::STORAGE_SHA1HASH => $sha1_hash,
 					);
@@ -548,7 +548,7 @@ class CerberusMail {
 
 				// Link
 				if($file_id)
-					DAO_AttachmentLink::create($file_id, CerberusContexts::CONTEXT_MESSAGE, $message_id);
+					DAO_Attachment::setLinks(CerberusContexts::CONTEXT_MESSAGE, $message_id, $file_id);
 				
 				@unlink($file);
 			}
@@ -558,13 +558,13 @@ class CerberusMail {
 		if(isset($properties['link_forward_files']) && !empty($properties['link_forward_files'])) {
 			// Attachments
 			if(is_array($forward_files) && !empty($forward_files)) {
-				DAO_AttachmentLink::addLinks(CerberusContexts::CONTEXT_MESSAGE, $message_id, $forward_files);
+				DAO_Attachment::setLinks(CerberusContexts::CONTEXT_MESSAGE, $message_id, $forward_files);
 			}
 		}
 		
 		// Link embedded files
 		if(isset($embedded_files) && is_array($embedded_files) && !empty($embedded_files)) {
-			DAO_AttachmentLink::addLinks(CerberusContexts::CONTEXT_MESSAGE, $message_id, $embedded_files);
+			DAO_Attachment::setLinks(CerberusContexts::CONTEXT_MESSAGE, $message_id, $embedded_files);
 		}
 		
 		// Finalize ticket
@@ -866,7 +866,7 @@ class CerberusMail {
 						if(false !== ($fp = DevblocksPlatform::getTempFile())) {
 							if(false !== $attachment->getFileContents($fp)) {
 								$attach = Swift_Attachment::fromPath(DevblocksPlatform::getTempFileInfo($fp), $attachment->mime_type);
-								$attach->setFilename($attachment->display_name);
+								$attach->setFilename($attachment->name);
 								$mail->attach($attach);
 								fclose($fp);
 							}
@@ -885,7 +885,7 @@ class CerberusMail {
 				// ...do nothing
 				
 			} else { // otherwise send
-				if(!$mail_service->send($mail)) {
+				if(false === $mail_service->send($mail)) {
 					throw new Exception('Mail not sent.');
 				}
 			}
@@ -1018,7 +1018,7 @@ class CerberusMail {
 					if(false == ($file_id = DAO_Attachment::getBySha1Hash($sha1_hash, $files['name'][$idx]))) {
 						// Create record
 						$fields = array(
-							DAO_Attachment::DISPLAY_NAME => $files['name'][$idx],
+							DAO_Attachment::NAME => $files['name'][$idx],
 							DAO_Attachment::MIME_TYPE => $files['type'][$idx],
 							DAO_Attachment::STORAGE_SHA1HASH => $sha1_hash,
 						);
@@ -1035,7 +1035,7 @@ class CerberusMail {
 
 					// Link
 					if($file_id)
-						DAO_AttachmentLink::create($file_id, CerberusContexts::CONTEXT_MESSAGE, $message_id);
+						DAO_Attachment::setLinks(CerberusContexts::CONTEXT_MESSAGE, $message_id, $file_id);
 				}
 			}
 			
@@ -1043,13 +1043,13 @@ class CerberusMail {
 			if(isset($properties['link_forward_files']) && !empty($properties['link_forward_files'])) {
 				// Attachments
 				if(is_array($forward_files) && !empty($forward_files)) {
-					DAO_AttachmentLink::addLinks(CerberusContexts::CONTEXT_MESSAGE, $message_id, $forward_files);
+					DAO_Attachment::setLinks(CerberusContexts::CONTEXT_MESSAGE, $message_id, $forward_files);
 				}
 			}
 			
 			// Link embedded files
 			if(isset($embedded_files) && is_array($embedded_files) && !empty($embedded_files)) {
-				DAO_AttachmentLink::addLinks(CerberusContexts::CONTEXT_MESSAGE, $message_id, $embedded_files);
+				DAO_Attachment::setLinks(CerberusContexts::CONTEXT_MESSAGE, $message_id, $embedded_files);
 			}
 		}
 		
@@ -1173,6 +1173,8 @@ class CerberusMail {
 		
 		if(isset($message_id))
 			return $message_id;
+		
+		return true;
 	}
 	
 	static function relay($message_id, $emails, $include_attachments = false, $content = null, $actor_context = null, $actor_context_id = null) {
@@ -1206,8 +1208,8 @@ class CerberusMail {
 			$replyto = DAO_AddressOutgoing::getDefault();
 		}
 		
-		$attachment_data = ($include_attachments)
-			? DAO_AttachmentLink::getLinksAndAttachments(CerberusContexts::CONTEXT_MESSAGE, $message->id)
+		$attachments = ($include_attachments)
+			? DAO_Attachment::getByContextIds(CerberusContexts::CONTEXT_MESSAGE, $message->id)
 			: array()
 			;
 		
@@ -1274,18 +1276,17 @@ class CerberusMail {
 				$mail->setBody($content);
 				
 				// Files
-				if(!empty($attachment_data) && isset($attachment_data['attachments']) && !empty($attachment_data['attachments'])) {
-					foreach($attachment_data['attachments'] as $file_id => $file) { /* @var $file Model_Attachment */
-						//if('original_message.html' == $file->display_name)
-						//	continue;
-						
-						if(false !== ($fp = DevblocksPlatform::getTempFile())) {
-							if(false !== $file->getFileContents($fp)) {
-								$attach = Swift_Attachment::fromPath(DevblocksPlatform::getTempFileInfo($fp), $file->mime_type);
-								$attach->setFilename($file->display_name);
-								$mail->attach($attach);
-								fclose($fp);
-							}
+				if(!empty($attachments) && is_array($attachments))
+				foreach($attachments as $file_id => $file) { /* @var $file Model_Attachment */
+					//if('original_message.html' == $file->name)
+					//	continue;
+					
+					if(false !== ($fp = DevblocksPlatform::getTempFile())) {
+						if(false !== $file->getFileContents($fp)) {
+							$attach = Swift_Attachment::fromPath(DevblocksPlatform::getTempFileInfo($fp), $file->mime_type);
+							$attach->setFilename($file->name);
+							$mail->attach($attach);
+							fclose($fp);
 						}
 					}
 				}
@@ -1432,7 +1433,7 @@ class CerberusMail {
 										if(!in_array($file_id, $exclude_files))
 											$embedded_files[] = $file_id;
 										
-										$cid = $mail->embed(Swift_Image::newInstance($file->getFileContents(), $file->display_name, $file->mime_type));
+										$cid = $mail->embed(Swift_Image::newInstance($file->getFileContents(), $file->name, $file->mime_type));
 										return sprintf('"%s"', $cid);
 									}
 								}

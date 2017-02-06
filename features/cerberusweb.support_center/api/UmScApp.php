@@ -2,17 +2,17 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2017, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
 | The latest version of this license can be found here:
-| http://cerb.io/license
+| http://cerb.ai/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://cerb.io	    http://webgroup.media
+|	http://cerb.ai	    http://webgroup.media
 ***********************************************************************/
 /*
  * IMPORTANT LICENSING NOTE from your friends at Cerb
@@ -372,7 +372,7 @@ class UmScApp extends Extension_UsermeetTool {
 		@$visible_modules = unserialize(DAO_CommunityToolProperty::get($instance->code, self::PARAM_VISIBLE_MODULES, ''));
 		$tpl->assign('visible_modules', $visible_modules);
 		
-		$all_modules = DevblocksPlatform::getExtensions('usermeet.sc.controller', true, true);
+		$all_modules = DevblocksPlatform::getExtensions('usermeet.sc.controller', true);
 		$modules = array();
 		
 		// Sort the enabled modules first, in order.
@@ -424,7 +424,7 @@ class UmScApp extends Extension_UsermeetTool {
 		DAO_CommunityToolProperty::set($instance->code, self::PARAM_DEFAULT_LOCALE, $sDefaultLocale);
 
 		// Allow modules to save their own config
-		$modules = DevblocksPlatform::getExtensions('usermeet.sc.controller',true,true);
+		$modules = DevblocksPlatform::getExtensions('usermeet.sc.controller',true);
 		foreach($modules as $module) { /* @var $module Extension_UmScController */
 			// Only save enabled
 			if(!isset($aEnabledModules[$module->manifest->id]))
@@ -590,7 +590,7 @@ class UmScLoginAuthenticator extends Extension_ScLoginAuthenticator {
 			
 			$umsession->login($contact);
 			
-			// Virtual Attendant events
+			// Bot events
 			
 			Event_ContactRegisteredInSupportCenter::trigger($contact_id, null);
 			

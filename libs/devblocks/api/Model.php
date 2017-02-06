@@ -68,13 +68,20 @@ abstract class DevblocksSearchFields implements IDevblocksSearchFields {
 		return $field_key;
 	}
 	
-	static function _getWhereSQLFromFulltextField(DevblocksSearchCriteria $param, $schema, $pkey) {
+	static function _getWhereSQLFromFulltextField(DevblocksSearchCriteria $param, $schema, $pkey, $options=array()) {
 		if(false == ($search = Extension_DevblocksSearchSchema::get($schema)))
 			return null;
 		
 		$query = $search->getQueryFromParam($param);
+		$attribs = array();
 		
-		if(false === ($ids = $search->query($query, array()))) {
+		if(isset($options['prefetch_sql'])) {
+			$attribs['id'] = array(
+				'sql' => $options['prefetch_sql'],
+			);
+		}
+		
+		if(false === ($ids = $search->query($query, $attribs))) {
 			return '0';
 			
 		} elseif(is_array($ids)) {
@@ -120,6 +127,314 @@ abstract class DevblocksSearchFields implements IDevblocksSearchFields {
 				$ids,
 				$ids
 			);
+		}
+	}
+	
+	static function _getWhereSQLFromAttachmentsField(DevblocksSearchCriteria $param, $context, $join_key) {
+		// Handle nested quick search filters first
+		if($param->operator == DevblocksSearchCriteria::OPER_CUSTOM) {
+			$query = $param->value;
+			
+			if(false == ($ext_attachments = Extension_DevblocksContext::get(CerberusContexts::CONTEXT_ATTACHMENT)))
+				return;
+			
+			if(false == ($ext = Extension_DevblocksContext::get($context)))
+				return;
+			
+			$view = $ext_attachments->getSearchView(uniqid());
+			$view->is_ephemeral = true;
+			$view->setAutoPersist(false);
+			$view->addParamsWithQuickSearch($query, true);
+			
+			$params = $view->getParams();
+			
+			$query_parts = DAO_Attachment::getSearchQueryComponents(array(), $params);
+			
+			$query_parts['select'] = sprintf("SELECT %s ", SearchFields_Attachment::getPrimaryKey());
+			
+			$sql = 
+				$query_parts['select']
+				. $query_parts['join']
+				. $query_parts['where']
+				. $query_parts['sort']
+				;
+			
+			return sprintf("%s IN (SELECT context_id FROM attachment_link WHERE attachment_id IN (%s)) ",
+				Cerb_OrmHelper::escape($join_key),
+				$sql
+			);
+		}
+	}
+	
+	static function _getWhereSQLFromVirtualSearchSqlField(DevblocksSearchCriteria $param, $context, $subquery_sql) {
+		// Handle nested quick search filters first
+		if($param->operator == DevblocksSearchCriteria::OPER_CUSTOM) {
+			$query = $param->value;
+			
+			if(false == ($ext = Extension_DevblocksContext::get($context)))
+				return;
+			
+			$view = $ext->getSearchView(uniqid());
+			$view->is_ephemeral = true;
+			$view->setAutoPersist(false);
+			$view->addParamsWithQuickSearch($query, true);
+			
+			$params = $view->getParams();
+			
+			if(false == ($dao_class = $ext->getDaoClass()))
+				return;
+			
+			if(false == ($search_class = $ext->getSearchClass()))
+				return;
+			
+			$query_parts = $dao_class::getSearchQueryComponents(array(), $params);
+			
+			$query_parts['select'] = sprintf("SELECT %s ", $search_class::getPrimaryKey());
+			
+			$sql = 
+				$query_parts['select']
+				. $query_parts['join']
+				. $query_parts['where']
+				. $query_parts['sort']
+				;
+			
+			return sprintf($subquery_sql, $sql);
+		}
+	}
+	
+	static function _getWhereSQLFromVirtualSearchField(DevblocksSearchCriteria $param, $context, $join_key) {
+		// Handle nested quick search filters first
+		if($param->operator == DevblocksSearchCriteria::OPER_CUSTOM) {
+			$query = $param->value;
+			
+			if(false == ($ext = Extension_DevblocksContext::get($context)))
+				return;
+			
+			$view = $ext->getSearchView(uniqid());
+			$view->is_ephemeral = true;
+			$view->setAutoPersist(false);
+			$view->addParamsWithQuickSearch($query, true);
+			
+			$params = $view->getParams();
+			
+			if(false == ($dao_class = $ext->getDaoClass()) || !class_exists($dao_class))
+				return;
+			
+			if(false == ($search_class = $ext->getSearchClass()) || !class_exists($search_class))
+				return;
+			
+			if(false == ($primary_key = $search_class::getPrimaryKey()))
+				return;
+			
+			$query_parts = $dao_class::getSearchQueryComponents(array(), $params);
+			
+			$query_parts['select'] = sprintf("SELECT %s ", $primary_key);
+			
+			$sql = 
+				$query_parts['select']
+				. $query_parts['join']
+				. $query_parts['where']
+				. $query_parts['sort']
+				;
+			
+			return sprintf("%s IN (%s) ",
+				Cerb_OrmHelper::escape($join_key),
+				$sql
+			);
+		}
+	}
+	
+	static function _getWhereSQLFromContextAndID(DevblocksSearchCriteria $param, $context_field, $context_id_field) {
+		// Handle nested quick search filters first
+		if($param->operator == DevblocksSearchCriteria::OPER_CUSTOM) {
+			@list($alias, $query) = explode(':', $param->value, 2);
+			
+			if(empty($alias) || (false == ($ext = Extension_DevblocksContext::getByAlias(str_replace('.', ' ', $alias), true))))
+				return;
+			
+			if(!method_exists($ext, 'getSearchView') || false == ($view = $ext->getSearchView(uniqid()))) {
+				// Handle contexts without worklists
+				switch($alias) {
+					case 'app':
+						return sprintf("(%s = %s AND %s = %d)",
+							Cerb_OrmHelper::escape($context_field),
+							Cerb_ORMHelper::qstr($ext->id),
+							Cerb_OrmHelper::escape($context_id_field),
+							'0'
+						);
+						break;
+				}
+				return;
+			}
+				
+			$view->is_ephemeral = true;
+			$view->setAutoPersist(false);
+			$view->addParamsWithQuickSearch($query, true);
+			
+			$params = $view->getParams();
+			
+			if(false == ($dao_class = $ext->getDaoClass()) || !class_exists($dao_class))
+				return;
+			
+			if(false == ($search_class = $ext->getSearchClass()) || !class_exists($search_class))
+				return;
+			
+			if(false == ($primary_key = $search_class::getPrimaryKey()))
+				return;
+			
+			$query_parts = $dao_class::getSearchQueryComponents(array(), $params);
+			
+			$query_parts['select'] = sprintf("SELECT %s ", $primary_key);
+			
+			$sql = 
+				$query_parts['select']
+				. $query_parts['join']
+				. $query_parts['where']
+				. $query_parts['sort']
+				;
+			
+			return sprintf("(%s = %s AND %s IN (%s)) ",
+				Cerb_OrmHelper::escape($context_field),
+				Cerb_ORMHelper::qstr($ext->id),
+				Cerb_OrmHelper::escape($context_id_field),
+				$sql
+			);
+		}
+		
+		if(!is_array($param->value))
+			return '0';
+		
+		$wheres = array();
+		$contexts = array();
+			
+		foreach($param->value as $owner_context) {
+			@list($context, $context_id) = explode(':', $owner_context);
+			
+			if(empty($context))
+				continue;
+			
+			if(!empty($context_id)) {
+				$wheres[] = sprintf("(%s = %s AND %s = %d)",
+					Cerb_ORMHelper::escape($context_field),
+					Cerb_ORMHelper::qstr($context),
+					Cerb_ORMHelper::escape($context_id_field),
+					$context_id
+				);
+				
+			} else {
+				$contexts[] = $context;
+			}
+		}
+		
+		if(!empty($contexts)) {
+			$wheres[] = sprintf("(%s IN (%s))",
+				Cerb_ORMHelper::escape($context_field),
+				implode(',', array_map(function($ctx) {
+					return Cerb_ORMHelper::qstr($ctx);
+				}, $contexts))
+			);
+		}
+		
+		if(!empty($wheres))
+			return implode(' OR ', $wheres);
+	}
+	
+	static function _getWhereSQLFromContextLinksField(DevblocksSearchCriteria $param, $from_context, $pkey) {
+		
+		// Handle nested quick search filters first
+		if($param->operator == DevblocksSearchCriteria::OPER_CUSTOM) {
+			@list($alias, $query) = explode(':', $param->value, 2);
+			
+			if(empty($alias) || (false == ($ext = Extension_DevblocksContext::getByAlias(str_replace('.', ' ', $alias), true))))
+				return;
+			
+			$view = $ext->getSearchView(uniqid());
+			$view->is_ephemeral = true;
+			$view->setAutoPersist(false);
+			$view->addParamsWithQuickSearch($query, true);
+			
+			$params = $view->getParams();
+			
+			if(false == ($dao_class = $ext->getDaoClass()) || !class_exists($dao_class))
+				return;
+			
+			if(false == ($search_class = $ext->getSearchClass()) || !class_exists($search_class))
+				return;
+			
+			if(false == ($primary_key = $search_class::getPrimaryKey()))
+				return;
+			
+			$query_parts = $dao_class::getSearchQueryComponents(array(), $params);
+			
+			$query_parts['select'] = sprintf("SELECT %s ", $primary_key);
+			
+			$sql = 
+				$query_parts['select']
+				. $query_parts['join']
+				. $query_parts['where']
+				. $query_parts['sort']
+				;
+			
+			return sprintf("%s IN (SELECT from_context_id FROM context_link cl WHERE from_context = %s AND to_context = %s AND to_context_id IN (%s)) ",
+				$pkey,
+				Cerb_ORMHelper::qstr($from_context),
+				Cerb_ORMHelper::qstr($ext->id),
+				$sql
+			);
+		}
+		
+		if($param->operator != DevblocksSearchCriteria::OPER_TRUE) {
+			if(empty($param->value) || !is_array($param->value))
+				$param->operator = DevblocksSearchCriteria::OPER_IS_NULL;
+		}
+		
+		$where_contexts = array();
+		
+		if(is_array($param->value))
+		foreach($param->value as $context_data) {
+			@list($context, $context_id) = explode(':', $context_data, 2);
+	
+			if(empty($context))
+				return;
+			
+			if(!isset($where_contexts[$context]))
+				$where_contexts[$context] = array();
+			
+			if($context_id)
+				$where_contexts[$context][] = $context_id;
+		}
+		
+		switch($param->operator) {
+			case DevblocksSearchCriteria::OPER_TRUE:
+				break;
+	
+			case DevblocksSearchCriteria::OPER_IS_NULL:
+				/*
+				$where_sql .= sprintf("AND (SELECT count(*) FROM context_link WHERE context_link.to_context=%s AND context_link.to_context_id=%s) = 0 ",
+					self::qstr($to_context),
+					$to_index
+				);
+				*/
+				break;
+	
+			case DevblocksSearchCriteria::OPER_IN:
+				$where_sqls = array();
+				
+				foreach($where_contexts as $context => $ids) {
+					$ids = DevblocksPlatform::sanitizeArray($ids, 'integer');
+					
+					$where_sqls[] = sprintf("%s IN (SELECT from_context_id FROM context_link cl WHERE from_context = %s AND to_context = %s %s) ",
+						$pkey,
+						Cerb_ORMHelper::qstr($from_context),
+						Cerb_ORMHelper::qstr($context),
+						(!empty($ids) ? (sprintf("AND to_context_id IN (%s)", implode(',', $ids))) : '')
+					);
+				}
+				
+				if(!empty($where_sqls))
+					return sprintf('(%s)', implode(' OR ', $where_sqls));
+				
+				break;
 		}
 	}
 	
@@ -447,6 +762,84 @@ class DevblocksSearchCriteria {
 		);
 	}
 	
+	public static function getBytesParamFromTokens($field_key, $tokens) {
+		$oper = DevblocksSearchCriteria::OPER_EQ;
+		$value = null;
+		$not = false;
+		
+		if(is_array($tokens))
+		foreach($tokens as $token) {
+			switch($token->type) {
+				case 'T_NOT':
+					$not = true;
+					break;
+					
+				case 'T_ARRAY':
+					$oper = $not ? DevblocksSearchCriteria::OPER_NIN : DevblocksSearchCriteria::OPER_IN;
+					
+					// Convert values
+					array_walk($token->value, function(&$v) {
+						$v = DevblocksPlatform::parseBytesString($v);
+					});
+					
+					$value = DevblocksPlatform::sanitizeArray($token->value, 'int');
+					break;
+					
+				case 'T_TEXT':
+				case 'T_QUOTED_TEXT':
+					$oper = $not ? DevblocksSearchCriteria::OPER_NEQ : DevblocksSearchCriteria::OPER_EQ;
+					$value = $token->value;
+					
+					if(preg_match('#(.*?)\.{3}(.*)#', $value, $matches) || preg_match('#(.*?)\s+to\s+(.*)#', $value, $matches)) {
+						$from = intval(DevblocksPlatform::parseBytesString($matches[1]));
+						$to = intval(DevblocksPlatform::parseBytesString($matches[2]));
+						
+						$oper = DevblocksSearchCriteria::OPER_BETWEEN;
+						$value = array($from, $to);
+						
+					} else if(preg_match('#^([\<\>\!\=]+)(.*)#', $value, $matches)) {
+						$oper_hint = trim($matches[1]);
+						$value = DevblocksPlatform::parseBytesString(trim($matches[2]));
+						
+						switch($oper_hint) {
+							case '!':
+							case '!=':
+								$oper = self::OPER_NEQ;
+								break;
+								
+							case '>':
+								$oper = self::OPER_GT;
+								break;
+								
+							case '>=':
+								$oper = self::OPER_GTE;
+								break;
+								
+							case '<':
+								$oper = self::OPER_LT;
+								break;
+								
+							case '<=':
+								$oper = self::OPER_LTE;
+								break;
+								
+							default:
+								break;
+						}
+						
+						$value = intval($value);
+					}
+					break;
+			}
+		}
+		
+		return new DevblocksSearchCriteria(
+			$field_key,
+			$oper,
+			$value
+		);
+	}
+	
 	public static function getNumberParamFromTokens($field_key, $tokens) {
 		$oper = DevblocksSearchCriteria::OPER_EQ;
 		$value = null;
@@ -606,6 +999,90 @@ class DevblocksSearchCriteria {
 		);
 		
 		return $param;
+	}
+	
+	public static function getVirtualQuickSearchParamFromTokens($field_key, $tokens, $search_field_key) {
+		$query = CerbQuickSearchLexer::getTokensAsQuery($tokens);
+		
+		$param = new DevblocksSearchCriteria(
+			$search_field_key,
+			DevblocksSearchCriteria::OPER_CUSTOM,
+			sprintf('%s', $query)
+		);
+		return $param;
+	}
+	public static function getVirtualContextParamFromTokens($field_key, $tokens, $prefix, $search_field_key) {
+		// Is this a nested subquery?
+		if(DevblocksPlatform::strStartsWith($field_key, $prefix.'.')) {
+			@list($null, $alias) = explode('.', $field_key);
+			
+			$query = CerbQuickSearchLexer::getTokensAsQuery($tokens);
+			
+			$param = new DevblocksSearchCriteria(
+				$search_field_key,
+				DevblocksSearchCriteria::OPER_CUSTOM,
+				sprintf('%s:%s', $alias, $query)
+			);
+			return $param;
+			
+		} else {
+			$aliases = Extension_DevblocksContext::getAliasesForAllContexts();
+			$link_contexts = array();
+			
+			$oper = null;
+			$value = null;
+			CerbQuickSearchLexer::getOperArrayFromTokens($tokens, $oper, $value);
+			
+			if(is_array($value))
+			foreach($value as $alias) {
+				if(isset($aliases[$alias]))
+					$link_contexts[$aliases[$alias]] = true;
+			}
+			
+			$param = new DevblocksSearchCriteria(
+				$search_field_key,
+				DevblocksSearchCriteria::OPER_IN,
+				array_keys($link_contexts)
+			);
+			return $param;
+		}
+	}
+	
+	public static function getContextLinksParamFromTokens($field_key, $tokens) {
+		// Is this a nested subquery?
+		if(substr($field_key,0,6) == 'links.') {
+			@list($null, $alias) = explode('.', $field_key);
+			
+			$query = CerbQuickSearchLexer::getTokensAsQuery($tokens);
+			
+			$param = new DevblocksSearchCriteria(
+				'*_context_link',
+				DevblocksSearchCriteria::OPER_CUSTOM,
+				sprintf('%s:%s', $alias, $query)
+			);
+			return $param;
+			
+		} else {
+			$aliases = Extension_DevblocksContext::getAliasesForAllContexts();
+			$link_contexts = array();
+			
+			$oper = null;
+			$value = null;
+			CerbQuickSearchLexer::getOperArrayFromTokens($tokens, $oper, $value);
+			
+			if(is_array($value))
+			foreach($value as $alias) {
+				if(isset($aliases[$alias]))
+					$link_contexts[$aliases[$alias]] = true;
+			}
+			
+			$param = new DevblocksSearchCriteria(
+				'*_context_link',
+				DevblocksSearchCriteria::OPER_IN,
+				array_keys($link_contexts)
+			);
+			return $param;
+		}
 	}
 	
 	public static function getWatcherParamFromTokens($field_key, $tokens) {
@@ -1462,6 +1939,20 @@ class DevblocksExtensionManifest {
 	function getParam($key, $default=null) {
 		return DAO_DevblocksExtensionPropertyStore::get($this->id, $key, $default);
 	}
+	
+	/**
+	 * 
+	 * @param string $key
+	 * @return boolean
+	 */
+	function hasOption($key) {
+		if(!isset($this->params['options']) || !is_array($this->params['options']))
+			return false;
+		
+		$options = $this->params['options'][0];
+		
+		return isset($options[$key]);
+	}
 };
 
 /**
@@ -1579,7 +2070,7 @@ class Model_DevblocksStorageProfile {
 	
 	function getUsageStats() {
 		// Schemas
-		$storage_schemas = DevblocksPlatform::getExtensions('devblocks.storage.schema', true, true);
+		$storage_schemas = DevblocksPlatform::getExtensions('devblocks.storage.schema', true);
 		
 		// Stats
 		$storage_schema_stats = array();

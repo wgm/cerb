@@ -7,12 +7,12 @@
 |
 | This source code is released under the Devblocks Public License.
 | The latest version of this license can be found here:
-| http://cerb.io/license
+| http://cerb.ai/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://cerb.io	    http://webgroup.media
+|	http://cerb.ai	    http://webgroup.media
 ***********************************************************************/
 
 class PageSection_ProfilesMailHtmlTemplate extends Extension_PageSection {
@@ -48,13 +48,13 @@ class PageSection_ProfilesMailHtmlTemplate extends Extension_PageSection {
 		// Properties
 			
 		$properties = array();
-			
+		
 		$properties['updated'] = array(
-			'label' => mb_ucfirst($translate->_('common.updated')),
+			'label' => DevblocksPlatform::translateCapitalized('common.updated'),
 			'type' => Model_CustomField::TYPE_DATE,
 			'value' => $mail_html_template->updated_at,
 		);
-			
+		
 	
 		// Custom Fields
 
@@ -79,21 +79,10 @@ class PageSection_ProfilesMailHtmlTemplate extends Extension_PageSection {
 					DAO_ContextLink::getContextLinkCounts(
 						CerberusContexts::CONTEXT_MAIL_HTML_TEMPLATE,
 						$mail_html_template->id,
-						array(CerberusContexts::CONTEXT_WORKER, CerberusContexts::CONTEXT_CUSTOM_FIELDSET)
+						array(CerberusContexts::CONTEXT_CUSTOM_FIELDSET)
 					),
 			),
 		);
-		
-		if(isset($mail_html_template->owner_context)) {
-			$properties_links[$mail_html_template->owner_context] = array(
-				$mail_html_template->owner_context_id => 
-					DAO_ContextLink::getContextLinkCounts(
-						$mail_html_template->owner_context,
-						$mail_html_template->owner_context_id,
-						array(CerberusContexts::CONTEXT_WORKER, CerberusContexts::CONTEXT_CUSTOM_FIELDSET)
-					),
-			);
-		}
 		
 		$tpl->assign('properties_links', $properties_links);
 		
@@ -125,7 +114,7 @@ class PageSection_ProfilesMailHtmlTemplate extends Extension_PageSection {
 		
 		$active_worker = CerberusApplication::getActiveWorker();
 		
-		header('Content-Type: application/json; charset=' . LANG_CHARSET_CODE);
+		header('Content-Type: application/json; charset=utf-8');
 		
 		try {
 			if(!$active_worker->is_superuser)
@@ -165,13 +154,6 @@ class PageSection_ProfilesMailHtmlTemplate extends Extension_PageSection {
 					if(false == ($id = DAO_MailHtmlTemplate::create($fields)))
 						return false;
 					
-					// Context Link (if given)
-					@$link_context = DevblocksPlatform::importGPC($_REQUEST['link_context'],'string','');
-					@$link_context_id = DevblocksPlatform::importGPC($_REQUEST['link_context_id'],'integer','');
-					if(!empty($id) && !empty($link_context) && !empty($link_context_id)) {
-						DAO_ContextLink::setLink(CerberusContexts::CONTEXT_MAIL_HTML_TEMPLATE, $id, $link_context, $link_context_id);
-					}
-					
 					if(!empty($view_id) && !empty($id))
 						C4_AbstractView::setMarqueeContextCreated($view_id, CerberusContexts::CONTEXT_MAIL_HTML_TEMPLATE, $id);
 					
@@ -180,14 +162,16 @@ class PageSection_ProfilesMailHtmlTemplate extends Extension_PageSection {
 					
 				}
 	
-				// Custom fields
-				@$field_ids = DevblocksPlatform::importGPC($_REQUEST['field_ids'], 'array', array());
-				DAO_CustomFieldValue::handleFormPost(CerberusContexts::CONTEXT_MAIL_HTML_TEMPLATE, $id, $field_ids);
-				
-				// Files
-				@$file_ids = DevblocksPlatform::importGPC($_REQUEST['file_ids'], 'array', array());
-				if(is_array($file_ids))
-					DAO_AttachmentLink::setLinks(CerberusContexts::CONTEXT_MAIL_HTML_TEMPLATE, $id, $file_ids);
+				if($id) {
+					// Custom fields
+					@$field_ids = DevblocksPlatform::importGPC($_REQUEST['field_ids'], 'array', array());
+					DAO_CustomFieldValue::handleFormPost(CerberusContexts::CONTEXT_MAIL_HTML_TEMPLATE, $id, $field_ids);
+					
+					// Files
+					@$file_ids = DevblocksPlatform::importGPC($_REQUEST['file_ids'], 'array', array());
+					if(is_array($file_ids))
+						DAO_Attachment::setLinks(CerberusContexts::CONTEXT_MAIL_HTML_TEMPLATE, $id, $file_ids);
+				}
 			}
 			
 			echo json_encode(array(

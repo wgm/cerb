@@ -61,7 +61,7 @@
 						{$workers = DAO_Worker::getAllActive()}
 					{/if}
 					
-					<button type="button" class="chooser-cfield-worker" data-field-name="{$field_name}" data-context="{CerberusContexts::CONTEXT_WORKER}" data-single="true" data-query="" data-autocomplete="if-null"><span class="glyphicons glyphicons-search"></span></button>
+					<button type="button" class="chooser-cfield-worker" data-field-name="{$field_name}" data-context="{CerberusContexts::CONTEXT_WORKER}" data-single="true" data-query="" data-autocomplete="" data-autocomplete-if-empty="true"><span class="glyphicons glyphicons-search"></span></button>
 					
 					<ul class="bubbles chooser-container">
 						{if $custom_field_values.$f_id}
@@ -70,7 +70,7 @@
 						{/if}
 					</ul>
 				{elseif $f->type==Model_CustomField::TYPE_LINK}
-					<button type="button" class="chooser-cfield-link" data-field-name="{$field_name}" data-context="{$f->params.context}" data-single="true" data-query="" data-autocomplete="if-null"><span class="glyphicons glyphicons-search"></span></button>
+					<button type="button" class="chooser-cfield-link" data-field-name="{$field_name}" data-context="{$f->params.context}" data-single="true" data-query="" data-autocomplete="" data-autocomplete-if-empty="true"><span class="glyphicons glyphicons-search"></span></button>
 					
 					<ul class="bubbles chooser-container">
 						{if $custom_field_values.$f_id}
@@ -85,7 +85,7 @@
 					{if $custom_field_values.$f_id}
 						{$file_id = $custom_field_values.$f_id}
 						{$file = DAO_Attachment::get($file_id)}
-						<li><input type="hidden" name="{$field_name}" value="{$file->id}"><a href="{devblocks_url}c=files&guid={$file->storage_sha1hash}&file={$file->display_name|escape:'url'}{/devblocks_url}" target="_blank">{$file->display_name}</a> ({$file->storage_size|devblocks_prettybytes}) <a href="javascript:;" onclick="$(this).parent().remove();"><span class="glyphicons glyphicons-circle-remove"></span></a></li>
+						<li><input type="hidden" name="{$field_name}" value="{$file->id}"><a href="{devblocks_url}c=files&id={$file->id}&file={$file->name|escape:'url'}{/devblocks_url}" target="_blank">{$file->name}</a> ({$file->storage_size|devblocks_prettybytes}) <a href="javascript:;" onclick="$(this).parent().remove();"><span class="glyphicons glyphicons-circle-remove"></span></a></li>
 					{/if}
 					</ul>
 				{elseif $f->type==Model_CustomField::TYPE_FILES}
@@ -93,7 +93,7 @@
 					<ul class="bubbles chooser-container">
 					{foreach from=$custom_field_values.$f_id item=file_id}
 						{$file = DAO_Attachment::get($file_id)}
-						<li><input type="hidden" name="{$field_name}[]" value="{$file->id}"><a href="{devblocks_url}c=files&guid={$file->storage_sha1hash}&file={$file->display_name|escape:'url'}{/devblocks_url}" target="_blank">{$file->display_name}</a> ({$file->storage_size|devblocks_prettybytes}) <a href="javascript:;" onclick="$(this).parent().remove();"><span class="glyphicons glyphicons-circle-remove"></span></a></li>
+						<li><input type="hidden" name="{$field_name}[]" value="{$file->id}"><a href="{devblocks_url}c=files&id={$file->id}&file={$file->name|escape:'url'}{/devblocks_url}" target="_blank">{$file->name}</a> ({$file->storage_size|devblocks_prettybytes}) <a href="javascript:;" onclick="$(this).parent().remove();"><span class="glyphicons glyphicons-circle-remove"></span></a></li>
 					{/foreach}
 					</ul>
 				{elseif $f->type==Model_CustomField::TYPE_DATE}

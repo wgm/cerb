@@ -2,17 +2,17 @@
 /***********************************************************************
  | Cerb(tm) developed by Webgroup Media, LLC.
  |-----------------------------------------------------------------------
- | All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
+ | All source code & content (c) Copyright 2002-2017, Webgroup Media LLC
  |   unless specifically noted otherwise.
  |
  | This source code is released under the Devblocks Public License.
  | The latest version of this license can be found here:
- | http://cerb.io/license
+ | http://cerb.ai/license
  |
  | By using this software, you acknowledge having read this license
  | and agree to be bound thereby.
  | ______________________________________________________________________
- |	http://cerb.io	    http://webgroup.media
+ |	http://cerb.ai	    http://webgroup.media
  ***********************************************************************/
 /*
  * IMPORTANT LICENSING NOTE from your friends at Cerb
@@ -234,8 +234,6 @@ class DAO_DevblocksSession extends Cerb_ORMHelper {
 			
 		$join_sql = "FROM devblocks_session ";
 		
-		$has_multiple_values = false;
-				
 		$where_sql = "".
 			(!empty($wheres) ? sprintf("WHERE %s ",implode(' AND ',$wheres)) : "WHERE 1 ");
 			
@@ -246,7 +244,6 @@ class DAO_DevblocksSession extends Cerb_ORMHelper {
 			'select' => $select_sql,
 			'join' => $join_sql,
 			'where' => $where_sql,
-			'has_multiple_values' => $has_multiple_values,
 			'sort' => $sort_sql,
 		);
 	}
@@ -272,14 +269,12 @@ class DAO_DevblocksSession extends Cerb_ORMHelper {
 		$select_sql = $query_parts['select'];
 		$join_sql = $query_parts['join'];
 		$where_sql = $query_parts['where'];
-		$has_multiple_values = $query_parts['has_multiple_values'];
 		$sort_sql = $query_parts['sort'];
 		
 		$sql =
 			$select_sql.
 			$join_sql.
 			$where_sql.
-			($has_multiple_values ? 'GROUP BY devblocks_session.id ' : '').
 			$sort_sql;
 			
 		if($limit > 0) {
@@ -307,7 +302,7 @@ class DAO_DevblocksSession extends Cerb_ORMHelper {
 			// We can skip counting if we have a less-than-full single page
 			if(!(0 == $page && $total < $limit)) {
 				$count_sql =
-					($has_multiple_values ? "SELECT COUNT(DISTINCT devblocks_session.session_key) " : "SELECT COUNT(devblocks_session.session_key) ").
+					"SELECT COUNT(devblocks_session.session_key) ".
 					$join_sql.
 					$where_sql;
 				$total = $db->GetOneSlave($count_sql);
@@ -340,6 +335,8 @@ class SearchFields_DevblocksSession extends DevblocksSearchFields {
 	const USER_IP = 'd_user_ip';
 	const USER_AGENT = 'd_user_agent';
 	
+	const VIRTUAL_WORKER_SEARCH = '*_worker_search';
+	
 	static private $_fields = null;
 	
 	static function getPrimaryKey() {
@@ -354,10 +351,20 @@ class SearchFields_DevblocksSession extends DevblocksSearchFields {
 	}
 	
 	static function getWhereSQL(DevblocksSearchCriteria $param) {
-		if('cf_' == substr($param->field, 0, 3)) {
-			return self::_getWhereSQLFromCustomFields($param);
-		} else {
-			return $param->getWhereSQL(self::getFields(), self::getPrimaryKey());
+		$field = $param->field;
+		
+		switch($field) {
+			case SearchFields_DevblocksSession::VIRTUAL_WORKER_SEARCH:
+				return self::_getWhereSQLFromVirtualSearchField($param, CerberusContexts::CONTEXT_WORKER, 'devblocks_session.user_id');
+				break;
+				
+			default:
+				if('cf_' == substr($field, 0, 3)) {
+					return self::_getWhereSQLFromCustomFields($param);
+				} else {
+					return $param->getWhereSQL(self::getFields(), self::getPrimaryKey());
+				}
+				break;
 		}
 	}
 	
@@ -385,6 +392,8 @@ class SearchFields_DevblocksSession extends DevblocksSearchFields {
 			self::USER_ID => new DevblocksSearchField(self::USER_ID, 'devblocks_session', 'user_id', $translate->_('common.worker'), Model_CustomField::TYPE_WORKER, true),
 			self::USER_IP => new DevblocksSearchField(self::USER_IP, 'devblocks_session', 'user_ip', $translate->_('dao.devblocks_session.user_ip'), Model_CustomField::TYPE_SINGLE_LINE, true),
 			self::USER_AGENT => new DevblocksSearchField(self::USER_AGENT, 'devblocks_session', 'user_agent', $translate->_('dao.devblocks_session.user_agent'), Model_CustomField::TYPE_SINGLE_LINE, true),
+				
+			self::VIRTUAL_WORKER_SEARCH => new DevblocksSearchField(self::VIRTUAL_WORKER_SEARCH, '*', 'worker_search', null, null, true),
 		);
 		
 		// Sort by label (translation-conscious)
@@ -417,11 +426,13 @@ class View_DevblocksSession extends C4_AbstractView implements IAbstractView_Qui
 		$this->addColumnsHidden(array(
 			SearchFields_DevblocksSession::SESSION_KEY,
 			SearchFields_DevblocksSession::SESSION_DATA,
+			SearchFields_DevblocksSession::VIRTUAL_WORKER_SEARCH,
 		));
 		
 		$this->addParamsHidden(array(
 			SearchFields_DevblocksSession::SESSION_KEY,
 			SearchFields_DevblocksSession::SESSION_DATA,
+			SearchFields_DevblocksSession::VIRTUAL_WORKER_SEARCH,
 		));
 		
 		$this->doResetCriteria();
@@ -531,8 +542,19 @@ class View_DevblocksSession extends C4_AbstractView implements IAbstractView_Qui
 				),
 			'worker' => 
 				array(
-					'type' => DevblocksSearchCriteria::TYPE_WORKER,
+					'type' => DevblocksSearchCriteria::TYPE_VIRTUAL,
+					'options' => array('param_key' => SearchFields_DevblocksSession::VIRTUAL_WORKER_SEARCH),
+					'examples' => [
+						['type' => 'search', 'context' => CerberusContexts::CONTEXT_WORKER, 'q' => ''],
+					]
+				),
+			'worker.id' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_NUMBER,
 					'options' => array('param_key' => SearchFields_DevblocksSession::USER_ID),
+					'examples' => [
+						['type' => 'chooser', 'context' => CerberusContexts::CONTEXT_WORKER, 'q' => ''],
+					]
 				),
 		);
 		
@@ -549,6 +571,10 @@ class View_DevblocksSession extends C4_AbstractView implements IAbstractView_Qui
 	
 	function getParamFromQuickSearchFieldTokens($field, $tokens) {
 		switch($field) {
+			case 'worker':
+				return DevblocksSearchCriteria::getVirtualQuickSearchParamFromTokens($field, $tokens, SearchFields_DevblocksSession::VIRTUAL_WORKER_SEARCH);
+				break;
+			
 			default:
 				$search_fields = $this->getQuickSearchFields();
 				return DevblocksSearchCriteria::getParamFromQueryFieldTokens($field, $tokens, $search_fields);
@@ -621,9 +647,13 @@ class View_DevblocksSession extends C4_AbstractView implements IAbstractView_Qui
 	function renderVirtualCriteria($param) {
 		$key = $param->field;
 		
-		$translate = DevblocksPlatform::getTranslationService();
-		
 		switch($key) {
+			case SearchFields_DevblocksSession::VIRTUAL_WORKER_SEARCH:
+				echo sprintf("%s matches <b>%s</b>",
+					DevblocksPlatform::strEscapeHtml(DevblocksPlatform::translateCapitalized('common.worker')),
+					DevblocksPlatform::strEscapeHtml($param->value)
+				);
+				break;
 		}
 	}
 

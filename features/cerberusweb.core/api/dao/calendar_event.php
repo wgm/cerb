@@ -2,17 +2,17 @@
 /***********************************************************************
  | Cerb(tm) developed by Webgroup Media, LLC.
  |-----------------------------------------------------------------------
- | All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
+ | All source code & content (c) Copyright 2002-2017, Webgroup Media LLC
  |   unless specifically noted otherwise.
  |
  | This source code is released under the Devblocks Public License.
  | The latest version of this license can be found here:
- | http://cerb.io/license
+ | http://cerb.ai/license
  |
  | By using this software, you acknowledge having read this license
  | and agree to be bound thereby.
  | ______________________________________________________________________
- |	http://cerb.io	    http://webgroup.media
+ |	http://cerb.ai	    http://webgroup.media
  ***********************************************************************/
 
 class DAO_CalendarEvent extends Cerb_ORMHelper {
@@ -173,6 +173,14 @@ class DAO_CalendarEvent extends Cerb_ORMHelper {
 		return self::_getRandom('calendar_event');
 	}
 	
+	static function countByCalendar($calendar_id) {
+		$db = DevblocksPlatform::getDatabaseService();
+		return $db->GetOneSlave(sprintf("SELECT count(id) FROM calendar_event ".
+			"WHERE calendar_id = %d",
+			$calendar_id
+		));
+	}
+	
 	static function delete($ids) {
 		if(!is_array($ids)) $ids = array($ids);
 		$db = DevblocksPlatform::getDatabaseService();
@@ -233,9 +241,7 @@ class DAO_CalendarEvent extends Cerb_ORMHelper {
 				SearchFields_CalendarEvent::DATE_END
 			);
 			
-		$join_sql = "FROM calendar_event ".
-			(isset($tables['context_link']) ? "INNER JOIN context_link ON (context_link.to_context = 'cerberusweb.contexts.calendar_event' AND context_link.to_context_id = calendar_event.id) " : " ")
-			;
+		$join_sql = "FROM calendar_event ";
 		
 		$where_sql = "".
 			(!empty($wheres) ? sprintf("WHERE %s ",implode(' AND ',$wheres)) : "WHERE 1 ");
@@ -246,13 +252,6 @@ class DAO_CalendarEvent extends Cerb_ORMHelper {
 			'join_sql' => &$join_sql,
 			'where_sql' => &$where_sql,
 			'tables' => &$tables,
-			'has_multiple_values' => &$has_multiple_values
-		);
-		
-		array_walk_recursive(
-			$params,
-			array('DAO_CalendarEvent', '_translateVirtualParameters'),
-			$args
 		);
 		
 		return array(
@@ -260,26 +259,8 @@ class DAO_CalendarEvent extends Cerb_ORMHelper {
 			'select' => $select_sql,
 			'join' => $join_sql,
 			'where' => $where_sql,
-			'has_multiple_values' => $has_multiple_values,
 			'sort' => $sort_sql,
 		);
-	}
-	
-	private static function _translateVirtualParameters($param, $key, &$args) {
-		if(!is_a($param, 'DevblocksSearchCriteria'))
-			return;
-			
-		$from_context = CerberusContexts::CONTEXT_CALENDAR_EVENT;
-		$from_index = 'calendar_event.id';
-		
-		$param_key = $param->field;
-		settype($param_key, 'string');
-		
-		switch($param_key) {
-			case SearchFields_CalendarEvent::VIRTUAL_CONTEXT_LINK:
-				self::_searchComponentsVirtualContextLinks($param, $from_context, $from_index, $args['join_sql'], $args['where_sql']);
-				break;
-		}
 	}
 	
 	/**
@@ -303,14 +284,12 @@ class DAO_CalendarEvent extends Cerb_ORMHelper {
 		$select_sql = $query_parts['select'];
 		$join_sql = $query_parts['join'];
 		$where_sql = $query_parts['where'];
-		$has_multiple_values = $query_parts['has_multiple_values'];
 		$sort_sql = $query_parts['sort'];
 		
 		$sql =
 			$select_sql.
 			$join_sql.
 			$where_sql.
-			($has_multiple_values ? 'GROUP BY calendar_event.id ' : '').
 			$sort_sql;
 			
 		if($limit > 0) {
@@ -340,7 +319,7 @@ class DAO_CalendarEvent extends Cerb_ORMHelper {
 			// We can skip counting if we have a less-than-full single page
 			if(!(0 == $page && $total < $limit)) {
 				$count_sql =
-					($has_multiple_values ? "SELECT COUNT(DISTINCT calendar_event.id) " : "SELECT COUNT(calendar_event.id) ").
+					"SELECT COUNT(calendar_event.id) ".
 					$join_sql.
 					$where_sql;
 				$total = $db->GetOneSlave($count_sql);
@@ -362,11 +341,8 @@ class SearchFields_CalendarEvent extends DevblocksSearchFields {
 	const DATE_END = 'c_date_end';
 	
 	// Virtuals
+	const VIRTUAL_CALENDAR_SEARCH = '*_calendar_search';
 	const VIRTUAL_CONTEXT_LINK = '*_context_link';
-	
-	// Context Links
-	const CONTEXT_LINK = 'cl_context_from';
-	const CONTEXT_LINK_ID = 'cl_context_from_id';
 	
 	static private $_fields = null;
 	
@@ -382,10 +358,22 @@ class SearchFields_CalendarEvent extends DevblocksSearchFields {
 	}
 	
 	static function getWhereSQL(DevblocksSearchCriteria $param) {
-		if('cf_' == substr($param->field, 0, 3)) {
-			return self::_getWhereSQLFromCustomFields($param);
-		} else {
-			return $param->getWhereSQL(self::getFields(), self::getPrimaryKey());
+		switch($param->field) {
+			case self::VIRTUAL_CALENDAR_SEARCH:
+				return self::_getWhereSQLFromVirtualSearchField($param, CerberusContexts::CONTEXT_CALENDAR, 'calendar_event.calendar_id');
+				break;
+			
+			case self::VIRTUAL_CONTEXT_LINK:
+				return self::_getWhereSQLFromContextLinksField($param, CerberusContexts::CONTEXT_CALENDAR_EVENT, self::getPrimaryKey());
+				break;
+				
+			default:
+				if('cf_' == substr($param->field, 0, 3)) {
+					return self::_getWhereSQLFromCustomFields($param);
+				} else {
+					return $param->getWhereSQL(self::getFields(), self::getPrimaryKey());
+				}
+				break;
 		}
 	}
 	
@@ -414,9 +402,6 @@ class SearchFields_CalendarEvent extends DevblocksSearchFields {
 			self::DATE_END => new DevblocksSearchField(self::DATE_END, 'calendar_event', 'date_end', $translate->_('dao.calendar_event.date_end'), Model_CustomField::TYPE_DATE, true),
 
 			self::VIRTUAL_CONTEXT_LINK => new DevblocksSearchField(self::VIRTUAL_CONTEXT_LINK, '*', 'context_link', $translate->_('common.links'), null, false),
-				
-			self::CONTEXT_LINK => new DevblocksSearchField(self::CONTEXT_LINK, 'context_link', 'from_context', null, null, false),
-			self::CONTEXT_LINK_ID => new DevblocksSearchField(self::CONTEXT_LINK_ID, 'context_link', 'from_context_id', null, null, false),
 		);
 		
 		// Custom fields with fieldsets
@@ -440,6 +425,18 @@ class Model_CalendarEvent {
 	public $is_available;
 	public $date_start;
 	public $date_end;
+	
+	private $_calendar_model = null;
+	
+	/**
+	 * @return Model_Calendar
+	 */
+	function getCalendar() {
+		if(is_null($this->_calendar_model))
+			$this->_calendar_model = DAO_Calendar::get($this->calendar_id);
+			
+		return $this->_calendar_model;
+	}
 };
 
 class View_CalendarEvent extends C4_AbstractView implements IAbstractView_Subtotals, IAbstractView_QuickSearch {
@@ -463,15 +460,11 @@ class View_CalendarEvent extends C4_AbstractView implements IAbstractView_Subtot
 		
 		$this->addColumnsHidden(array(
 			SearchFields_CalendarEvent::ID,
-			SearchFields_CalendarEvent::CONTEXT_LINK,
-			SearchFields_CalendarEvent::CONTEXT_LINK_ID,
 			SearchFields_CalendarEvent::VIRTUAL_CONTEXT_LINK,
 		));
 		
 		$this->addParamsHidden(array(
 			SearchFields_CalendarEvent::ID,
-			SearchFields_CalendarEvent::CONTEXT_LINK,
-			SearchFields_CalendarEvent::CONTEXT_LINK_ID,
 		));
 		
 		$this->doResetCriteria();
@@ -586,10 +579,21 @@ class View_CalendarEvent extends C4_AbstractView implements IAbstractView_Subtot
 					'type' => DevblocksSearchCriteria::TYPE_TEXT,
 					'options' => array('param_key' => SearchFields_CalendarEvent::NAME, 'match' => DevblocksSearchCriteria::OPTION_TEXT_PARTIAL),
 				),
-			'calendar' =>
+			'calendar' => 
 				array(
 					'type' => DevblocksSearchCriteria::TYPE_VIRTUAL,
+					'options' => array('param_key' => SearchFields_CalendarEvent::VIRTUAL_CALENDAR_SEARCH),
+					'examples' => [
+						['type' => 'search', 'context' => CerberusContexts::CONTEXT_CALENDAR, 'q' => ''],
+					]
+				),
+			'calendar.id' =>
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_NUMBER,
 					'options' => array('param_key' => SearchFields_CalendarEvent::CALENDAR_ID),
+					'examples' => [
+						['type' => 'chooser', 'context' => CerberusContexts::CONTEXT_CALENDAR, 'q' => ''],
+					]
 				),
 			'endDate' =>
 				array(
@@ -600,6 +604,9 @@ class View_CalendarEvent extends C4_AbstractView implements IAbstractView_Subtot
 				array(
 					'type' => DevblocksSearchCriteria::TYPE_NUMBER,
 					'options' => array('param_key' => SearchFields_CalendarEvent::ID),
+					'examples' => [
+						['type' => 'chooser', 'context' => CerberusContexts::CONTEXT_CALENDAR_EVENT, 'q' => ''],
+					]
 				),
 			'name' =>
 				array(
@@ -622,6 +629,10 @@ class View_CalendarEvent extends C4_AbstractView implements IAbstractView_Subtot
 				),
 		);
 		
+		// Add quick search links
+		
+		$fields = self::_appendVirtualFiltersFromQuickSearchContexts('links', $fields, 'links');
+		
 		// Add searchable custom fields
 		
 		$fields = self::_appendFieldsFromQuickSearchContext(CerberusContexts::CONTEXT_CALENDAR_EVENT, $fields, null);
@@ -640,32 +651,7 @@ class View_CalendarEvent extends C4_AbstractView implements IAbstractView_Subtot
 	function getParamFromQuickSearchFieldTokens($field, $tokens) {
 		switch($field) {
 			case 'calendar':
-				$field_key = SearchFields_CalendarEvent::CALENDAR_ID;
-				$oper = null;
-				$terms = array();
-				
-				if(false == CerbQuickSearchLexer::getOperArrayFromTokens($tokens, $oper, $terms, false))
-					return false;
-				
-				if(empty($terms))
-					return false;
-				
-				$calendars = DAO_Calendar::getAll();
-				$value = array();;
-				
-				if(is_array($terms))
-				foreach($terms as $term) {
-					foreach($calendars as $calendar_id => $calendar) {
-						if(false !== stripos($calendar->name, $term))
-							$values[$calendar_id] = true;
-					}
-				}
-				
-				return new DevblocksSearchCriteria(
-					$field_key,
-					$oper,
-					array_keys($values)
-				);
+				return DevblocksSearchCriteria::getVirtualQuickSearchParamFromTokens($field, $tokens, SearchFields_CalendarEvent::VIRTUAL_CALENDAR_SEARCH);
 				break;
 				
 			case 'status':
@@ -694,6 +680,9 @@ class View_CalendarEvent extends C4_AbstractView implements IAbstractView_Subtot
 				break;
 				
 			default:
+				if($field == 'links' || substr($field, 0, 6) == 'links.')
+					return DevblocksSearchCriteria::getContextLinksParamFromTokens($field, $tokens);
+				
 				$search_fields = $this->getQuickSearchFields();
 				return DevblocksSearchCriteria::getParamFromQueryFieldTokens($field, $tokens, $search_fields);
 				break;
@@ -799,9 +788,14 @@ class View_CalendarEvent extends C4_AbstractView implements IAbstractView_Subtot
 	function renderVirtualCriteria($param) {
 		$key = $param->field;
 		
-		$translate = DevblocksPlatform::getTranslationService();
-		
 		switch($key) {
+			case SearchFields_CalendarEvent::VIRTUAL_CALENDAR_SEARCH:
+				echo sprintf("%s matches <b>%s</b>",
+					DevblocksPlatform::strEscapeHtml(DevblocksPlatform::translateCapitalized('common.calendar')),
+					DevblocksPlatform::strEscapeHtml($param->value)
+				);
+				break;
+		
 			case SearchFields_CalendarEvent::VIRTUAL_CONTEXT_LINK:
 				$this->_renderVirtualContextLinks($param);
 				break;
@@ -860,6 +854,14 @@ class View_CalendarEvent extends C4_AbstractView implements IAbstractView_Subtot
 };
 
 class Context_CalendarEvent extends Extension_DevblocksContext implements IDevblocksContextPeek, IDevblocksContextProfile {
+	static function isReadableByActor($models, $actor) {
+		return CerberusContexts::isReadableByDelegateOwner($actor, CerberusContexts::CONTEXT_CALENDAR_EVENT, $models, 'calendar_owner_');
+	}
+	
+	static function isWriteableByActor($models, $actor) {
+		return CerberusContexts::isWriteableByDelegateOwner($actor, CerberusContexts::CONTEXT_CALENDAR_EVENT, $models, 'calendar_owner_');
+	}
+	
 	function profileGetUrl($context_id) {
 		if(empty($context_id))
 			return '';
@@ -1024,7 +1026,7 @@ class Context_CalendarEvent extends Extension_DevblocksContext implements IDevbl
 		
 		if(!$is_loaded) {
 			$labels = array();
-			CerberusContexts::getContext($context, $context_id, $labels, $values, null, true);
+			CerberusContexts::getContext($context, $context_id, $labels, $values, null, true, true);
 		}
 		
 		switch($token) {
@@ -1036,7 +1038,7 @@ class Context_CalendarEvent extends Extension_DevblocksContext implements IDevbl
 				break;
 				
 			default:
-				if(substr($token,0,7) == 'custom_') {
+				if(DevblocksPlatform::strStartsWith($token, 'custom_')) {
 					$fields = $this->_lazyLoadCustomFields($token, $context, $context_id);
 					$values = array_merge($values, $fields);
 				}
@@ -1089,8 +1091,7 @@ class Context_CalendarEvent extends Extension_DevblocksContext implements IDevbl
 		
 		if(!empty($context) && !empty($context_id)) {
 			$params_req = array(
-				new DevblocksSearchCriteria(SearchFields_CalendarEvent::CONTEXT_LINK,'=',$context),
-				new DevblocksSearchCriteria(SearchFields_CalendarEvent::CONTEXT_LINK_ID,'=',$context_id),
+				new DevblocksSearchCriteria(SearchFields_CalendarEvent::VIRTUAL_CONTEXT_LINK,'in',array($context.':'.$context_id)),
 			);
 		}
 		
@@ -1099,44 +1100,116 @@ class Context_CalendarEvent extends Extension_DevblocksContext implements IDevbl
 		$view->renderTemplate = 'context';
 		return $view;
 	}
-
+	
 	function renderPeekPopup($context_id=0, $view_id='', $edit=false) {
 		$tpl = DevblocksPlatform::getTemplateService();
 		$tpl->assign('view_id', $view_id);
 		
-		// [TODO] Check calendar+event ownership
+		$context = CerberusContexts::CONTEXT_CALENDAR_EVENT;
 		
 		if(!empty($context_id)) {
-			if(null != ($event = DAO_CalendarEvent::get($context_id))) {  /* @var $event Model_CalendarEvent */
-				$tpl->assign('event', $event);
-				
-				$custom_fields = DAO_CustomField::getByContext(CerberusContexts::CONTEXT_CALENDAR_EVENT, false);
-				$tpl->assign('custom_fields', $custom_fields);
-				
-				$custom_field_values = DAO_CustomFieldValue::getValuesByContextIds(CerberusContexts::CONTEXT_CALENDAR_EVENT, $context_id);
-				if(isset($custom_field_values[$context_id]))
-					$tpl->assign('custom_field_values', $custom_field_values[$context_id]);
-			}
+			$model = DAO_CalendarEvent::get($context_id);
 		}
 		
-		if(empty($context_id) || is_null($event)) {
-			@$calendar_id = DevblocksPlatform::importGPC($_REQUEST['calendar_id'],'integer');
+		if(empty($context_id) || $edit) {
+			if(empty($context_id)) {
+				$model = new Model_CalendarEvent();
 			
-			$event = new Model_CalendarEvent();
-			$event->id = 0;
-			$event->calendar_id = $calendar_id;
-			$event->is_available = 0;
-			$tpl->assign('event', $event);
-			
-			if(empty($calendar_id)) {
-				$active_worker = CerberusApplication::getActiveWorker();
-				$calendars = DAO_Calendar::getWriteableByActor($active_worker);
-				$tpl->assign('calendars', $calendars);
+				if($view_id && false != ($view = C4_AbstractViewLoader::getView($view_id))) {
+					switch(get_class($view)) {
+						case 'View_CalendarEvent':
+							$filters = $view->findParam(SearchFields_CalendarEvent::CALENDAR_ID, $view->getParams());
+							
+							if(!empty($filters)) {
+								$filter = array_shift($filters);
+								if(is_numeric($filter->value))
+									$model->calendar_id = $filter->value;
+							}
+							break;
+					}
+				}
+				
+				if(!empty($edit)) {
+					$tokens = explode(' ', trim($edit));
+					
+					foreach($tokens as $token) {
+						@list($k,$v) = explode(':', $token);
+						
+						if(empty($k) || empty($v))
+							continue;
+						
+						switch($k) {
+							case 'calendar.id':
+								$model->calendar_id = intval($v);
+								break;
+								
+							case 'start':
+								$model->date_start = intval($v);
+								break;
+						}
+					}
+				}
 			}
 			
-			$tpl->assign('workers', DAO_Worker::getAllActive());
+			$tpl->assign('model', $model);
+			
+			// Custom fields
+			$custom_fields = DAO_CustomField::getByContext($context, false);
+			$tpl->assign('custom_fields', $custom_fields);
+	
+			$custom_field_values = DAO_CustomFieldValue::getValuesByContextIds($context, $context_id);
+			if(isset($custom_field_values[$context_id]))
+				$tpl->assign('custom_field_values', $custom_field_values[$context_id]);
+			
+			$types = Model_CustomField::getTypes();
+			$tpl->assign('types', $types);
+			
+			// View
+			$tpl->assign('id', $context_id);
+			$tpl->assign('view_id', $view_id);
+			$tpl->display('devblocks:cerberusweb.core::internal/calendar_event/peek_edit.tpl');
+			
+		} else {
+			// Counts
+			$activity_counts = array(
+				'comments' => DAO_Comment::count($context, $context_id),
+			);
+			$tpl->assign('activity_counts', $activity_counts);
+			
+			// Links
+			$links = array(
+				$context => array(
+					$context_id => 
+						DAO_ContextLink::getContextLinkCounts(
+							$context,
+							$context_id,
+							array(CerberusContexts::CONTEXT_CUSTOM_FIELDSET)
+						),
+				),
+			);
+			$tpl->assign('links', $links);
+			
+			// Timeline
+			if($context_id) {
+				$timeline_json = Page_Profiles::getTimelineJson(Extension_DevblocksContext::getTimelineComments($context, $context_id));
+				$tpl->assign('timeline_json', $timeline_json);
+			}
+
+			// Context
+			if(false == ($context_ext = Extension_DevblocksContext::get($context)))
+				return;
+			
+			// Dictionary
+			$labels = array();
+			$values = array();
+			CerberusContexts::getContext($context, $model, $labels, $values, '', true, false);
+			$dict = DevblocksDictionaryDelegate::instance($values);
+			$tpl->assign('dict', $dict);
+			
+			$properties = $context_ext->getCardProperties();
+			$tpl->assign('properties', $properties);
+			
+			$tpl->display('devblocks:cerberusweb.core::internal/calendar_event/peek.tpl');
 		}
-		
-		$tpl->display('devblocks:cerberusweb.core::internal/calendar_event/peek.tpl');
 	}
 };

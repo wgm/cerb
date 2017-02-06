@@ -7,12 +7,12 @@
 |
 | This source code is released under the Devblocks Public License.
 | The latest version of this license can be found here:
-| http://cerb.io/license
+| http://cerb.ai/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://cerb.io	    http://webgroup.media
+|	http://cerb.ai	    http://webgroup.media
 ***********************************************************************/
 
 class PageSection_ProfilesContact extends Extension_PageSection {
@@ -98,7 +98,7 @@ class PageSection_ProfilesContact extends Extension_PageSection {
 		);
 		
 		$properties['updated'] = array(
-			'label' => mb_ucfirst($translate->_('common.updated')),
+			'label' => DevblocksPlatform::translateCapitalized('common.updated'),
 			'type' => Model_CustomField::TYPE_DATE,
 			'value' => $contact->updated_at,
 		);
@@ -133,7 +133,23 @@ class PageSection_ProfilesContact extends Extension_PageSection {
 					DAO_ContextLink::getContextLinkCounts(
 						CerberusContexts::CONTEXT_CONTACT,
 						$contact->id,
-						array(CerberusContexts::CONTEXT_WORKER, CerberusContexts::CONTEXT_CUSTOM_FIELDSET)
+						array(CerberusContexts::CONTEXT_CUSTOM_FIELDSET)
+					),
+			),
+			CerberusContexts::CONTEXT_ADDRESS => array(
+				$contact->primary_email_id => 
+					DAO_ContextLink::getContextLinkCounts(
+						CerberusContexts::CONTEXT_ADDRESS,
+						$contact->primary_email_id,
+						array(CerberusContexts::CONTEXT_CUSTOM_FIELDSET)
+					),
+			),
+			CerberusContexts::CONTEXT_ORG => array(
+				$contact->org_id => 
+					DAO_ContextLink::getContextLinkCounts(
+						CerberusContexts::CONTEXT_ORG,
+						$contact->org_id,
+						array(CerberusContexts::CONTEXT_CUSTOM_FIELDSET)
 					),
 			),
 		);
@@ -168,7 +184,7 @@ class PageSection_ProfilesContact extends Extension_PageSection {
 		
 		$active_worker = CerberusApplication::getActiveWorker();
 		
-		header('Content-Type: application/json; charset=' . LANG_CHARSET_CODE);
+		header('Content-Type: application/json; charset=utf-8');
 		
 		try {
 		
@@ -187,6 +203,7 @@ class PageSection_ProfilesContact extends Extension_PageSection {
 			} else {
 				@$first_name = DevblocksPlatform::importGPC($_REQUEST['first_name'], 'string', '');
 				@$last_name = DevblocksPlatform::importGPC($_REQUEST['last_name'], 'string', '');
+				@$aliases = DevblocksPlatform::importGPC($_REQUEST['aliases'],'string','');
 				@$title = DevblocksPlatform::importGPC($_REQUEST['title'], 'string', '');
 				@$org_id = DevblocksPlatform::importGPC($_REQUEST['org_id'], 'integer', 0);
 				@$primary_email_id = DevblocksPlatform::importGPC($_REQUEST['primary_email_id'], 'integer', 0);
@@ -247,18 +264,6 @@ class PageSection_ProfilesContact extends Extension_PageSection {
 					
 					$id = DAO_Contact::create($fields);
 					
-					// Watchers
-					@$add_watcher_ids = DevblocksPlatform::sanitizeArray(DevblocksPlatform::importGPC($_REQUEST['add_watcher_ids'],'array',array()),'integer',array('unique','nonzero'));
-					if(!empty($add_watcher_ids))
-						CerberusContexts::addWatchers(CerberusContexts::CONTEXT_CONTACT, $id, $add_watcher_ids);
-					
-					// Context Link (if given)
-					@$link_context = DevblocksPlatform::importGPC($_REQUEST['link_context'],'string','');
-					@$link_context_id = DevblocksPlatform::importGPC($_REQUEST['link_context_id'],'integer','');
-					if(!empty($id) && !empty($link_context) && !empty($link_context_id)) {
-						DAO_ContextLink::setLink(CerberusContexts::CONTEXT_CONTACT, $id, $link_context, $link_context_id);
-					}
-					
 					if(!empty($view_id) && !empty($id))
 						C4_AbstractView::setMarqueeContextCreated($view_id, CerberusContexts::CONTEXT_CONTACT, $id);
 					
@@ -290,6 +295,9 @@ class PageSection_ProfilesContact extends Extension_PageSection {
 				}
 				
 				if($id) {
+					// Aliases
+					DAO_ContextAlias::set(CerberusContexts::CONTEXT_CONTACT, $id, DevblocksPlatform::parseCrlfString(sprintf("%s%s", $first_name, $last_name ? (' '.$last_name) : '') . "\n" . $aliases));
+					
 					// Custom fields
 					@$field_ids = DevblocksPlatform::importGPC($_REQUEST['field_ids'], 'array', array());
 					DAO_CustomFieldValue::handleFormPost(CerberusContexts::CONTEXT_CONTACT, $id, $field_ids);

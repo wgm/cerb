@@ -12,15 +12,13 @@
 	</div>
 
 	<div style="float:right;">
-		{if $page->isReadableByWorker($active_worker)}
-			<button class="add" type="button" page_id="{$page->id}" page_label="{$page->name|lower}" page_url="{devblocks_url}c=pages&page={$page->id}-{$page->name|devblocks_permalink}{/devblocks_url}">{if $in_menu}<span class="glyphicons glyphicons-circle-minus" style="color:rgb(200,0,0);"></span>{else}<span class="glyphicons glyphicons-circle-plus" style="color:rgb(0,180,0);"></span>{/if} Menu</button>
-		{/if}
+		<button class="add" type="button" page_id="{$page->id}" page_label="{$page->name|lower}" page_url="{devblocks_url}c=pages&page={$page->id}-{$page->name|devblocks_permalink}{/devblocks_url}">{if $in_menu}<span class="glyphicons glyphicons-circle-minus" style="color:rgb(200,0,0);"></span>{else}<span class="glyphicons glyphicons-circle-plus" style="color:rgb(0,180,0);"></span>{/if} Menu</button>
 	
 		<div style="display:inline-block;">
 			<button class="config-page split-left" type="button"><span class="glyphicons glyphicons-cogwheel"></span></button><!--
 			--><button class="config-page split-right" type="button"><span class="glyphicons glyphicons-chevron-down" style="font-size:12px;color:white;"></span></button>
 			<ul class="cerb-popupmenu cerb-float">
-				{if $page->isWriteableByWorker($active_worker)}
+				{if Context_WorkspacePage::isWriteableByActor($page, $active_worker)}
 					<li><a href="javascript:;" class="edit-page">Edit Page</a></li>
 					{if $page->extension_id == 'core.workspace.page.workspace'}<li><a href="javascript:;" class="edit-tab">Edit Tab</a></li>{/if}
 				{/if}
@@ -77,7 +75,7 @@
 		
 		// Edit workspace actions
 		
-		{if $page->isWriteableByWorker($active_worker)}
+		{if Context_WorkspacePage::isWriteableByActor($page, $active_worker)}
 			// Edit page
 			$workspace.find('a.edit-page').click(function(e) {
 				e.stopPropagation();
@@ -156,7 +154,6 @@
 		});
 		
 		// Add/Remove in menu
-		{if $page->isReadableByWorker($active_worker)}
 		$workspace.find('button.add').click(function(e) {
 			var $this = $(this);
 		
@@ -203,7 +200,6 @@
 				genericAjaxGet('', 'c=pages&a=doToggleMenuPageJson&page_id=' + $this.attr('page_id') + '&toggle=1');
 			}
 		});
-		{/if}
 		
 	});
 </script>

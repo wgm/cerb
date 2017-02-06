@@ -2,17 +2,17 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2017, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
 | The latest version of this license can be found here:
-| http://cerb.io/license
+| http://cerb.ai/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://cerb.io	    http://webgroup.media
+|	http://cerb.ai	    http://webgroup.media
 ***********************************************************************/
 
 class ChDisplayPage extends CerberusPageExtension {
@@ -99,6 +99,7 @@ class ChDisplayPage extends CerberusPageExtension {
 		$tpl->assign('mail_reply_button', $mail_reply_button);
 			
 		$tpl->assign('expanded', (empty($hide) ? true : false));
+		$tpl->assign('is_refreshed', true);
 
 		$tpl->display('devblocks:cerberusweb.core::display/modules/conversation/message.tpl');
 	}
@@ -181,14 +182,11 @@ class ChDisplayPage extends CerberusPageExtension {
 		
 		$active_worker = CerberusApplication::getActiveWorker();
 		
-		header('Content-Type: application/json; charset=' . LANG_CHARSET_CODE);
+		header('Content-Type: application/json; charset=utf-8');
 		
 		try {
-		
-			$context_ext = Extension_DevblocksContext::get(CerberusContexts::CONTEXT_MESSAGE);
-			
 			// ACL
-			if(!$context_ext->authorize($id, $active_worker))
+			if(!Context_Message::isWriteableByActor($id, $active_worker))
 				throw new Exception_DevblocksAjaxValidationError("You are not authorized to modify this record.");
 			
 			if(!empty($id) && !empty($do_delete)) { // Delete
@@ -1239,11 +1237,8 @@ class ChDisplayPage extends CerberusPageExtension {
 		$tpl->assign('ticket_id', $ticket_id);
 		$tpl->assign('message_id', $message_id);
 		
-		if(null == ($ctx = DevblocksPlatform::getExtension(CerberusContexts::CONTEXT_TICKET, true))) /* @var $ctx Extension_DevblocksContext */
-			return;
-
 		// Verify permission
-		$editable = $ctx->authorize($ticket_id, $active_worker);
+		$editable = Context_Ticket::isWriteableByActor($ticket_id, $active_worker);
 		
 		if(!$editable)
 			return;
@@ -1269,11 +1264,8 @@ class ChDisplayPage extends CerberusPageExtension {
 			return;
 		}
 			
-		if(null == ($ctx = DevblocksPlatform::getExtension(CerberusContexts::CONTEXT_TICKET, true))) /* @var $ctx Extension_DevblocksContext */
-			return;
-
 		// Verify permission
-		$editable = $ctx->authorize($ticket_id, $active_worker);
+		$editable = Context_Ticket::isWriteableByActor($ticket_id, $active_worker);
 		
 		if(!$editable)
 			return;
@@ -1665,13 +1657,10 @@ class ChDisplayPage extends CerberusPageExtension {
 		if(empty($ticket_id))
 			return;
 
-		// Check context for worker auth
-		$ticket_context = DevblocksPlatform::getExtension(CerberusContexts::CONTEXT_TICKET, true, true); /* @var $ticket_context Extension_DevblocksContext */
-
-		if(!$ticket_context->authorize($ticket_id, $active_worker))
-			return;
-
 		if(null == ($ticket = DAO_Ticket::get($ticket_id)))
+			return;
+		
+		if(!Context_Ticket::isWriteableByActor($ticket, $active_worker))
 			return;
 		
 		if(empty($ticket->owner_id)) {
@@ -1690,6 +1679,9 @@ class ChDisplayPage extends CerberusPageExtension {
 			return;
 
 		if(null == ($ticket = DAO_Ticket::get($ticket_id)))
+			return;
+		
+		if(!Context_Ticket::isWriteableByActor($ticket, $active_worker))
 			return;
 		
 		if($ticket->owner_id == $active_worker->id) {

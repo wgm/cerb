@@ -4,6 +4,32 @@
 // Cerb custom styles
 
 
+// Forms
+
+DIV.cerb-form {
+	margin: 0px 0px 10px 0px;
+	
+	> DIV {
+		margin: 0px 0px 5px 10px;
+		
+		LABEL {
+			display: block;
+			font-weight: bold;
+			margin-left: -10px;
+			padding-bottom: 5px;
+		}
+		
+		INPUT[type=text] {
+			width: 100%;
+		}
+		
+		TEXTAREA {
+			width: 100%;
+			height: 50px;
+		}
+	}
+}
+
 // Fieldsets
 
 FIELDSET.delete {
@@ -646,6 +672,16 @@ TABLE.worklistBody {
 			}
 		}
 	}
+	
+	tbody {
+		&.disabled {
+			color: rgb(167,167,167);
+			
+			A {
+				color: rgb(167,167,167);
+			}
+		}
+	}
 }
 
 // Calendar
@@ -998,14 +1034,6 @@ UL.bubbles {
 				color:rgb(0,0,0);
 			}
 		
-			IMG.cerb-avatar {
-				height:16px;
-				width:16px;
-				margin-right:3px;
-				@include border-radius(16px);
-				vertical-align:middle;
-			}
-			
 			.glyphicons-circle-remove {
 				cursor: pointer;
 				position: absolute;
@@ -1021,6 +1049,16 @@ UL.bubbles {
 			}
 		}
 	}
+}
+
+// Avatars
+
+IMG.cerb-avatar {
+	height:16px;
+	width:16px;
+	margin-right:3px;
+	@include border-radius(16px);
+	vertical-align:middle;
 }
 
 // Badges
@@ -1058,7 +1096,9 @@ DIV.badge {
 	}
 
 	&.selected {
-		border:2px dashed;
+		border:1px dashed;
+		background: none;
+		background-color: rgb(255, 250, 160);
 	}
 }
 
@@ -1146,6 +1186,10 @@ FIELDSET.properties {
 
 	LEGEND {
 		color:rgb(50,50,50);
+		
+		A {
+			color:inherit;
+		}
 	}
 
 	DIV.property {
@@ -1196,7 +1240,16 @@ FIELDSET.peek {
 
 	LEGEND {
 		color:$green;
+		
+		A {
+			color:inherit;
+		}
 	}
+}
+
+FIELDSET.no-legend {
+	background: none;
+	border: 0;
 }
 
 FIELDSET.peek-noborder {
@@ -1263,13 +1316,6 @@ DIV.cerb-popupmenu {
 	
 	@include box-shadow-trbl(0px, 0px, 15px, 0px, rgb(175,175,175));
 	
-	&.cerb-float {
-		position: absolute;
-		z-index: 2500;
-		float: left;
-		border: 0;
-	}
-	
 	> div.cerb-popupmenu-item {
 		padding:2px;
 		font-weight:normal;
@@ -1311,13 +1357,6 @@ UL.cerb-popupmenu {
 
 	@include box-shadow-trbl(0px, 0px, 15px, 0px, rgb(175,175,175));
 
-	&.cerb-float {
-		position: absolute;
-		z-index: 2500;
-		float: left;
-		border: 0;
-	}
-
 	> LI {
 		padding:2px;
 		font-weight:normal;
@@ -1346,6 +1385,15 @@ UL.cerb-popupmenu {
 			}
 		}
 	}
+}
+
+// Utilities
+
+.cerb-float {
+	position: absolute;
+	z-index: 2500;
+	float: left;
+	border: 0;
 }
 
 // Subpage
@@ -1543,6 +1591,128 @@ DIV.emailBodyHtml {
 			font-size: initial;
 			margin: initial;
 			color: initial
+		}
+	}
+}
+
+.cerb-expression-editor {
+	UL.expression-toolbar {
+		width: 100%;
+		border: 0;
+		overflow-x: hidden;
+		overflow-y: auto;
+		max-height: 35em;
+		
+		LI {
+			color: black;
+			
+			&.ui-state-focus {
+				color: inherit;
+				border-color: rgba(200,200,200,0.5);
+				background-color: rgba(128,128,128,0.1);
+			}
+			
+			&.ui-menu-item {
+				background-color: rgb(255,255,255);
+			
+				&:hover {
+					background-color: rgb(240,240,240);
+					border-color: rgb(240,240,240);
+				}
+			}
+		}
+		
+		&::-webkit-scrollbar {
+			width: 12px;
+		}
+		&::-webkit-scrollbar-track {
+			background-color: rgb(245,245,245);
+			border-radius: 10px;
+		}
+		&::-webkit-scrollbar-thumb {
+			background-color: rgb(200,200,200);
+			border-radius:10px;
+		}
+
+	}
+	
+	.expression {
+		&:focus {
+			outline: none;
+		}
+		
+		SPAN {
+			color: black;
+			font-weight:bold;
+			border-radius:10px;
+			padding:0px 6px;
+			background-color:rgb(220,220,220);
+			
+			&.default {
+				font-weight: normal;
+				background-color:rgb(220,220,220);
+			}
+			&.alias {
+				background-color:rgb(220,220,220);
+			}
+			&.avail {
+				background-color:rgb(220,220,220);
+			}
+			&.contact {
+				color:rgb(0,120,0);
+				background-color:rgb(235,255,205);
+			}
+			&.contact_method {
+				background-color:rgb(220,220,220);
+			}
+			&.context {
+				background-color:rgb(220,220,220);
+			}
+			&.date {
+				color:rgb(68,147,224);
+				background-color:rgb(217,239,255);
+			}
+			&.duration {
+				color: rgb(188, 121, 20);
+				background-color: rgb(255, 228, 16);
+				//background-color: rgb(252, 255, 15);
+			}
+			&.entity {
+				background-color:rgb(220,220,220);
+			}
+			&.event {
+				background-color:rgb(220,220,220);
+			}
+			&.number {
+				background-color:rgb(220,220,220);
+			}
+			&.org {
+				background-color:rgb(220,220,220);
+			}
+			&.phone {
+				background-color:rgb(220,220,220);
+			}
+			&.place {
+				background-color:rgb(220,220,220);
+			}
+			&.remind {
+				background-color:rgb(220,220,220);
+			}
+			&.status {
+				background-color:rgb(220,220,220);
+			}
+			&.temperature {
+				color:rgb(212,4,30);
+				background-color:rgb(245,200,200);
+			}
+			&.time {
+				color:rgb(255,128,0);
+				background-color:rgb(253,238,193);
+			}
+			&.worker {
+				color: rgb(169,63,255);
+				background-color: rgb(233,217,255);
+			}
 		}
 	}
 }

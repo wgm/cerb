@@ -6,10 +6,6 @@
 <input type="hidden" name="a" value="savePeekJson">
 <input type="hidden" name="id" value="{$ticket->id}">
 <input type="hidden" name="view_id" value="{$view_id}">
-{if !empty($link_context)}
-<input type="hidden" name="link_context" value="{$link_context}">
-<input type="hidden" name="link_context_id" value="{$link_context_id}">
-{/if}
 <input type="hidden" name="_csrf_token" value="{$session.csrf_token}">
 
 <fieldset class="peek" style="margin-bottom:0;">
@@ -29,7 +25,7 @@
 		<tr>
 			<td width="1%" nowrap="nowrap" align="right" valign="middle">{'common.organization'|devblocks_translate|capitalize}:</td>
 			<td width="99%" valign="top">
-					<button type="button" class="chooser-abstract" data-field-name="org_id" data-context="{CerberusContexts::CONTEXT_ORG}" data-single="true" data-query="" data-autocomplete="if-null" data-create="if-null"><span class="glyphicons glyphicons-search"></span></button>
+					<button type="button" class="chooser-abstract" data-field-name="org_id" data-context="{CerberusContexts::CONTEXT_ORG}" data-single="true" data-query="" data-autocomplete="" data-autocomplete-if-empty="true" data-create="if-null"><span class="glyphicons glyphicons-search"></span></button>
 					
 					<ul class="bubbles chooser-container">
 						{$ticket_org = $ticket->getOrg()}
@@ -115,14 +111,14 @@
 		<tr>
 			<td width="1%" nowrap="nowrap" align="right" valign="middle">{'common.owner'|devblocks_translate|capitalize}:</td>
 			<td width="99%" valign="top">
-					<button type="button" class="chooser-abstract" data-field-name="owner_id" data-context="{CerberusContexts::CONTEXT_WORKER}" data-single="true" data-query="inGroups:{$ticket->group_id}" data-autocomplete="if-null"><span class="glyphicons glyphicons-search"></span></button>
-					
-					<ul class="bubbles chooser-container">
-						{$owner = $ticket->getOwner()}
-						{if $owner}
-							<li><img class="cerb-avatar" src="{devblocks_url}c=avatars&context=worker&context_id={$owner->id}{/devblocks_url}?v={$owner->updated}"><input type="hidden" name="owner_id" value="{$owner->id}"><a href="javascript:;" class="cerb-peek-trigger no-underline" data-context="{CerberusContexts::CONTEXT_WORKER}" data-context-id="{$owner->id}">{$owner->getName()}</a></li>
-						{/if}
-					</ul>
+				<button type="button" class="chooser-abstract" data-field-name="owner_id" data-context="{CerberusContexts::CONTEXT_WORKER}" data-single="true" data-query="group:(id:{$ticket->group_id})" data-autocomplete="" data-autocomplete-if-empty="true"><span class="glyphicons glyphicons-search"></span></button>
+				
+				<ul class="bubbles chooser-container">
+					{$owner = $ticket->getOwner()}
+					{if $owner}
+						<li><img class="cerb-avatar" src="{devblocks_url}c=avatars&context=worker&context_id={$owner->id}{/devblocks_url}?v={$owner->updated}"><input type="hidden" name="owner_id" value="{$owner->id}"><a href="javascript:;" class="cerb-peek-trigger no-underline" data-context="{CerberusContexts::CONTEXT_WORKER}" data-context-id="{$owner->id}">{$owner->getName()}</a></li>
+					{/if}
+				</ul>
 			</td>
 		</tr>
 		
@@ -263,7 +259,7 @@ $(function() {
 			$btn_watchers.trigger('refresh');
 			
 			// When the group changes, change the owner chooser defaults
-			$chooser_owner.attr('data-query', 'inGroups:' + $frm.find('select[name=group_id]').val());
+			$chooser_owner.attr('data-query', 'group:(id:' + $frm.find('select[name=group_id]' + ')').val());
 		});
 	});
 });

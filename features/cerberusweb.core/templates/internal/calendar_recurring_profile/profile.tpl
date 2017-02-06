@@ -1,5 +1,6 @@
-{$page_context = 'cerberusweb.contexts.calendar_event.recurring'}
+{$page_context = CerberusContexts::CONTEXT_CALENDAR_EVENT_RECURRING}
 {$page_context_id = $calendar_recurring_profile->id}
+{$is_writeable = Context_CalendarRecurringProfile::isWriteableByActor($calendar_recurring_profile, $active_worker)}
 
 <div style="float:left">
 	<h1>{$calendar_recurring_profile->event_name}</h1>
@@ -26,7 +27,10 @@
 		{include file="devblocks:cerberusweb.core::internal/macros/display/button.tpl" context=$page_context context_id=$page_context_id macros=$macros return_url=$return_url}
 		
 		<!-- Edit -->
-		<button type="button" id="btnDisplayCalendarRecurringProfileEdit" title="{'common.edit'|devblocks_translate|capitalize}"><span class="glyphicons glyphicons-cogwheel"></span></button>
+		{if $is_writeable}
+		<button type="button" id="btnDisplayCalendarRecurringProfileEdit" class="cerb-peek-trigger" data-context="{CerberusContexts::CONTEXT_CALENDAR_EVENT_RECURRING}" data-context-id="{$page_context_id}" data-edit="true" title="{'common.edit'|devblocks_translate|capitalize}"><span class="glyphicons glyphicons-cogwheel"></span></button>
+		<button type="button" id="btnProfileAddComment" data-context="{CerberusContexts::CONTEXT_COMMENT}" data-context-id="0" data-edit="context:{$page_context} context.id:{$page_context_id}"><span class="glyphicons glyphicons-conversation"></span> {'common.comment'|devblocks_translate|capitalize}</button>
+		{/if}
 	</form>
 	
 	{if $pref_keyboard_shortcuts}
@@ -40,7 +44,7 @@
 </div>
 
 <fieldset class="properties">
-	<legend>{'Calendar Recurring Profile'|devblocks_translate|capitalize}</legend>
+	<legend>{'common.calendar.event.recurring'|devblocks_translate|capitalize}</legend>
 
 	<div style="margin-left:15px;">
 	{foreach from=$properties item=v key=k name=props}
@@ -55,6 +59,10 @@
 		{/if}
 	{/foreach}
 	<br clear="all">
+	
+	<div style="margin-top:5px;">
+		<button type="button" class="cerb-search-trigger" data-context="{CerberusContexts::CONTEXT_COMMENT}" data-query="on.calendar_recurring_event:(id:{$page_context_id})"><div class="badge-count">{$owner_counts.comments|default:0}</div> {'common.comments'|devblocks_translate|capitalize}</button>
+	</div>
 	</div>
 </fieldset>
 
@@ -72,11 +80,10 @@
 
 <div id="calendar_recurring_profileTabs">
 	<ul>
-		{$tabs = [activity,comments,links]}
+		{$tabs = []}
 
-		<li><a href="{devblocks_url}ajax.php?c=internal&a=showTabActivityLog&scope=target&point={$point}&context={$page_context}&context_id={$page_context_id}{/devblocks_url}">{'common.activity_log'|devblocks_translate|capitalize}</a></li>
-		<li><a href="{devblocks_url}ajax.php?c=internal&a=showTabContextComments&point={$point}&context={$page_context}&id={$page_context_id}{/devblocks_url}">{'common.comments'|devblocks_translate|capitalize} <div class="tab-badge">{DAO_Comment::count($page_context, $page_context_id)|default:0}</div></a></li>
-		<li><a href="{devblocks_url}ajax.php?c=internal&a=showTabContextLinks&point={$point}&context={$page_context}&id={$page_context_id}{/devblocks_url}">{'common.links'|devblocks_translate} <div class="tab-badge">{DAO_ContextLink::count($page_context, $page_context_id)|default:0}</div></a></li>
+		{$tabs[] = 'activity'}
+		<li><a href="{devblocks_url}ajax.php?c=internal&a=showTabActivityLog&scope=target&point={$point}&context={$page_context}&context_id={$page_context_id}{/devblocks_url}">{'common.log'|devblocks_translate|capitalize}</a></li>
 
 		{foreach from=$tab_manifests item=tab_manifest}
 			{$tabs[] = $tab_manifest->params.uri}
@@ -93,13 +100,32 @@ $(function() {
 	
 	var tabs = $("#calendar_recurring_profileTabs").tabs(tabOptions);
 	
-	$('#btnDisplayCalendarRecurringProfileEdit').bind('click', function() {
-		var $popup = genericAjaxPopup('peek','c=internal&a=showPeekPopup&context={$page_context}&context_id={$page_context_id}',null,false,'50%');
-		$popup.one('calendar_event_save', function(event) {
-			event.stopPropagation();
+	// Edit
+	{if $is_writeable}
+	$('#btnDisplayCalendarRecurringProfileEdit')
+		.cerbPeekTrigger()
+		.on('cerb-peek-opened', function(e) {
+		})
+		.on('cerb-peek-saved', function(e) {
+			e.stopPropagation();
 			document.location.reload();
-		});
-	});
+		})
+		.on('cerb-peek-deleted', function(e) {
+			document.location.href = '{devblocks_url}{/devblocks_url}';
+			
+		})
+		.on('cerb-peek-closed', function(e) {
+		})
+		;
+	
+	// Comments
+	$('#btnProfileAddComment')
+		.cerbPeekTrigger()
+		.on('cerb-peek-saved', function() {
+			//genericAjaxPopup($layer,'c=internal&a=showPeekPopup&context={$peek_context}&context_id={$dict->id}&view_id={$view_id}','reuse',false,'50%');
+		})
+		;
+	{/if}
 
 	{include file="devblocks:cerberusweb.core::internal/macros/display/menu_script.tpl" selector_button=null selector_menu=null}
 });

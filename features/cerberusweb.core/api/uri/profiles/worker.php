@@ -2,17 +2,17 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2017, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
 | The latest version of this license can be found here:
-| http://cerb.io/license
+| http://cerb.ai/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://cerb.io	    http://webgroup.media
+|	http://cerb.ai	    http://webgroup.media
 ***********************************************************************/
 
 class PageSection_ProfilesWorker extends Extension_PageSection {
@@ -148,7 +148,7 @@ class PageSection_ProfilesWorker extends Extension_PageSection {
 					DAO_ContextLink::getContextLinkCounts(
 						CerberusContexts::CONTEXT_WORKER,
 						$worker->id,
-						array(CerberusContexts::CONTEXT_WORKER, CerberusContexts::CONTEXT_CUSTOM_FIELDSET)
+						array(CerberusContexts::CONTEXT_CUSTOM_FIELDSET)
 					),
 			),
 		);
@@ -187,7 +187,7 @@ class PageSection_ProfilesWorker extends Extension_PageSection {
 		$translate = DevblocksPlatform::getTranslationService();
 		$active_worker = CerberusApplication::getActiveWorker();
 		
-		header('Content-Type: application/json; charset=' . LANG_CHARSET_CODE);
+		header('Content-Type: application/json; charset=utf-8');
 		
 		try {
 			if(!$active_worker || !$active_worker->is_superuser)
@@ -212,6 +212,7 @@ class PageSection_ProfilesWorker extends Extension_PageSection {
 			} else {
 				@$first_name = DevblocksPlatform::importGPC($_POST['first_name'],'string');
 				@$last_name = DevblocksPlatform::importGPC($_POST['last_name'],'string');
+				@$aliases = DevblocksPlatform::importGPC($_POST['aliases'],'string','');
 				@$title = DevblocksPlatform::importGPC($_POST['title'],'string');
 				@$email_id = DevblocksPlatform::importGPC($_POST['email_id'],'integer', 0);
 				@$dob = DevblocksPlatform::importGPC($_POST['dob'],'string', '');
@@ -445,6 +446,9 @@ class PageSection_ProfilesWorker extends Extension_PageSection {
 				}
 	
 				if($id) {
+					// Aliases
+					DAO_ContextAlias::set(CerberusContexts::CONTEXT_WORKER, $id, DevblocksPlatform::parseCrlfString(sprintf("%s%s", $first_name, $last_name ? (' '.$last_name) : '') . "\n" . $aliases));
+					
 					// Custom field saves
 					@$field_ids = DevblocksPlatform::importGPC($_POST['field_ids'], 'array', array());
 					DAO_CustomFieldValue::handleFormPost(CerberusContexts::CONTEXT_WORKER, $id, $field_ids);
@@ -536,7 +540,7 @@ class PageSection_ProfilesWorker extends Extension_PageSection {
 		$html_templates = DAO_MailHtmlTemplate::getAll();
 		$tpl->assign('html_templates', $html_templates);
 		
-		$tpl->display('devblocks:cerberusweb.core::configuration/section/workers/bulk.tpl');
+		$tpl->display('devblocks:cerberusweb.core::workers/bulk.tpl');
 	}
 	
 	function startBulkUpdateJsonAction() {
@@ -656,7 +660,7 @@ class PageSection_ProfilesWorker extends Extension_PageSection {
 			if(false == ($calendar = DAO_Calendar::get($availability_calendar_id)))
 				$availability_calendar_id = 0;
 			
-			if(!CerberusContexts::isWriteableByActor($calendar->owner_context, $calendar->owner_context_id, $active_worker))
+			if(!Context_Calendar::isWriteableByActor($calendar, $active_worker))
 				$availability_calendar_id = 0;
 		}
 		

@@ -61,7 +61,7 @@
 		</tu>
 		<tu tuid="activities.comment.create">
 			<tuv xml:lang="en_US">
-				<seg>{{actor}} commented on {{object}} {{target}}: {{content}}</seg>
+				<seg>{{actor}} {{'common.commented'}} on {{object}} {{target}}</seg>
 			</tuv>
 		</tu>
 		<tu tuid="activities.connection.link">
@@ -217,6 +217,16 @@
 				<seg>Access denied.</seg>
 			</tuv>
 		</tu>
+		<tu tuid="common.account">
+			<tuv xml:lang="en_US">
+				<seg>account</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.accounts">
+			<tuv xml:lang="en_US">
+				<seg>accounts</seg>
+			</tuv>
+		</tu>
 		<tu tuid="common.action">
 			<tuv xml:lang="en_US">
 				<seg>Action</seg>
@@ -257,6 +267,16 @@
 				<seg>all</seg>
 			</tuv>
 		</tu>
+		<tu tuid="common.alias">
+			<tuv xml:lang="en_US">
+				<seg>alias</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.aliases">
+			<tuv xml:lang="en_US">
+				<seg>aliases</seg>
+			</tuv>
+		</tu>
 		<tu tuid="common.anonymous">
 			<tuv xml:lang="en_US">
 				<seg>anonymous</seg>
@@ -272,6 +292,16 @@
 				<seg>anybody</seg>
 			</tuv>
 		</tu>
+		<tu tuid="common.article">
+			<tuv xml:lang="en_US">
+				<seg>article</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.articles">
+			<tuv xml:lang="en_US">
+				<seg>articles</seg>
+			</tuv>
+		</tu>
 		<tu tuid="common.assign">
 			<tuv xml:lang="en_US">
 				<seg>assign</seg>
@@ -282,9 +312,29 @@
 				<seg>Assigned</seg>
 			</tuv>
 		</tu>
+		<tu tuid="common.attachment">
+			<tuv xml:lang="en_US">
+				<seg>attachment</seg>
+			</tuv>
+		</tu>
 		<tu tuid="common.attachments">
 			<tuv xml:lang="en_US">
-				<seg>Attachments</seg>
+				<seg>attachments</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.attribute">
+			<tuv xml:lang="en_US">
+				<seg>attribute</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.attributes">
+			<tuv xml:lang="en_US">
+				<seg>attributes</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.author">
+			<tuv xml:lang="en_US">
+				<seg>Author</seg>
 			</tuv>
 		</tu>
 		<tu tuid="common.available">
@@ -300,6 +350,21 @@
 		<tu tuid="common.behavior">
 			<tuv xml:lang="en_US">
 				<seg>Behavior</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.behaviors">
+			<tuv xml:lang="en_US">
+				<seg>Behaviors</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.bot">
+			<tuv xml:lang="en_US">
+				<seg>bot</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.bots">
+			<tuv xml:lang="en_US">
+				<seg>bots</seg>
 			</tuv>
 		</tu>
 		<tu tuid="common.broadcast">
@@ -320,6 +385,11 @@
 		<tu tuid="common.buckets">
 			<tuv xml:lang="en_US">
 				<seg>Buckets</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.builder">
+			<tuv xml:lang="en_US">
+				<seg>builder</seg>
 			</tuv>
 		</tu>
 		<tu tuid="common.bulk_update">
@@ -357,6 +427,26 @@
 				<seg>Calendar</seg>
 			</tuv>
 		</tu>
+		<tu tuid="common.calendar.event">
+			<tuv xml:lang="en_US">
+				<seg>Calendar Event</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.calendar.event.recurring">
+			<tuv xml:lang="en_US">
+				<seg>Calendar Recurring Event</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.calendar.events">
+			<tuv xml:lang="en_US">
+				<seg>Calendar Events</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.calendar.events.recurring">
+			<tuv xml:lang="en_US">
+				<seg>Calendar Recurring Events</seg>
+			</tuv>
+		</tu>
 		<tu tuid="common.calendars">
 			<tuv xml:lang="en_US">
 				<seg>Calendars</seg>
@@ -387,6 +477,36 @@
 				<seg>choose</seg>
 			</tuv>
 		</tu>
+		<tu tuid="common.classifier">
+			<tuv xml:lang="en_US">
+				<seg>classifier</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.classifier.classification">
+			<tuv xml:lang="en_US">
+				<seg>classification</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.classifier.classifications">
+			<tuv xml:lang="en_US">
+				<seg>classifications</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.classifier.entity">
+			<tuv xml:lang="en_US">
+				<seg>entity</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.classifier.entities">
+			<tuv xml:lang="en_US">
+				<seg>entities</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.classifiers">
+			<tuv xml:lang="en_US">
+				<seg>classifiers</seg>
+			</tuv>
+		</tu>
 		<tu tuid="common.clear">
 			<tuv xml:lang="en_US">
 				<seg>clear</seg>
@@ -407,6 +527,11 @@
 				<seg>comment</seg>
 			</tuv>
 		</tu>
+		<tu tuid="common.commented">
+			<tuv xml:lang="en_US">
+				<seg>commented</seg>
+			</tuv>
+		</tu>
 		<tu tuid="common.comments">
 			<tuv xml:lang="en_US">
 				<seg>comments</seg>
@@ -420,6 +545,21 @@
 		<tu tuid="common.conditions">
 			<tuv xml:lang="en_US">
 				<seg>conditions</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.confidence">
+			<tuv xml:lang="en_US">
+				<seg>confidence</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.connected_account">
+			<tuv xml:lang="en_US">
+				<seg>connected account</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.connected_accounts">
+			<tuv xml:lang="en_US">
+				<seg>connected accounts</seg>
 			</tuv>
 		</tu>
 		<tu tuid="common.contact">
@@ -557,9 +697,19 @@
 				<seg>due</seg>
 			</tuv>
 		</tu>
+		<tu tuid="common.duplicate">
+			<tuv xml:lang="en_US">
+				<seg>duplicate</seg>
+			</tuv>
+		</tu>
 		<tu tuid="common.edit">
 			<tuv xml:lang="en_US">
 				<seg>edit</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.editor">
+			<tuv xml:lang="en_US">
+				<seg>editor</seg>
 			</tuv>
 		</tu>
 		<tu tuid="common.email">
@@ -582,6 +732,16 @@
 				<seg>Enabled</seg>
 			</tuv>
 		</tu>
+		<tu tuid="common.entity">
+			<tuv xml:lang="en_US">
+				<seg>entity</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.entities">
+			<tuv xml:lang="en_US">
+				<seg>entities</seg>
+			</tuv>
+		</tu>
 		<tu tuid="common.error">
 			<tuv xml:lang="en_US">
 				<seg>error</seg>
@@ -590,6 +750,26 @@
 		<tu tuid="common.event">
 			<tuv xml:lang="en_US">
 				<seg>event</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.event.recurring">
+			<tuv xml:lang="en_US">
+				<seg>recurring event</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.events">
+			<tuv xml:lang="en_US">
+				<seg>events</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.events.recurring">
+			<tuv xml:lang="en_US">
+				<seg>recurring events</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.everyone">
+			<tuv xml:lang="en_US">
+				<seg>everyone</seg>
 			</tuv>
 		</tu>
 		<tu tuid="common.example">
@@ -957,6 +1137,11 @@
 				<seg>objects</seg>
 			</tuv>
 		</tu>
+		<tu tuid="common.on">
+			<tuv xml:lang="en_US">
+				<seg>on</seg>
+			</tuv>
+		</tu>
 		<tu tuid="common.optional">
 			<tuv xml:lang="en_US">
 				<seg>optional</seg>
@@ -1052,6 +1237,11 @@
 				<seg>location</seg>
 			</tuv>
 		</tu>
+		<tu tuid="common.log">
+			<tuv xml:lang="en_US">
+				<seg>log</seg>
+			</tuv>
+		</tu>
 		<tu tuid="common.next">
 			<tuv xml:lang="en_US">
 				<seg>next</seg>
@@ -1080,6 +1270,16 @@
 		<tu tuid="common.ok">
 			<tuv xml:lang="en_US">
 				<seg>OK</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.param">
+			<tuv xml:lang="en_US">
+				<seg>param</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.params">
+			<tuv xml:lang="en_US">
+				<seg>params</seg>
 			</tuv>
 		</tu>
 		<tu tuid="common.participant">
@@ -1160,6 +1360,11 @@
 		<tu tuid="common.print">
 			<tuv xml:lang="en_US">
 				<seg>Print</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.priority">
+			<tuv xml:lang="en_US">
+				<seg>priority</seg>
 			</tuv>
 		</tu>
 		<tu tuid="common.private">
@@ -1307,6 +1512,16 @@
 				<seg>Save Changes</seg>
 			</tuv>
 		</tu>
+		<tu tuid="common.script">
+			<tuv xml:lang="en_US">
+				<seg>script</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.scripts">
+			<tuv xml:lang="en_US">
+				<seg>scripts</seg>
+			</tuv>
+		</tu>
 		<tu tuid="common.search">
 			<tuv xml:lang="en_US">
 				<seg>search</seg>
@@ -1330,6 +1545,36 @@
 		<tu tuid="common.security">
 			<tuv xml:lang="en_US">
 				<seg>security</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.sender">
+			<tuv xml:lang="en_US">
+				<seg>sender</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.senders">
+			<tuv xml:lang="en_US">
+				<seg>senders</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.service">
+			<tuv xml:lang="en_US">
+				<seg>service</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.service.provider">
+			<tuv xml:lang="en_US">
+				<seg>service provider</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.service.providers">
+			<tuv xml:lang="en_US">
+				<seg>service providers</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.services">
+			<tuv xml:lang="en_US">
+				<seg>services</seg>
 			</tuv>
 		</tu>
 		<tu tuid="common.session">
@@ -1381,6 +1626,11 @@
 		<tu tuid="common.skillsets">
 			<tuv xml:lang="en_US">
 				<seg>skillsets</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.snippet">
+			<tuv xml:lang="en_US">
+				<seg>snippet</seg>
 			</tuv>
 		</tu>
 		<tu tuid="common.snippets">
@@ -1488,6 +1738,16 @@
 				<seg>total</seg>
 			</tuv>
 		</tu>
+		<tu tuid="common.train">
+			<tuv xml:lang="en_US">
+				<seg>train</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.training">
+			<tuv xml:lang="en_US">
+				<seg>training</seg>
+			</tuv>
+		</tu>
 		<tu tuid="common.type">
 			<tuv xml:lang="en_US">
 				<seg>Type</seg>
@@ -1558,14 +1818,14 @@
 				<seg>Record URL</seg>
 			</tuv>
 		</tu>
-		<tu tuid="common.bot">
+		<tu tuid="common.variable">
 			<tuv xml:lang="en_US">
-				<seg>bot</seg>
+				<seg>variable</seg>
 			</tuv>
 		</tu>
-		<tu tuid="common.bots">
+		<tu tuid="common.variables">
 			<tuv xml:lang="en_US">
-				<seg>bots</seg>
+				<seg>variables</seg>
 			</tuv>
 		</tu>
 		<tu tuid="common.watch">
@@ -1719,15 +1979,28 @@
 				<seg>Description</seg>
 			</tuv>
 		</tu>
-		<tu tuid="dao.cerb_plugin.author">
-			<tuv xml:lang="en_US">
-				<seg>Author</seg>
-			</tuv>
-		</tu>
 		<tu tuid="dao.cerb_plugin.version">
 			<tuv xml:lang="en_US">
 				<seg>Version</seg>
 			</tuv>
+		</tu>
+		
+		<!-- Classifier -->
+		
+		<tu tuid='dao.classifier.dictionary_size'>
+			<tuv xml:lang="en_US"><seg>Dictionary Size</seg></tuv>
+		</tu>
+		
+		<!-- Classifier Class -->
+		
+		<tu tuid='dao.classifier_class.training_count'>
+			<tuv xml:lang="en_US"><seg>Training Count</seg></tuv>
+		</tu>
+		
+		<!-- ClassifierExample -->
+		
+		<tu tuid='dao.classifier_example.expression'>
+			<tuv xml:lang="en_US"><seg>Expression</seg></tuv>
 		</tu>
 
 		<!-- DecisionNode -->
@@ -1735,11 +2008,6 @@
 		<tu tuid="dao.decision_node.node_type">
 			<tuv xml:lang="en_US">
 				<seg>Node Type</seg>
-			</tuv>
-		</tu>
-		<tu tuid="dao.decision_node.params">
-			<tuv xml:lang="en_US">
-				<seg>Params</seg>
 			</tuv>
 		</tu>
 		<tu tuid="dao.decision_node.parent_id">
@@ -1844,14 +2112,9 @@
 				<seg>Is Disabled</seg>
 			</tuv>
 		</tu>
-		<tu tuid="dao.trigger_event.owner_context">
+		<tu tuid="dao.trigger_event.is_private">
 			<tuv xml:lang="en_US">
-				<seg>Owner Context</seg>
-			</tuv>
-		</tu>
-		<tu tuid="dao.trigger_event.owner_context_id">
-			<tuv xml:lang="en_US">
-				<seg>Owner Context Id</seg>
+				<seg>Is Private</seg>
 			</tuv>
 		</tu>
 
@@ -1885,54 +2148,49 @@
 		
 		<!-- Address Book -->
 		
-		<tu tuid="acl.core.addybook">
-			<tuv xml:lang="en_US">
-				<seg>[Address Book] Can browse the address book</seg>
-			</tuv>
-		</tu>
 		<tu tuid="acl.core.addybook.addy.actions.update">
 			<tuv xml:lang="en_US">
-				<seg>[Address Book] Can modify email address contacts</seg>
+				<seg>[Addresses] Can modify email address contacts</seg>
 			</tuv>
 		</tu>
 		<tu tuid="acl.core.addybook.addy.view.actions.broadcast">
 			<tuv xml:lang="en_US">
-				<seg>[Address Book] Can broadcast compose email to address lists</seg>
+				<seg>[Addresses] Can broadcast compose email to address lists</seg>
 			</tuv>
 		</tu>
 		<tu tuid="acl.core.addybook.addy.view.actions.export">
 			<tuv xml:lang="en_US">
-				<seg>[Address Book] Can export email address lists to CSV/XML</seg>
+				<seg>[Addresses] Can export email address lists to CSV/XML</seg>
 			</tuv>
 		</tu>
 		<tu tuid="acl.core.addybook.org.actions.merge">
 			<tuv xml:lang="en_US">
-				<seg>[Address Book] Can merge organizations</seg>
+				<seg>[Orgs] Can merge organizations</seg>
 			</tuv>
 		</tu>
 		<tu tuid="acl.core.addybook.org.actions.update">
 			<tuv xml:lang="en_US">
-				<seg>[Address Book] Can modify organizations</seg>
+				<seg>[Orgs] Can modify organizations</seg>
 			</tuv>
 		</tu>
 		<tu tuid="acl.core.addybook.org.actions.delete">
 			<tuv xml:lang="en_US">
-				<seg>[Address Book] Can delete organizations</seg>
+				<seg>[Orgs] Can delete organizations</seg>
 			</tuv>
 		</tu>
 		<tu tuid="acl.core.addybook.org.view.actions.export">
 			<tuv xml:lang="en_US">
-				<seg>[Address Book] Can export organization lists to CSV/XML</seg>
+				<seg>[Orgs] Can export organization lists to CSV/XML</seg>
 			</tuv>
 		</tu>
 		<tu tuid="acl.core.addybook.person.actions.delete">
 			<tuv xml:lang="en_US">
-				<seg>[Address Book] Can delete registered contacts</seg>
+				<seg>[Contacts] Can delete registered contacts</seg>
 			</tuv>
 		</tu>
 		<tu tuid="acl.core.addybook.person.actions.update">
 			<tuv xml:lang="en_US">
-				<seg>[Address Book] Can modify registered contacts</seg>
+				<seg>[Contacts] Can modify registered contacts</seg>
 			</tuv>
 		</tu>
 
@@ -1940,37 +2198,32 @@
 		
 		<tu tuid="acl.core.display.actions.attachments.download">
 			<tuv xml:lang="en_US">
-				<seg>[Display Ticket] Can download ticket attachments</seg>
-			</tuv>
-		</tu>
-		<tu tuid="acl.core.display.actions.comment">
-			<tuv xml:lang="en_US">
-				<seg>[Display Ticket] Can comment on tickets</seg>
+				<seg>[Tickets] Can download ticket attachments</seg>
 			</tuv>
 		</tu>
 		<tu tuid="acl.core.display.actions.forward">
 			<tuv xml:lang="en_US">
-				<seg>[Display Ticket] Can forward tickets to third-party email addresses</seg>
+				<seg>[Tickets] Can forward tickets to third-party email addresses</seg>
 			</tuv>
 		</tu>
 		<tu tuid="acl.core.display.actions.note">
 			<tuv xml:lang="en_US">
-				<seg>[Display Ticket] Can add sticky notes to tickets</seg>
+				<seg>[Tickets] Can add sticky notes to tickets</seg>
 			</tuv>
 		</tu>
 		<tu tuid="acl.core.display.actions.reply">
 			<tuv xml:lang="en_US">
-				<seg>[Display Ticket] Can reply to tickets</seg>
+				<seg>[Tickets] Can reply to tickets</seg>
 			</tuv>
 		</tu>
 		<tu tuid="acl.core.display.actions.split">
 			<tuv xml:lang="en_US">
-				<seg>[Display Ticket] Can split tickets</seg>
+				<seg>[Tickets] Can split tickets</seg>
 			</tuv>
 		</tu>
 		<tu tuid="acl.core.display.message.actions.delete">
 			<tuv xml:lang="en_US">
-				<seg>[Display Ticket] Can permanently delete messages on tickets</seg>
+				<seg>[Tickets] Can permanently delete messages on tickets</seg>
 			</tuv>
 		</tu>
 
@@ -2194,11 +2447,6 @@
 				<seg>Attachment ID</seg>
 			</tuv>
 		</tu>
-		<tu tuid="attachment.display_name">
-			<tuv xml:lang="en_US">
-				<seg>File Name</seg>
-			</tuv>
-		</tu>
 		<tu tuid="attachment.mime_type">
 			<tuv xml:lang="en_US">
 				<seg>MIME Type</seg>
@@ -2222,11 +2470,6 @@
 		<tu tuid="attachment.storage_sha1hash">
 			<tuv xml:lang="en_US">
 				<seg>SHA-1 Hash</seg>
-			</tuv>
-		</tu>
-		<tu tuid="attachment.storage_size">
-			<tuv xml:lang="en_US">
-				<seg>Size (bytes)</seg>
 			</tuv>
 		</tu>
 
@@ -3012,11 +3255,6 @@ For example: http://www.cerbweb.com/support/</seg>
 				<seg>Is Queued</seg>
 			</tuv>
 		</tu>
-		<tu tuid="mail_queue.params_json">
-			<tuv xml:lang="en_US">
-				<seg>Parameters</seg>
-			</tuv>
-		</tu>
 		<tu tuid="mail_queue.queue_delivery_date">
 			<tuv xml:lang="en_US">
 				<seg>Delivery Date</seg>
@@ -3558,7 +3796,7 @@ For example: *receipt*</seg>
 			</tuv>
 		</tu>
 
-		<!-- Virtual Attendants -->
+		<!-- Bots -->
 		
 		<tu tuid="va.actions.ticket.relay.default_content">
 			<tuv xml:lang="en_US">

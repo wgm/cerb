@@ -10,7 +10,7 @@
 	{if is_array($menu) && !empty($menu)}
 	{foreach from=$menu item=workspace_page_id}
 		{$workspace_page = $workspace_pages.$workspace_page_id}
-		{if $workspace_page && $workspace_page->isReadableByWorker($active_worker)}
+		{if $workspace_page}
 		<li class="{if $page->id=='core.page.pages' && isset($response_path[1]) && intval($response_path[1])==$workspace_page->id}selected{/if} drag" page_id="{$workspace_page->id}">
 			<a href="{devblocks_url}c=pages&page={$workspace_page->id}-{$workspace_page->name|devblocks_permalink}{/devblocks_url}">{$workspace_page->name|lower}</a>
 		</li>
@@ -31,10 +31,8 @@
 	<li class="tour-navmenu-search{if $page->id=='core.page.search'} selected{/if}" style="float:right;">
 		<a href="javascript:;" class="submenu"><span class="glyphicons glyphicons-search"></span> <span class="glyphicons glyphicons-chevron-down" style="{if $page->id=='core.page.search'}color:white;{else}{/if}"></span></a>
 		<ul class="cerb-popupmenu cerb-float" style="margin-top:-2px;">
-			{foreach from=$contexts item=context key=context_id}
-			{if isset($context->params.options.0.workspace)}
-			<li><a href="javascript:;" data-context="{$context_id}">{$context->name}</a></li>
-			{/if}
+			{foreach from=$search_menu item=label key=context_id}
+				<li><a href="javascript:;" data-context="{$context_id}">{$label|capitalize}</a></li>
 			{/foreach}
 		</ul>
 	</li>

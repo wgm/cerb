@@ -2,17 +2,17 @@
 /***********************************************************************
  | Cerb(tm) developed by Webgroup Media, LLC.
  |-----------------------------------------------------------------------
- | All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
+ | All source code & content (c) Copyright 2002-2017, Webgroup Media LLC
  |   unless specifically noted otherwise.
  |
  | This source code is released under the Devblocks Public License.
  | The latest version of this license can be found here:
- | http://cerb.io/license
+ | http://cerb.ai/license
  |
  | By using this software, you acknowledge having read this license
  | and agree to be bound thereby.
  | ______________________________________________________________________
- |	http://cerb.io	    http://webgroup.media
+ |	http://cerb.ai	    http://webgroup.media
  ***********************************************************************/
 
 class DAO_CalendarRecurringProfile extends Cerb_ORMHelper {
@@ -191,6 +191,14 @@ class DAO_CalendarRecurringProfile extends Cerb_ORMHelper {
 		return self::_getRandom('calendar_recurring_profile');
 	}
 	
+	static function countByCalendar($calendar_id) {
+		$db = DevblocksPlatform::getDatabaseService();
+		return $db->GetOneSlave(sprintf("SELECT count(id) FROM calendar_recurring_profile ".
+			"WHERE calendar_id = %d",
+			$calendar_id
+		));
+	}
+	
 	static function delete($ids) {
 		if(!is_array($ids)) $ids = array($ids);
 		$db = DevblocksPlatform::getDatabaseService();
@@ -259,9 +267,7 @@ class DAO_CalendarRecurringProfile extends Cerb_ORMHelper {
 				SearchFields_CalendarRecurringProfile::PATTERNS
 			);
 			
-		$join_sql = "FROM calendar_recurring_profile ".
-			(isset($tables['context_link']) ? "INNER JOIN context_link ON (context_link.to_context = 'cerberusweb.contexts.calendar_event.recurring' AND context_link.to_context_id = calendar_recurring_profile.id) " : " ").
-			'';
+		$join_sql = "FROM calendar_recurring_profile ";
 		
 		$where_sql = "".
 			(!empty($wheres) ? sprintf("WHERE %s ",implode(' AND ',$wheres)) : "WHERE 1 ");
@@ -274,7 +280,6 @@ class DAO_CalendarRecurringProfile extends Cerb_ORMHelper {
 			'join_sql' => &$join_sql,
 			'where_sql' => &$where_sql,
 			'tables' => &$tables,
-			'has_multiple_values' => &$has_multiple_values
 		);
 	
 		array_walk_recursive(
@@ -288,7 +293,6 @@ class DAO_CalendarRecurringProfile extends Cerb_ORMHelper {
 			'select' => $select_sql,
 			'join' => $join_sql,
 			'where' => $where_sql,
-			'has_multiple_values' => $has_multiple_values,
 			'sort' => $sort_sql,
 		);
 	}
@@ -304,10 +308,6 @@ class DAO_CalendarRecurringProfile extends Cerb_ORMHelper {
 		settype($param_key, 'string');
 		
 		switch($param_key) {
-			case SearchFields_CalendarRecurringProfile::VIRTUAL_CONTEXT_LINK:
-				self::_searchComponentsVirtualContextLinks($param, $from_context, $from_index, $args['join_sql'], $args['where_sql']);
-				break;
-		
 			case SearchFields_CalendarRecurringProfile::VIRTUAL_HAS_FIELDSET:
 				self::_searchComponentsVirtualHasFieldset($param, $from_context, $from_index, $args['join_sql'], $args['where_sql']);
 				break;
@@ -335,14 +335,12 @@ class DAO_CalendarRecurringProfile extends Cerb_ORMHelper {
 		$select_sql = $query_parts['select'];
 		$join_sql = $query_parts['join'];
 		$where_sql = $query_parts['where'];
-		$has_multiple_values = $query_parts['has_multiple_values'];
 		$sort_sql = $query_parts['sort'];
 		
 		$sql =
 			$select_sql.
 			$join_sql.
 			$where_sql.
-			($has_multiple_values ? 'GROUP BY calendar_recurring_profile.id ' : '').
 			$sort_sql;
 			
 		if($limit > 0) {
@@ -372,7 +370,7 @@ class DAO_CalendarRecurringProfile extends Cerb_ORMHelper {
 			// We can skip counting if we have a less-than-full single page
 			if(!(0 == $page && $total < $limit)) {
 				$count_sql =
-					($has_multiple_values ? "SELECT COUNT(DISTINCT calendar_recurring_profile.id) " : "SELECT COUNT(calendar_recurring_profile.id) ").
+					"SELECT COUNT(calendar_recurring_profile.id) ".
 					$join_sql.
 					$where_sql;
 				$total = $db->GetOneSlave($count_sql);
@@ -398,12 +396,10 @@ class SearchFields_CalendarRecurringProfile extends DevblocksSearchFields {
 	const RECUR_END = 'c_recur_end';
 	const PATTERNS = 'c_patterns';
 
+	const VIRTUAL_CALENDAR_SEARCH = '*_calendar_search';
 	const VIRTUAL_CONTEXT_LINK = '*_context_link';
 	const VIRTUAL_HAS_FIELDSET = '*_has_fieldset';
 	const VIRTUAL_WATCHERS = '*_workers';
-	
-	const CONTEXT_LINK = 'cl_context_from';
-	const CONTEXT_LINK_ID = 'cl_context_from_id';
 	
 	static private $_fields = null;
 	
@@ -420,6 +416,14 @@ class SearchFields_CalendarRecurringProfile extends DevblocksSearchFields {
 	
 	static function getWhereSQL(DevblocksSearchCriteria $param) {
 		switch($param->field) {
+			case self::VIRTUAL_CALENDAR_SEARCH:
+				return self::_getWhereSQLFromVirtualSearchField($param, CerberusContexts::CONTEXT_CALENDAR, 'calendar_recurring_profile.calendar_id');
+				break;
+			
+			case self::VIRTUAL_CONTEXT_LINK:
+				return self::_getWhereSQLFromContextLinksField($param, CerberusContexts::CONTEXT_CALENDAR_EVENT_RECURRING, self::getPrimaryKey());
+				break;
+			
 			case self::VIRTUAL_WATCHERS:
 				return self::_getWhereSQLFromWatchersField($param, CerberusContexts::CONTEXT_CALENDAR_EVENT_RECURRING, self::getPrimaryKey());
 				break;
@@ -462,12 +466,10 @@ class SearchFields_CalendarRecurringProfile extends DevblocksSearchFields {
 			self::RECUR_END => new DevblocksSearchField(self::RECUR_END, 'calendar_recurring_profile', 'recur_end', $translate->_('dao.calendar_recurring_profile.recur_end'), Model_CustomField::TYPE_DATE, true),
 			self::PATTERNS => new DevblocksSearchField(self::PATTERNS, 'calendar_recurring_profile', 'patterns', $translate->_('dao.calendar_recurring_profile.patterns'), Model_CustomField::TYPE_MULTI_LINE, true),
 
+			self::VIRTUAL_CALENDAR_SEARCH => new DevblocksSearchField(self::VIRTUAL_CALENDAR_SEARCH, '*', 'calendar_search', null, null, false),
 			self::VIRTUAL_CONTEXT_LINK => new DevblocksSearchField(self::VIRTUAL_CONTEXT_LINK, '*', 'context_link', $translate->_('common.links'), null, false),
 			self::VIRTUAL_HAS_FIELDSET => new DevblocksSearchField(self::VIRTUAL_HAS_FIELDSET, '*', 'has_fieldset', $translate->_('common.fieldset'), null, false),
 			self::VIRTUAL_WATCHERS => new DevblocksSearchField(self::VIRTUAL_WATCHERS, '*', 'workers', $translate->_('common.watchers'), 'WS', false),
-			
-			self::CONTEXT_LINK => new DevblocksSearchField(self::CONTEXT_LINK, 'context_link', 'from_context', null, null, false),
-			self::CONTEXT_LINK_ID => new DevblocksSearchField(self::CONTEXT_LINK_ID, 'context_link', 'from_context_id', null, null, false),
 		);
 		
 		// Custom Fields
@@ -494,6 +496,18 @@ class Model_CalendarRecurringProfile {
 	public $recur_start;
 	public $recur_end;
 	public $patterns;
+	
+	private $_calendar_model = null;
+	
+	/**
+	 * @return Model_Calendar
+	 */
+	function getCalendar() {
+		if(is_null($this->_calendar_model))
+			$this->_calendar_model = DAO_Calendar::get($this->calendar_id);
+			
+		return $this->_calendar_model;
+	}
 	
 	function generateRecurringEvents($date_from, $date_to) {
 		$calendar_events = array();
@@ -528,7 +542,7 @@ class Model_CalendarRecurringProfile {
 					continue;
 				}
 			}
-
+			
 			foreach($patterns as $pattern) {
 				if($passed)
 					continue;
@@ -548,29 +562,14 @@ class Model_CalendarRecurringProfile {
 				}
 				
 				if($passed) {
-					// This is a B.S. workaround for a PHP bug
-					// If we can do things the right way
-					if(version_compare(PHP_VERSION, '5.3.6', '>=')) {
-						$timezone = new DateTimeZone($this->tz);
-						$datetime = new DateTime(date('Y-m-d', $day), $timezone);
-						
-						$datetime->modify($this->event_start ?: 'midnight');
-						$event_start_local = $datetime->getTimestamp();
-						
-						$datetime->modify($this->event_end ?: 'midnight');
-						$event_end_local = $datetime->getTimestamp();
-						
-					// If we have to hack around the PHP bug with DateTime::modify($absolute_time)
-					} else {
-						$datetime_date = date('Y-m-d', $day);
-						$previous_timezone = DevblocksPlatform::getTimezone();
-						DevblocksPlatform::setTimezone($this->tz);
-						$datetime = strtotime($datetime_date);
-						
-						@$event_start_local = strtotime($this->event_start ?: 'midnight', $datetime);
-						@$event_end_local = strtotime($this->event_end ?: 'midnight', $datetime);
-						DevblocksPlatform::setTimezone($previous_timezone);
-					}
+					$timezone = new DateTimeZone($this->tz);
+					$datetime = new DateTime(date('Y-m-d', $day), $timezone);
+					
+					$datetime->modify($this->event_start ?: 'midnight');
+					$event_start_local = $datetime->getTimestamp();
+					
+					$datetime->modify($this->event_end ?: 'midnight');
+					$event_end_local = $datetime->getTimestamp();
 					
 					// If the generated event starts before the recurring event begins, skip
 					if($this->recur_start && $event_start_local < $this->recur_start)
@@ -626,12 +625,14 @@ class View_CalendarRecurringProfile extends C4_AbstractView implements IAbstract
 		);
 
 		$this->addColumnsHidden(array(
+			SearchFields_CalendarRecurringProfile::VIRTUAL_CALENDAR_SEARCH,
 			SearchFields_CalendarRecurringProfile::VIRTUAL_CONTEXT_LINK,
 			SearchFields_CalendarRecurringProfile::VIRTUAL_HAS_FIELDSET,
 			SearchFields_CalendarRecurringProfile::VIRTUAL_WATCHERS,
 		));
 		
 		$this->addParamsHidden(array(
+			SearchFields_CalendarRecurringProfile::VIRTUAL_CALENDAR_SEARCH,
 		));
 		
 		$this->doResetCriteria();
@@ -753,6 +754,9 @@ class View_CalendarRecurringProfile extends C4_AbstractView implements IAbstract
 	
 	function getQuickSearchFields() {
 		$search_fields = SearchFields_CalendarRecurringProfile::getFields();
+		$date = DevblocksPlatform::getDateService();
+		
+		$timezones = $date->getTimezones();
 		
 		$fields = array(
 			'text' => 
@@ -763,12 +767,26 @@ class View_CalendarRecurringProfile extends C4_AbstractView implements IAbstract
 			'calendar' => 
 				array(
 					'type' => DevblocksSearchCriteria::TYPE_VIRTUAL,
+					'options' => array('param_key' => SearchFields_CalendarRecurringProfile::VIRTUAL_CALENDAR_SEARCH),
+					'examples' => [
+						['type' => 'search', 'context' => CerberusContexts::CONTEXT_CALENDAR, 'q' => ''],
+					]
+				),
+			'calendar.id' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_NUMBER,
 					'options' => array('param_key' => SearchFields_CalendarRecurringProfile::CALENDAR_ID),
+					'examples' => [
+						['type' => 'chooser', 'context' => CerberusContexts::CONTEXT_CALENDAR, 'q' => ''],
+					]
 				),
 			'id' =>
 				array(
 					'type' => DevblocksSearchCriteria::TYPE_NUMBER,
 					'options' => array('param_key' => SearchFields_CalendarRecurringProfile::ID),
+					'examples' => [
+						['type' => 'chooser', 'context' => CerberusContexts::CONTEXT_CALENDAR_EVENT_RECURRING, 'q' => ''],
+					]
 				),
 			'name' => 
 				array(
@@ -787,7 +805,10 @@ class View_CalendarRecurringProfile extends C4_AbstractView implements IAbstract
 			'timezone' =>
 				array(
 					'type' => DevblocksSearchCriteria::TYPE_TEXT,
-					'options' => array('param_key' => SearchFields_CalendarRecurringProfile::TZ, 'match' => DevblocksSearchCriteria::OPTION_TEXT_PARTIAL),
+					'options' => array('param_key' => SearchFields_CalendarRecurringProfile::TZ),
+					'examples' => array(
+						['type' => 'list', 'values' => array_combine($timezones, $timezones), 'label_delimiter' => '/', 'key_delimiter' => '/'],
+					)
 				),
 			'watchers' =>
 				array(
@@ -795,6 +816,10 @@ class View_CalendarRecurringProfile extends C4_AbstractView implements IAbstract
 					'options' => array('param_key' => SearchFields_CalendarRecurringProfile::VIRTUAL_WATCHERS),
 				),
 		);
+		
+		// Add quick search links
+		
+		$fields = self::_appendVirtualFiltersFromQuickSearchContexts('links', $fields, 'links');
 
 		// Add searchable custom fields
 		
@@ -814,32 +839,7 @@ class View_CalendarRecurringProfile extends C4_AbstractView implements IAbstract
 	function getParamFromQuickSearchFieldTokens($field, $tokens) {
 		switch($field) {
 			case 'calendar':
-				$field_key = SearchFields_CalendarRecurringProfile::CALENDAR_ID;
-				$oper = null;
-				$terms = array();
-				
-				if(false == CerbQuickSearchLexer::getOperArrayFromTokens($tokens, $oper, $terms, false))
-					return false;
-				
-				if(empty($terms))
-					return false;
-				
-				$calendars = DAO_Calendar::getAll();
-				$value = array();;
-				
-				if(is_array($terms))
-				foreach($terms as $term) {
-					foreach($calendars as $calendar_id => $calendar) {
-						if(false !== stripos($calendar->name, $term))
-							$values[$calendar_id] = true;
-					}
-				}
-				
-				return new DevblocksSearchCriteria(
-					$field_key,
-					$oper,
-					array_keys($values)
-				);
+				return DevblocksSearchCriteria::getVirtualQuickSearchParamFromTokens($field, $tokens, SearchFields_CalendarRecurringProfile::VIRTUAL_CALENDAR_SEARCH);
 				break;
 				
 			case 'status':
@@ -872,6 +872,9 @@ class View_CalendarRecurringProfile extends C4_AbstractView implements IAbstract
 				break;
 				
 			default:
+				if($field == 'links' || substr($field, 0, 6) == 'links.')
+					return DevblocksSearchCriteria::getContextLinksParamFromTokens($field, $tokens);
+				
 				$search_fields = $this->getQuickSearchFields();
 				return DevblocksSearchCriteria::getParamFromQueryFieldTokens($field, $tokens, $search_fields);
 				break;
@@ -987,6 +990,13 @@ class View_CalendarRecurringProfile extends C4_AbstractView implements IAbstract
 		$translate = DevblocksPlatform::getTranslationService();
 		
 		switch($key) {
+			case SearchFields_CalendarRecurringProfile::VIRTUAL_CALENDAR_SEARCH:
+				echo sprintf("%s matches <b>%s</b>",
+					DevblocksPlatform::strEscapeHtml(DevblocksPlatform::translateCapitalized('common.calendar')),
+					DevblocksPlatform::strEscapeHtml($param->value)
+				);
+				break;
+			
 			case SearchFields_CalendarRecurringProfile::VIRTUAL_CONTEXT_LINK:
 				$this->_renderVirtualContextLinks($param);
 				break;
@@ -1067,6 +1077,14 @@ class View_CalendarRecurringProfile extends C4_AbstractView implements IAbstract
 };
 
 class Context_CalendarRecurringProfile extends Extension_DevblocksContext implements IDevblocksContextProfile, IDevblocksContextPeek { // IDevblocksContextImport
+	static function isReadableByActor($models, $actor) {
+		return CerberusContexts::isReadableByDelegateOwner($actor, CerberusContexts::CONTEXT_CALENDAR_EVENT_RECURRING, $models, 'calendar_owner_');
+	}
+	
+	static function isWriteableByActor($models, $actor) {
+		return CerberusContexts::isWriteableByDelegateOwner($actor, CerberusContexts::CONTEXT_CALENDAR_EVENT_RECURRING, $models, 'calendar_owner_');
+	}
+	
 	function getRandom() {
 		return DAO_CalendarRecurringProfile::random();
 	}
@@ -1244,10 +1262,15 @@ class Context_CalendarRecurringProfile extends Extension_DevblocksContext implem
 		
 		if(!$is_loaded) {
 			$labels = array();
-			CerberusContexts::getContext($context, $context_id, $labels, $values, null, true);
+			CerberusContexts::getContext($context, $context_id, $labels, $values, null, true, true);
 		}
 		
 		switch($token) {
+			case 'links':
+				$links = $this->_lazyLoadLinks($context, $context_id);
+				$values = array_merge($values, $fields);
+				break;
+			
 			case 'watchers':
 				$watchers = array(
 					$token => CerberusContexts::getWatchers($context, $context_id, true),
@@ -1256,7 +1279,7 @@ class Context_CalendarRecurringProfile extends Extension_DevblocksContext implem
 				break;
 				
 			default:
-				if(substr($token,0,7) == 'custom_') {
+				if(DevblocksPlatform::strStartsWith($token, 'custom_')) {
 					$fields = $this->_lazyLoadCustomFields($token, $context, $context_id);
 					$values = array_merge($values, $fields);
 				}
@@ -1301,8 +1324,7 @@ class Context_CalendarRecurringProfile extends Extension_DevblocksContext implem
 		
 		if(!empty($context) && !empty($context_id)) {
 			$params_req = array(
-				new DevblocksSearchCriteria(SearchFields_CalendarRecurringProfile::CONTEXT_LINK,'=',$context),
-				new DevblocksSearchCriteria(SearchFields_CalendarRecurringProfile::CONTEXT_LINK_ID,'=',$context_id),
+				new DevblocksSearchCriteria(SearchFields_CalendarRecurringProfile::VIRTUAL_CONTEXT_LINK,'in',array($context.':'.$context_id)),
 			);
 		}
 		
@@ -1316,95 +1338,95 @@ class Context_CalendarRecurringProfile extends Extension_DevblocksContext implem
 		$tpl = DevblocksPlatform::getTemplateService();
 		$tpl->assign('view_id', $view_id);
 		
-		if(!empty($context_id) && null != ($calendar_recurring_profile = DAO_CalendarRecurringProfile::get($context_id))) {
-			$tpl->assign('model', $calendar_recurring_profile);
-		}
-		
-		$custom_fields = DAO_CustomField::getByContext(CerberusContexts::CONTEXT_CALENDAR_EVENT_RECURRING, false);
-		$tpl->assign('custom_fields', $custom_fields);
+		$context = CerberusContexts::CONTEXT_CALENDAR_EVENT_RECURRING;
 		
 		if(!empty($context_id)) {
-			$custom_field_values = DAO_CustomFieldValue::getValuesByContextIds(CerberusContexts::CONTEXT_CALENDAR_EVENT_RECURRING, $context_id);
+			$model = DAO_CalendarRecurringProfile::get($context_id);
+		}
+		
+		if(empty($context_id) || $edit) {
+			if(!isset($model)) {
+				$model = new Model_CalendarRecurringProfile();
+				$model->is_available = 0;
+				$model->tz = DevblocksPlatform::getTimezone();
+				
+				if(false != ($view = C4_AbstractViewLoader::getView($view_id))) {
+					switch(get_class($view)) {
+						case 'View_CalendarRecurringProfile':
+							$filters = $view->findParam(SearchFields_CalendarRecurringProfile::CALENDAR_ID, $view->getParams());
+							
+							if(!empty($filters)) {
+								$filter = array_shift($filters);
+								if(is_numeric($filter->value))
+									$model->calendar_id = $filter->value;
+							}
+							break;
+					}
+				}
+			}
+			$tpl->assign('model', $model);
+			
+			// Custom fields
+			$custom_fields = DAO_CustomField::getByContext($context, false);
+			$tpl->assign('custom_fields', $custom_fields);
+	
+			$custom_field_values = DAO_CustomFieldValue::getValuesByContextIds($context, $context_id);
 			if(isset($custom_field_values[$context_id]))
 				$tpl->assign('custom_field_values', $custom_field_values[$context_id]);
-		}
-		
-		if(empty($context_id) || is_null($calendar_recurring_profile)) {
-			@$calendar_id = DevblocksPlatform::importGPC($_REQUEST['calendar_id'],'integer');
 			
-			$model = new Model_CalendarRecurringProfile();
-			$model->id = 0;
-			$model->calendar_id = $calendar_id;
-			$model->is_available = 0;
-			$model->tz = DevblocksPlatform::getTimezone();
-			$tpl->assign('model', $model);
-		}
-
-		// Calendars
-		if(empty($context_id)) {
-			$active_worker = CerberusApplication::getActiveWorker();
-			$calendars = DAO_Calendar::getWriteableByActor($active_worker);
-			$tpl->assign('calendars', $calendars);
-		}
-		
-		// Timezones
-		
-		$date = DevblocksPlatform::getDateService();
-		$tpl->assign('timezones', $date->getTimezones());
-		
-		// Template
-		
-		$tpl->display('devblocks:cerberusweb.core::internal/calendar_recurring_profile/peek.tpl');
-	}
-	
-	/*
-	function importGetKeys() {
-		// [TODO] Translate
-	
-		$keys = array(
-			'name' => array(
-				'label' => 'Name',
-				'type' => Model_CustomField::TYPE_SINGLE_LINE,
-				'param' => SearchFields_CalendarRecurringProfile::EVENT_NAME,
-				'required' => true,
-			),
-		);
-		
-		$fields = SearchFields_CalendarRecurringProfile::getFields();
-		self::_getImportCustomFields($fields, $keys);
-	
-		DevblocksPlatform::sortObjects($keys, '[label]', true);
-	
-		return $keys;
-	}
-	
-	function importKeyValue($key, $value) {
-		switch($key) {
-		}
-	
-		return $value;
-	}
-	
-	function importSaveObject(array $fields, array $custom_fields, array $meta) {
-		// If new...
-		if(!isset($meta['object_id']) || empty($meta['object_id'])) {
-			// Make sure we have a name
-			if(!isset($fields[DAO_CalendarRecurringProfile::EVENT_NAME])) {
-				$fields[DAO_CalendarRecurringProfile::EVENT_NAME] = 'New ' . $this->manifest->name;
-			}
-	
-			// Create
-			$meta['object_id'] = DAO_CalendarRecurringProfile::create($fields);
-	
+			$types = Model_CustomField::getTypes();
+			$tpl->assign('types', $types);
+			
+			// Timezones
+			$date = DevblocksPlatform::getDateService();
+			$tpl->assign('timezones', $date->getTimezones());
+			
+			// View
+			$tpl->assign('id', $context_id);
+			$tpl->assign('view_id', $view_id);
+			$tpl->display('devblocks:cerberusweb.core::internal/calendar_recurring_profile/peek_edit.tpl');
+			
 		} else {
-			// Update
-			DAO_CalendarRecurringProfile::update($meta['object_id'], $fields);
-		}
-	
-		// Custom fields
-		if(!empty($custom_fields) && !empty($meta['object_id'])) {
-			DAO_CustomFieldValue::formatAndSetFieldValues($this->manifest->id, $meta['object_id'], $custom_fields, false, true, true); //$is_blank_unset (4th)
+			// Counts
+			$activity_counts = array(
+				'comments' => DAO_Comment::count($context, $context_id),
+			);
+			$tpl->assign('activity_counts', $activity_counts);
+			
+			// Links
+			$links = array(
+				$context => array(
+					$context_id => 
+						DAO_ContextLink::getContextLinkCounts(
+							$context,
+							$context_id,
+							array(CerberusContexts::CONTEXT_CUSTOM_FIELDSET)
+						),
+				),
+			);
+			$tpl->assign('links', $links);
+			
+			// Timeline
+			if($context_id) {
+				$timeline_json = Page_Profiles::getTimelineJson(Extension_DevblocksContext::getTimelineComments($context, $context_id));
+				$tpl->assign('timeline_json', $timeline_json);
+			}
+
+			// Context
+			if(false == ($context_ext = Extension_DevblocksContext::get($context)))
+				return;
+			
+			// Dictionary
+			$labels = array();
+			$values = array();
+			CerberusContexts::getContext($context, $model, $labels, $values, '', true, false);
+			$dict = DevblocksDictionaryDelegate::instance($values);
+			$tpl->assign('dict', $dict);
+			
+			$properties = $context_ext->getCardProperties();
+			$tpl->assign('properties', $properties);
+			
+			$tpl->display('devblocks:cerberusweb.core::internal/calendar_recurring_profile/peek.tpl');
 		}
 	}
-	*/
 };

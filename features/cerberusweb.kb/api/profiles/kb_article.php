@@ -2,17 +2,17 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2017, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
 | The latest version of this license can be found here:
-| http://cerb.io/license
+| http://cerb.ai/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://cerb.io	    http://webgroup.media
+|	http://cerb.ai	    http://webgroup.media
 ***********************************************************************/
 
 class PageSection_ProfilesKbArticle extends Extension_PageSection {
@@ -50,7 +50,7 @@ class PageSection_ProfilesKbArticle extends Extension_PageSection {
 		$properties = array();
 			
 		$properties['updated'] = array(
-			'label' => mb_ucfirst($translate->_('common.updated')),
+			'label' => DevblocksPlatform::translateCapitalized('common.updated'),
 			'type' => Model_CustomField::TYPE_DATE,
 			'value' => $article->updated,
 		);
@@ -90,7 +90,7 @@ class PageSection_ProfilesKbArticle extends Extension_PageSection {
 					DAO_ContextLink::getContextLinkCounts(
 						CerberusContexts::CONTEXT_KB_ARTICLE,
 						$article->id,
-						array(CerberusContexts::CONTEXT_WORKER, CerberusContexts::CONTEXT_CUSTOM_FIELDSET)
+						array(CerberusContexts::CONTEXT_CUSTOM_FIELDSET)
 					),
 			),
 		);
@@ -113,37 +113,20 @@ class PageSection_ProfilesKbArticle extends Extension_PageSection {
 		$tab_manifests = Extension_ContextProfileTab::getExtensions(false, CerberusContexts::CONTEXT_KB_ARTICLE);
 		$tpl->assign('tab_manifests', $tab_manifests);
 		
-		// Attachments
-		
-		$attachments_map = DAO_AttachmentLink::getLinksAndAttachments(CerberusContexts::CONTEXT_KB_ARTICLE, $article->id);
-		
-		$internal_urls = $article->extractInternalURLsFromContent();
-		
-		// Filter out inline URLs
-		
-		foreach($internal_urls as $internal_url => $internal_url_parts) {
-			@list($attachment_sha1hash, $attachment_name) = explode('/', $internal_url_parts['path'], 2);
-			
-			if(40 == strlen($attachment_sha1hash)) {
-				foreach($attachments_map['attachments'] as $attachment_id => $attachment_model) {
-					if($attachment_model->storage_sha1hash == $attachment_sha1hash) {
-						unset($attachments_map['attachments'][$attachment_id]);
-					}
-				}
-			}
-		}
-		
-		// Filter out attachment links with no content
-		 
-		foreach($attachments_map['links'] as $attachment_guid => $attachment_link) {
-			if(!isset($attachments_map['attachments'][$attachment_link->attachment_id]))
-				unset($attachments_map['links'][$attachment_guid]);
-		}
-		
-		$tpl->assign('attachments_map', $attachments_map);
-
 		// Template
 		$tpl->display('devblocks:cerberusweb.kb::kb/profile.tpl');
+	}
+	
+	function showArticleTabAction() {
+		@$id = DevblocksPlatform::importGPC($_REQUEST['context_id'], 'integer', 0);
+		
+		if(!$id || false == ($article = DAO_KbArticle::get($id)))
+			return;
+		
+		$tpl = DevblocksPlatform::getTemplateService();
+		$tpl->assign('article', $article);
+		
+		$tpl->display('devblocks:cerberusweb.kb::kb/ajax/tab_article.tpl');
 	}
 	
 	function showBulkPopupAction() {
@@ -255,5 +238,25 @@ class PageSection_ProfilesKbArticle extends Extension_PageSection {
 		));
 		
 		return;
-	}	
+	}
+	
+	function getEditorHtmlPreviewAction() {
+		@$data = DevblocksPlatform::importGPC($_REQUEST['data'], 'string', '');
+
+		$model = new Model_KbArticle();
+		$model->content = $data;
+		$model->format = Model_KbArticle::FORMAT_HTML;
+		
+		echo $model->getContent();
+	}
+	
+	function getEditorParsedownPreviewAction() {
+		@$data = DevblocksPlatform::importGPC($_REQUEST['data'], 'string', '');
+		
+		$model = new Model_KbArticle();
+		$model->content = $data;
+		$model->format = Model_KbArticle::FORMAT_MARKDOWN;
+		
+		echo $model->getContent();
+	}
 };

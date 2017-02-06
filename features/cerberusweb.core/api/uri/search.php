@@ -2,17 +2,17 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2017, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
 | The latest version of this license can be found here:
-| http://cerb.io/license
+| http://cerb.ai/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://cerb.io	    http://webgroup.media
+|	http://cerb.ai	    http://webgroup.media
 ***********************************************************************/
 
 class Page_Search extends CerberusPageExtension {
@@ -52,11 +52,10 @@ class Page_Search extends CerberusPageExtension {
 			return;
 		
 		if(null == ($context_ext = Extension_DevblocksContext::getByAlias($context_extid, true))) { /* @var $context_ext Extension_DevblocksContext */
-			if(null == ($context_ext = Extension_DevblocksContext::get($context_extid)))
-				return;
+			return;
 		}
 		
-		if(!isset($context_ext->manifest->params['options'][0]['workspace']))
+		if(!$context_ext->hasOption('search') && !$context_ext->hasOption('workspace'))
 			return;
 		
 		$tpl->assign('context_ext', $context_ext);
@@ -97,9 +96,7 @@ class Page_Search extends CerberusPageExtension {
 			return;
 		
 		// Verify that this context is publicly searchable
-		@$context_options = $context_ext->manifest->params['options'][0];
-		
-		if(!is_array($context_options) || !isset($context_options['workspace']))
+		if(!$context_ext->hasOption('workspace'))
 			return;
 		
 		if(false == ($view = $context_ext->getSearchView()) || !($view instanceof IAbstractView_QuickSearch))
@@ -140,57 +137,6 @@ class Page_Search extends CerberusPageExtension {
 		
 		$tpl = DevblocksPlatform::getTemplateService();
 		$tpl->assign('view', $view);
-		
-		// Add search meta output to the view marquee
-		
-		if(false != ($context_ext = Extension_DevblocksContext::getByViewClass(get_class($view), true))) {
-			$params = $view->getParams();
-			$marquees = array();
-			
-			$search_class = $context_ext->getSearchClass();
-			
-			array_walk_recursive($params, function($param) use (&$marquees, $search_class) {
-				if(!($param instanceof DevblocksSearchCriteria))
-					return;
-				
-				if($param->operator == DevblocksSearchCriteria::OPER_FULLTEXT && isset($param->value[0])) {
-					$search_class::getWhereSQL($param);
-					
-					$key = 'search_' . sha1($param->value[0]);
-					if(false != ($meta = DevblocksPlatform::getRegistryKey($key, DevblocksRegistryEntry::TYPE_JSON)) 
-							&& is_array($meta)
-							&& isset($meta['total'])
-							&& isset($meta['results'])
-							&& isset($meta['took_ms'])
-							&& isset($meta['engine'])
-							) {
-								
-							if($meta['results'] < $meta['total']) {
-								$marquees[] = sprintf("Found %s match%s for <b>%s</b>. Using %s. Try being more specific. [%s: %d ms]",
-									number_format($meta['total']),
-									(1 == $meta['results']) ? '' : 'es',
-									DevblocksPlatform::strEscapeHtml($meta['query']),
-									number_format($meta['results']),
-									$meta['engine'],
-									$meta['took_ms']
-								);
-							} else {
-								$marquees[] = sprintf("Found %s match%s for <b>%s</b> [%s: %d ms]",
-									number_format($meta['results']),
-									(1 == $meta['results']) ? '' : 'es',
-									DevblocksPlatform::strEscapeHtml($meta['query']),
-									$meta['engine'],
-									$meta['took_ms']
-								);
-							}
-					}
-				}
-			});
-				
-			if(!empty($marquees)) {
-				C4_AbstractView::setMarquee($view->id, implode('<br>', $marquees));
-			}
-		}
 		
 		$html = $tpl->fetch('devblocks:cerberusweb.core::internal/views/customize_view_criteria.tpl');
 		

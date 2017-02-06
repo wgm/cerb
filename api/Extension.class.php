@@ -2,17 +2,17 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2017, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
 | The latest version of this license can be found here:
-| http://cerb.io/license
+| http://cerb.ai/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://cerb.io	    http://webgroup.media
+|	http://cerb.ai	    http://webgroup.media
 ***********************************************************************/
 /*
  * IMPORTANT LICENSING NOTE from your friends at Cerb
@@ -60,7 +60,7 @@ abstract class Extension_PluginSetup extends DevblocksExtension {
 		$results = array();
 
 		// Include disabled extensions
-		$all_extensions = DevblocksPlatform::getExtensionRegistry(true, true, true);
+		$all_extensions = DevblocksPlatform::getExtensionRegistry(true, true);
 		foreach($all_extensions as $k => $ext) { /* @var $ext DevblocksExtensionManifest */
 			if($ext->plugin_id == $plugin_id && $ext->point == Extension_PluginSetup::POINT)
 				$results[$k] = ($as_instances) ? $ext->createInstance() : $ext;
@@ -786,4 +786,61 @@ abstract class Extension_UsermeetTool extends DevblocksExtension implements Devb
 	public function saveConfiguration(Model_CommunityTool $instance) {
 	}
 	
+};
+
+abstract class Extension_ServiceProvider extends DevblocksExtension {
+	const POINT = 'cerb.service.provider';
+	
+	static $_registry = array();
+	
+	/**
+	 * @return DevblocksExtensionManifest[]|Extension_ServiceProvider[]
+	 */
+	static function getAll($as_instances=true) {
+		$exts = DevblocksPlatform::getExtensions(self::POINT, $as_instances);
+
+		// Sorting
+		if($as_instances)
+			DevblocksPlatform::sortObjects($exts, 'manifest->name');
+		else
+			DevblocksPlatform::sortObjects($exts, 'name');
+		
+		return $exts;
+	}
+
+	static function get($extension_id) {
+		if(isset(self::$_registry[$extension_id]))
+			return self::$_registry[$extension_id];
+		
+		if(null != ($extension = DevblocksPlatform::getExtension($extension_id, true))
+			&& $extension instanceof Extension_ServiceProvider) {
+
+			self::$_registry[$extension->id] = $extension;
+			return $extension;
+		}
+		
+		return null;
+	}
+	
+	protected function _renderPopupAuthForm() {
+		if(!($this instanceof IServiceProvider_Popup))
+			return false;
+		
+		$tpl = DevblocksPlatform::getTemplateService();
+		$session = DevblocksPlatform::getSessionService();
+		$settings = DevblocksPlatform::getPluginSettingsService();
+		$active_worker = CerberusApplication::getActiveWorker();
+
+		$visit = $session->getVisit();
+		
+		$tpl->assign('ext', $this);
+		$tpl->assign('active_worker', $active_worker);
+		$tpl->assign('settings', $settings);
+		$tpl->assign('session', $_SESSION);
+		$tpl->assign('visit', $visit);
+		
+		$tpl->display('devblocks:cerberusweb.core::internal/connected_account/popup_shell.tpl');
+	}
+	
+	abstract function renderPopup();
 };

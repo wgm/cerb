@@ -20,11 +20,12 @@
 			</span>
 		</td>
 		<td valign="top" align="right">
-			<a href="http://www.cerberusweb.com/" target="_blank"><img src="{devblocks_url}c=resource&p=cerberusweb.core&f=images/wgm/powered_by_cerb.png{/devblocks_url}?v={$smarty.const.APP_BUILD}" border="0"></a>
+			<a href="https://cerb.ai/" target="_blank"><img src="{devblocks_url}c=resource&p=cerberusweb.core&f=images/wgm/powered_by_cerb.png{/devblocks_url}?v={$smarty.const.APP_BUILD}" border="0"></a>
 		</td>
 	</tr>
 </table>
 <br>
 
+{if $active_worker && !empty($conversational_bots)}{include file="devblocks:cerberusweb.core::console/bot_notification.tpl"}{/if}
 </body>
 </html>

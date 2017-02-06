@@ -1,5 +1,6 @@
 {$page_context = CerberusContexts::CONTEXT_CALENDAR}
 {$page_context_id = $calendar->id}
+{$is_writeable = Context_Calendar::isWriteableByActor($calendar, $active_worker)}
 
 <div style="float:left">
 	<h1>{$calendar->name}</h1>
@@ -28,7 +29,9 @@
 		{include file="devblocks:cerberusweb.core::internal/macros/display/button.tpl" context=$page_context context_id=$page_context_id macros=$macros return_url=$return_url}
 		
 		<!-- Edit -->
+		{if $is_writeable}
 		<button type="button" id="btnDisplayCalendarEdit" class="cerb-peek-trigger" data-context="{CerberusContexts::CONTEXT_CALENDAR}" data-context-id="{$page_context_id}" data-edit="true" title="{'common.edit'|devblocks_translate|capitalize}"><span class="glyphicons glyphicons-cogwheel"></span></button>
+		{/if}
 	</form>
 	
 	{if $pref_keyboard_shortcuts}
@@ -45,20 +48,25 @@
 	<legend>{'Calendar'|devblocks_translate|capitalize}</legend>
 
 	<div style="margin-left:15px;">
-	{foreach from=$properties item=v key=k name=props}
-		<div class="property">
-			{if $k == '...'}
-				<b>{'...'|devblocks_translate|capitalize}:</b>
-				...
-			{else}
-				{include file="devblocks:cerberusweb.core::internal/custom_fields/profile_cell_renderer.tpl"}
+		{foreach from=$properties item=v key=k name=props}
+			<div class="property">
+				{if $k == '...'}
+					<b>{'...'|devblocks_translate|capitalize}:</b>
+					...
+				{else}
+					{include file="devblocks:cerberusweb.core::internal/custom_fields/profile_cell_renderer.tpl"}
+				{/if}
+			</div>
+			{if $smarty.foreach.props.iteration % 3 == 0 && !$smarty.foreach.props.last}
+				<br clear="all">
 			{/if}
+		{/foreach}
+		<br clear="all">
+	
+		<div style="margin-top:5px;">
+			<button type="button" class="cerb-search-trigger" data-context="{CerberusContexts::CONTEXT_CALENDAR_EVENT}" data-query="calendar.id:{$page_context_id}"><div class="badge-count">{$counts.events|default:0}</div> {'common.events'|devblocks_translate|capitalize}</button>
+			<button type="button" class="cerb-search-trigger" data-context="{CerberusContexts::CONTEXT_CALENDAR_EVENT_RECURRING}" data-query="calendar.id:{$page_context_id}"><div class="badge-count">{$counts.events_recurring|default:0}</div> {'common.events.recurring'|devblocks_translate|capitalize}</button>
 		</div>
-		{if $smarty.foreach.props.iteration % 3 == 0 && !$smarty.foreach.props.last}
-			<br clear="all">
-		{/if}
-	{/foreach}
-	<br clear="all">
 	</div>
 </fieldset>
 
@@ -76,12 +84,11 @@
 
 <div id="profileCalendarTabs">
 	<ul>
-		{$tabs = [calendar,activity,comments,links]}
+		{$tabs = [calendar,activity,comments]}
 
 		<li><a href="{devblocks_url}ajax.php?c=internal&a=handleSectionAction&section=calendars&action=showCalendarTab&point={$point}&id={$page_context_id}{/devblocks_url}">Calendar</a></li>
-		<li><a href="{devblocks_url}ajax.php?c=internal&a=showTabActivityLog&scope=target&point={$point}&context={$page_context}&context_id={$page_context_id}{/devblocks_url}">{'common.activity_log'|devblocks_translate|capitalize}</a></li>
+		<li><a href="{devblocks_url}ajax.php?c=internal&a=showTabActivityLog&scope=target&point={$point}&context={$page_context}&context_id={$page_context_id}{/devblocks_url}">{'common.log'|devblocks_translate|capitalize}</a></li>
 		<li><a href="{devblocks_url}ajax.php?c=internal&a=showTabContextComments&point={$point}&context={$page_context}&id={$page_context_id}{/devblocks_url}">{'common.comments'|devblocks_translate|capitalize} <div class="tab-badge">{DAO_Comment::count($page_context, $page_context_id)|default:0}</div></a></li>
-		<li><a href="{devblocks_url}ajax.php?c=internal&a=showTabContextLinks&point={$point}&context={$page_context}&id={$page_context_id}{/devblocks_url}">{'common.links'|devblocks_translate} <div class="tab-badge">{DAO_ContextLink::count($page_context, $page_context_id)|default:0}</div></a></li>
 
 		{foreach from=$tab_manifests item=tab_manifest}
 			{$tabs[] = $tab_manifest->params.uri}
@@ -99,7 +106,7 @@
 		var tabs = $("#profileCalendarTabs").tabs(tabOptions);
 		
 		// Edit
-		
+		{if $is_writeable}
 		$('#btnDisplayCalendarEdit')
 			.cerbPeekTrigger()
 			.on('cerb-peek-opened', function(e) {
@@ -110,11 +117,11 @@
 			})
 			.on('cerb-peek-deleted', function(e) {
 				document.location.href = '{devblocks_url}{/devblocks_url}';
-				
 			})
 			.on('cerb-peek-closed', function(e) {
 			})
 			;
+		{/if}
 		
 		{include file="devblocks:cerberusweb.core::internal/macros/display/menu_script.tpl" selector_button=null selector_menu=null}
 	});

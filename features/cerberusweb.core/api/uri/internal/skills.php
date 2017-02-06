@@ -2,17 +2,17 @@
 /***********************************************************************
  | Cerb(tm) developed by Webgroup Media, LLC.
  |-----------------------------------------------------------------------
- | All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
+ | All source code & content (c) Copyright 2002-2017, Webgroup Media LLC
  |   unless specifically noted otherwise.
  |
  | This source code is released under the Devblocks Public License.
  | The latest version of this license can be found here:
- | http://cerb.io/license
+ | http://cerb.ai/license
  |
  | By using this software, you acknowledge having read this license
  | and agree to be bound thereby.
  | ______________________________________________________________________
- |	http://cerb.io	    http://webgroup.media
+ |	http://cerb.ai	    http://webgroup.media
  ***********************************************************************/
 
 if(class_exists('Extension_PageSection')):
@@ -80,10 +80,7 @@ class PageSection_InternalSkills extends Extension_PageSection {
 		
 		// Check permissions on active worker
 		
-		if(false == ($context_ext = Extension_DevblocksContext::get(CerberusContexts::CONTEXT_TICKET)))
-			return;
-		
-		if(!$context_ext->authorize($context_id, $active_worker))
+		if(!CerberusContexts::isWriteableByActor($context, $context_id, $active_worker))
 			return;
 		
 		$db = DevblocksPlatform::getDatabaseService();

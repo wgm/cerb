@@ -2,17 +2,17 @@
 /***********************************************************************
  | Cerb(tm) developed by Webgroup Media, LLC.
  |-----------------------------------------------------------------------
- | All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
+ | All source code & content (c) Copyright 2002-2017, Webgroup Media LLC
  |   unless specifically noted otherwise.
  |
  | This source code is released under the Devblocks Public License.
  | The latest version of this license can be found here:
- | http://cerb.io/license
+ | http://cerb.ai/license
  |
  | By using this software, you acknowledge having read this license
  | and agree to be bound thereby.
  | ______________________________________________________________________
- |	http://cerb.io	    http://webgroup.media
+ |	http://cerb.ai	    http://webgroup.media
  ***********************************************************************/
 
 class DAO_CustomField extends Cerb_ORMHelper {
@@ -579,7 +579,7 @@ class DAO_CustomFieldValue extends Cerb_ORMHelper {
 		switch($field->type) {
 			case Model_CustomField::TYPE_FILE:
 			case Model_CustomField::TYPE_FILES:
-				DAO_AttachmentLink::addLinks(CerberusContexts::CONTEXT_CUSTOM_FIELD, $field_id, $value);
+				DAO_Attachment::setLinks(CerberusContexts::CONTEXT_CUSTOM_FIELD, $field_id, $value);
 				break;
 		}
 		
@@ -619,9 +619,10 @@ class DAO_CustomFieldValue extends Cerb_ORMHelper {
 		switch($field->type) {
 			case Model_CustomField::TYPE_FILE:
 			case Model_CustomField::TYPE_FILES:
-				$sql = sprintf("DELETE FROM attachment_link WHERE context = %s and context_id = %d AND attachment_id NOT IN (SELECT field_value FROM custom_field_numbervalue WHERE field_id = %d)",
+				$sql = sprintf("DELETE FROM context_link WHERE from_context = %s and from_context_id = %d AND to_context = %s AND to_context_id NOT IN (SELECT field_value FROM custom_field_numbervalue WHERE field_id = %d)",
 					$db->qstr(CerberusContexts::CONTEXT_CUSTOM_FIELD),
 					$field_id,
+					$db->qstr(CerberusContexts::CONTEXT_ATTACHMENT),
 					$field_id
 				);
 				$db->ExecuteMaster($sql);
@@ -997,25 +998,44 @@ class Model_CustomField {
 	
 	static function hasMultipleValues($type) {
 		$multiple_types = array(Model_CustomField::TYPE_MULTI_CHECKBOX, Model_CustomField::TYPE_FILES);
-		return in_array($type, $multiple_types);					
+		return in_array($type, $multiple_types);
 	}
 };
 
 class Context_CustomField extends Extension_DevblocksContext {
-	function authorize($context_id, Model_Worker $worker) {
-		// Security
-		try {
-			if(empty($worker))
-				throw new Exception();
+	static function isReadableByActor($models, $actor) {
+		// Everyone can read
+		return CerberusContexts::allowEverything($models);
+	}
+	
+	static function isWriteableByActor($models, $actor) {
+		// Admins can modify
+		
+		if(false == ($actor = CerberusContexts::polymorphActorToDictionary($actor)))
+			CerberusContexts::denyEverything($models);
+		
+		if(CerberusContexts::isActorAnAdmin($actor))
+			return CerberusContexts::allowEverything($models);
+		
+		if(false == ($dicts = CerberusContexts::polymorphModelsToDictionaries($models, CerberusContexts::CONTEXT_GROUP)))
+			return CerberusContexts::denyEverything($models);
+		
+		$results = array_fill_keys(array_keys($dicts), false);
+		
+		foreach($dicts as $id => $dict) {
+			// If not in a fieldset, skip
+			if(!$dict->custom_fieldset_id)
+				continue;
 			
-			if($worker->is_superuser)
-				return TRUE;
-				
-		} catch (Exception $e) {
-			// Fail
+			// If in a fieldset, owner delegate can modify
+			$results[$id] = CerberusContexts::isWriteableByDelegateOwner($actor, CerberusContexts::CONTEXT_CUSTOM_FIELD, $dict, 'custom_fieldset_owner_');
 		}
 		
-		return FALSE;
+		if(is_array($models)) {
+			return $results;
+		} else {
+			return array_shift($results);
+		}
 	}
 	
 	function getRandom() {
@@ -1087,6 +1107,20 @@ class Context_CustomField extends Extension_DevblocksContext {
 				$token_values['params'] = $cfield->params;
 		}
 		
+		// Custom fieldset
+		$merge_token_labels = array();
+		$merge_token_values = array();
+		CerberusContexts::getContext(CerberusContexts::CONTEXT_CUSTOM_FIELDSET, null, $merge_token_labels, $merge_token_values, '', true);
+
+		CerberusContexts::merge(
+			'custom_fieldset_',
+			$prefix.'Fieldset:',
+			$merge_token_labels,
+			$merge_token_values,
+			$token_labels,
+			$token_values
+		);
+		
 		return true;
 	}
 
@@ -1102,12 +1136,17 @@ class Context_CustomField extends Extension_DevblocksContext {
 		
 		if(!$is_loaded) {
 			$labels = array();
-			CerberusContexts::getContext($context, $context_id, $labels, $values, null, true);
+			CerberusContexts::getContext($context, $context_id, $labels, $values, null, true, true);
 		}
 		
 		switch($token) {
+			case 'links':
+				$links = $this->_lazyLoadLinks($context, $context_id);
+				$values = array_merge($values, $fields);
+				break;
+			
 			default:
-				if(substr($token,0,7) == 'custom_') {
+				if(DevblocksPlatform::strStartsWith($token, 'custom_')) {
 					$fields = $this->_lazyLoadCustomFields($token, $context, $context_id);
 					$values = array_merge($values, $fields);
 				}

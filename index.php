@@ -2,17 +2,17 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2017, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
 | The latest version of this license can be found here:
-| http://cerb.io/license
+| http://cerb.ai/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://cerb.io	    http://webgroup.media
+|	http://cerb.ai	    http://webgroup.media
 ***********************************************************************/
 /*
  * IMPORTANT LICENSING NOTE from your friends at Cerb
@@ -40,9 +40,9 @@
  *	 Founders at Webgroup Media LLC; Developers of Cerb
  */
 
-if(version_compare(PHP_VERSION, "5.3", "<")) {
+if(version_compare(PHP_VERSION, "5.5", "<")) {
 	header('Status: 500');
-	die("Cerb requires PHP 5.3 or later.");
+	die("Cerb requires PHP 5.5 or later.");
 }
 
 if(!extension_loaded('mysqli')) {
@@ -67,7 +67,6 @@ if('' == APP_DB_HOST
 require(APP_PATH . '/api/Application.class.php');
 
 DevblocksPlatform::init();
-DevblocksPlatform::setExtensionDelegate('Cerb_DevblocksExtensionDelegate');
 DevblocksPlatform::setHandlerSession('Cerb_DevblocksSessionHandler');
 
 $request = DevblocksPlatform::readRequest();

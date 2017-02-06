@@ -69,7 +69,7 @@
 					{$headers = $message->getHeaders()}
 					<button name="saveDraft" type="button"><span class="glyphicons glyphicons-circle-ok"></span> Save Draft</button>
 					
-					{* Virtual Attendants *}
+					{* Bots *}
 					{if !empty($macros)}
 					<button type="button" title="(Ctrl+Shift+B)" class="split-left" onclick="$(this).next('button').click();"><img src="{devblocks_url}c=avatars&context=app&id=0{/devblocks_url}" style="width:22px;height:22px;margin:-3px 0px 0px 2px;"></button><!--  
 					--><button type="button" title="(Ctrl+Shift+B)" class="split-right" id="btnReplyMacros{$message->id}"><span class="glyphicons glyphicons-chevron-down" style="font-size:12px;color:white;"></span></button>
@@ -78,12 +78,12 @@
 							<input type="text" size="32" class="input_search filter">
 						</li>
 						
-						{$vas = DAO_VirtualAttendant::getAll()}
+						{$vas = DAO_Bot::getAll()}
 						
 						{foreach from=$vas item=va}
 							{capture name=behaviors}
 							{foreach from=$macros item=macro key=macro_id}
-							{if $macro->virtual_attendant_id == $va->id}
+							{if $macro->bot_id == $va->id}
 							<li class="item item-behavior">
 								<div style="margin-left:10px;">
 									{if $macro->has_public_vars}
@@ -133,7 +133,7 @@
 						Insert: 
 						<input type="text" size="25" class="context-snippet autocomplete" {if $pref_keyboard_shortcuts}placeholder="(Ctrl+Shift+I)"{/if}>
 						<button type="button" onclick="ajax.chooserSnippet('chooser{$message->id}',$('#reply_{$message->id}'), { '{CerberusContexts::CONTEXT_TICKET}':'{$ticket->id}', '{CerberusContexts::CONTEXT_WORKER}':'{$active_worker->id}' });"><span class="glyphicons glyphicons-search"></span></button>
-						<button type="button" onclick="var txt = encodeURIComponent($('#reply_{$message->id}').selection('get')); genericAjaxPopup('peek','c=internal&a=showSnippetsPeek&id=0&owner_context={CerberusContexts::CONTEXT_WORKER}&owner_context_id={$active_worker->id}&context={CerberusContexts::CONTEXT_TICKET}&context_id={$ticket->id}&text=' + txt,null,false,'50%');"><span class="glyphicons glyphicons-circle-plus"></span></button>
+						<button type="button" onclick="var txt = encodeURIComponent($('#reply_{$message->id}').selection('get')); genericAjaxPopup('peek','c=internal&a=showPeekPopup&context={CerberusContexts::CONTEXT_SNIPPET}&context_id=0&edit=1&text=' + txt,null,false,'50%');"><span class="glyphicons glyphicons-circle-plus"></span></button>
 					</div>
 				</fieldset>
 			</div>
@@ -229,12 +229,12 @@
 					{foreach from=$draft->params.file_ids item=file_id}
 						{$file = DAO_Attachment::get($file_id)}
 						{if !empty($file)}
-						<li><input type="hidden" name="file_ids[]" value="{$file_id}">{$file->display_name} ({$file->storage_size} bytes) <a href="javascript:;" onclick="$(this).parent().remove();"><span class="glyphicons glyphicons-circle-remove"></span></a></li>
+						<li><input type="hidden" name="file_ids[]" value="{$file_id}">{$file->name} ({$file->storage_size} bytes) <a href="javascript:;" onclick="$(this).parent().remove();"><span class="glyphicons glyphicons-circle-remove"></span></a></li>
 						{/if} 
 					{/foreach}
 				{elseif $is_forward && !empty($forward_attachments)}
 					{foreach from=$forward_attachments item=attach}
-						<li><input type="hidden" name="file_ids[]" value="{$attach->id}">{$attach->display_name} ({$attach->storage_size} bytes) <a href="javascript:;" onclick="$(this).parent().remove();"><span class="glyphicons glyphicons-circle-remove"></span></a></li>
+						<li><input type="hidden" name="file_ids[]" value="{$attach->id}">{$attach->name} ({$attach->storage_size} bytes) <a href="javascript:;" onclick="$(this).parent().remove();"><span class="glyphicons glyphicons-circle-remove"></span></a></li>
 					{/foreach}
 				{/if}
 				</ul>
@@ -300,7 +300,7 @@
 							{/if}
 							
 							<b>{'display.reply.next.owner'|devblocks_translate}</b><br>
-							<button type="button" class="chooser-abstract" data-field-name="owner_id" data-context="{CerberusContexts::CONTEXT_WORKER}" data-single="true" data-query="isDisabled:n" data-autocomplete="if-null"><span class="glyphicons glyphicons-search"></span></button>
+							<button type="button" class="chooser-abstract" data-field-name="owner_id" data-context="{CerberusContexts::CONTEXT_WORKER}" data-single="true" data-query="isDisabled:n" data-autocomplete="" data-autocomplete-if-empty="true"><span class="glyphicons glyphicons-search"></span></button>
 							<ul class="bubbles chooser-container">
 									{if $draft && $draft->params.owner_id}
 										{$owner = $workers.{$draft->params.owner_id}}

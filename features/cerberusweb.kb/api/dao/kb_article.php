@@ -2,17 +2,17 @@
 /***********************************************************************
  | Cerb(tm) developed by Webgroup Media, LLC.
  |-----------------------------------------------------------------------
- | All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
+ | All source code & content (c) Copyright 2002-2017, Webgroup Media LLC
  |   unless specifically noted otherwise.
  |
  | This source code is released under the Devblocks Public License.
  | The latest version of this license can be found here:
- | http://cerb.io/license
+ | http://cerb.ai/license
  |
  | By using this software, you acknowledge having read this license
  | and agree to be bound thereby.
  | ______________________________________________________________________
- |	http://cerb.io	    http://webgroup.media
+ |	http://cerb.ai	    http://webgroup.media
  ***********************************************************************/
 
 class DAO_KbArticle extends Cerb_ORMHelper {
@@ -379,10 +379,6 @@ class DAO_KbArticle extends Cerb_ORMHelper {
 			$join_sql .= "LEFT JOIN kb_article_to_category katc ON (kb.id=katc.kb_article_id) ";
 		}
 		
-		// [JAS]: Dynamic table joins
-		if(isset($tables['context_link']))
-			$join_sql .= "INNER JOIN context_link ON (context_link.to_context = 'cerberusweb.contexts.kb_article' AND context_link.to_context_id = kb.id) ";
-		
 		$where_sql = "".
 			(!empty($wheres) ? sprintf("WHERE %s ",implode(' AND ',$wheres)) : "WHERE 1 ");
 			
@@ -394,7 +390,6 @@ class DAO_KbArticle extends Cerb_ORMHelper {
 			'join_sql' => &$join_sql,
 			'where_sql' => &$where_sql,
 			'tables' => &$tables,
-			'has_multiple_values' => &$has_multiple_values
 		);
 		
 		array_walk_recursive(
@@ -408,7 +403,6 @@ class DAO_KbArticle extends Cerb_ORMHelper {
 			'select' => $select_sql,
 			'join' => $join_sql,
 			'where' => $where_sql,
-			'has_multiple_values' => true,
 			'sort' => $sort_sql,
 		);
 		
@@ -426,10 +420,6 @@ class DAO_KbArticle extends Cerb_ORMHelper {
 		settype($param_key, 'string');
 		
 		switch($param_key) {
-			case SearchFields_KbArticle::VIRTUAL_CONTEXT_LINK:
-				self::_searchComponentsVirtualContextLinks($param, $from_context, $from_index, $args['join_sql'], $args['where_sql']);
-				break;
-			
 			case SearchFields_KbArticle::VIRTUAL_HAS_FIELDSET:
 				self::_searchComponentsVirtualHasFieldset($param, $from_context, $from_index, $args['join_sql'], $args['where_sql']);
 				break;
@@ -445,14 +435,12 @@ class DAO_KbArticle extends Cerb_ORMHelper {
 		$select_sql = $query_parts['select'];
 		$join_sql = $query_parts['join'];
 		$where_sql = $query_parts['where'];
-		$has_multiple_values = $query_parts['has_multiple_values'];
 		$sort_sql = $query_parts['sort'];
 		
 		$sql =
 			$select_sql.
 			$join_sql.
 			$where_sql.
-			($has_multiple_values ? 'GROUP BY kb.id ' : '').
 			$sort_sql;
 		
 		if(false == ($rs = $db->SelectLimit($sql,$limit,$page*$limit)))
@@ -474,7 +462,7 @@ class DAO_KbArticle extends Cerb_ORMHelper {
 			// We can skip counting if we have a less-than-full single page
 			if(!(0 == $page && $total < $limit)) {
 				$count_sql =
-					($has_multiple_values ? "SELECT COUNT(DISTINCT kb.id) " : "SELECT COUNT(kb.id) ").
+					"SELECT COUNT(kb.id) ".
 					$join_sql.
 					$where_sql;
 				$total = $db->GetOneSlave($count_sql);
@@ -505,9 +493,6 @@ class SearchFields_KbArticle extends DevblocksSearchFields {
 	const VIRTUAL_HAS_FIELDSET = '*_has_fieldset';
 	const VIRTUAL_WATCHERS = '*_workers';
 	
-	const CONTEXT_LINK = 'cl_context_from';
-	const CONTEXT_LINK_ID = 'cl_context_from_id';
-	
 	static private $_fields = null;
 	
 	static function getPrimaryKey() {
@@ -525,6 +510,10 @@ class SearchFields_KbArticle extends DevblocksSearchFields {
 		switch($param->field) {
 			case self::FULLTEXT_ARTICLE_CONTENT:
 				return self::_getWhereSQLFromFulltextField($param, Search_KbArticle::ID, self::getPrimaryKey());
+				break;
+				
+			case self::VIRTUAL_CONTEXT_LINK:
+				return self::_getWhereSQLFromContextLinksField($param, CerberusContexts::CONTEXT_KB_ARTICLE, self::getPrimaryKey());
 				break;
 				
 			case self::VIRTUAL_WATCHERS:
@@ -572,9 +561,6 @@ class SearchFields_KbArticle extends DevblocksSearchFields {
 			self::VIRTUAL_HAS_FIELDSET => new DevblocksSearchField(self::VIRTUAL_HAS_FIELDSET, '*', 'has_fieldset', $translate->_('common.fieldset'), null, false),
 			self::VIRTUAL_WATCHERS => new DevblocksSearchField(self::VIRTUAL_WATCHERS, '*', 'workers', $translate->_('common.watchers'), 'WS', false),
 			
-			self::CONTEXT_LINK => new DevblocksSearchField(self::CONTEXT_LINK, 'context_link', 'from_context', null, null, false),
-			self::CONTEXT_LINK_ID => new DevblocksSearchField(self::CONTEXT_LINK_ID, 'context_link', 'from_context_id', null, null, false),
-				
 			self::FULLTEXT_ARTICLE_CONTENT => new DevblocksSearchField(self::FULLTEXT_ARTICLE_CONTENT, 'ftkb', 'content', $translate->_('kb_article.content'), 'FT', false),
 		);
 		
@@ -737,13 +723,17 @@ class Model_KbArticle {
 		
 		switch($this->format) {
 			case self::FORMAT_HTML:
-				$html = $this->content;
+				$tpl_builder = DevblocksPlatform::getTemplateBuilder();
+				$html = $tpl_builder->build($this->content, array());
 				break;
+				
 			case self::FORMAT_PLAINTEXT:
 				$html = nl2br(DevblocksPlatform::strEscapeHtml($this->content));
 				break;
+				
 			case self::FORMAT_MARKDOWN:
-				$html = DevblocksPlatform::parseMarkdown($this->content);
+				$tpl_builder = DevblocksPlatform::getTemplateBuilder();
+				$html = DevblocksPlatform::parseMarkdown($tpl_builder->build($this->content, array()));
 				break;
 		}
 		
@@ -800,39 +790,17 @@ class Model_KbArticle {
 		
 		return $breadcrumbs;
 	}
-	
-	function extractInternalURLsFromContent() {
-		$url_writer = DevblocksPlatform::getUrlService();
-		$img_baseurl = $url_writer->write('c=files', true, false);
-		$img_baseurl_parts = parse_url($img_baseurl);
-		
-		$results = array();
-		
-		// Extract URLs
-		$matches = array();
-			preg_match_all(
-				sprintf('#\"(https*://%s%s/(.*?))\"#i',
-				preg_quote($img_baseurl_parts['host']),
-				preg_quote($img_baseurl_parts['path'])
-			),
-			$this->content,
-			$matches
-		);
-
-		if(isset($matches[1]))
-		foreach($matches[1] as $idx => $replace_url) {
-			$results[$replace_url] = array(
-				'path' => $matches[2][$idx],
-			);
-		}
-		
-		return $results;
-	}
 };
 
 class Context_KbArticle extends Extension_DevblocksContext implements IDevblocksContextProfile, IDevblocksContextPeek {
-	function authorize($context_id, Model_Worker $worker) {
-		return TRUE;
+	static function isReadableByActor($models, $actor) {
+		// Everyone can read kb articles
+		return CerberusContexts::allowEverything($models);
+	}
+	
+	static function isWriteableByActor($models, $actor) {
+		// Everyone can edit kb articles
+		return CerberusContexts::allowEverything($models);
 	}
 	
 	function getRandom() {
@@ -981,7 +949,7 @@ class Context_KbArticle extends Extension_DevblocksContext implements IDevblocks
 		
 		if(!$is_loaded) {
 			$labels = array();
-			CerberusContexts::getContext($context, $context_id, $labels, $values, null, true);
+			CerberusContexts::getContext($context, $context_id, $labels, $values, null, true, true);
 		}
 		
 		switch($token) {
@@ -1011,7 +979,7 @@ class Context_KbArticle extends Extension_DevblocksContext implements IDevblocks
 				break;
 				
 			default:
-				if(substr($token,0,7) == 'custom_') {
+				if(DevblocksPlatform::strStartsWith($token, 'custom_')) {
 					$fields = $this->_lazyLoadCustomFields($token, $context, $context_id);
 					$values = array_merge($values, $fields);
 				}
@@ -1055,8 +1023,7 @@ class Context_KbArticle extends Extension_DevblocksContext implements IDevblocks
 		
 		if(!empty($context) && !empty($context_id)) {
 			$params_req = array(
-				new DevblocksSearchCriteria(SearchFields_KbArticle::CONTEXT_LINK,'=',$context),
-				new DevblocksSearchCriteria(SearchFields_KbArticle::CONTEXT_LINK_ID,'=',$context_id),
+				new DevblocksSearchCriteria(SearchFields_KbArticle::VIRTUAL_CONTEXT_LINK,'in',array($context.':'.$context_id)),
 			);
 		}
 		
@@ -1226,7 +1193,7 @@ class View_KbArticle extends C4_AbstractView implements IAbstractView_Subtotals,
 	}
 	
 	// [TODO] Fulltext: Comments
-	// [TODO] Virtual: Topic
+	// [TODO] Virtual: Topic/Categories
 	
 	function getQuickSearchFields() {
 		$search_fields = SearchFields_KbArticle::getFields();
@@ -1246,6 +1213,9 @@ class View_KbArticle extends C4_AbstractView implements IAbstractView_Subtotals,
 				array(
 					'type' => DevblocksSearchCriteria::TYPE_NUMBER,
 					'options' => array('param_key' => SearchFields_KbArticle::ID),
+					'examples' => [
+						['type' => 'chooser', 'context' => CerberusContexts::CONTEXT_KB_ARTICLE, 'q' => ''],
+					]
 				),
 			'title' => 
 				array(
@@ -1268,6 +1238,10 @@ class View_KbArticle extends C4_AbstractView implements IAbstractView_Subtotals,
 					'options' => array('param_key' => SearchFields_KbArticle::VIRTUAL_WATCHERS),
 				),
 		);
+		
+		// Add quick search links
+		
+		$fields = self::_appendVirtualFiltersFromQuickSearchContexts('links', $fields, 'links');
 		
 		// Add searchable custom fields
 		
@@ -1302,6 +1276,9 @@ class View_KbArticle extends C4_AbstractView implements IAbstractView_Subtotals,
 	function getParamFromQuickSearchFieldTokens($field, $tokens) {
 		switch($field) {
 			default:
+				if($field == 'links' || substr($field, 0, 6) == 'links.')
+					return DevblocksSearchCriteria::getContextLinksParamFromTokens($field, $tokens);
+				
 				$search_fields = $this->getQuickSearchFields();
 				return DevblocksSearchCriteria::getParamFromQueryFieldTokens($field, $tokens, $search_fields);
 				break;

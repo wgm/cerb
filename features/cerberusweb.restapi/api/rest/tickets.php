@@ -354,10 +354,10 @@ class ChRest_Tickets extends Extension_RestController implements IExtensionRestC
 				'links' => SearchFields_Ticket::VIRTUAL_CONTEXT_LINK,
 				'watchers' => SearchFields_Ticket::VIRTUAL_WATCHERS,
 				
-				'first_wrote' => SearchFields_Ticket::TICKET_FIRST_WROTE,
+				'first_wrote' => SearchFields_Ticket::TICKET_FIRST_WROTE_ID,
 				'group' => SearchFields_Ticket::TICKET_GROUP_ID,
-				'last_wrote' => SearchFields_Ticket::TICKET_LAST_WROTE,
-				'org_name' => SearchFields_Ticket::ORG_NAME,
+				'last_wrote' => SearchFields_Ticket::TICKET_LAST_WROTE_ID,
+				'org_name' => SearchFields_Ticket::TICKET_ORG_ID,
 				'owner' => SearchFields_Ticket::TICKET_OWNER_ID,
 				'spam_training' => SearchFields_Ticket::TICKET_SPAM_TRAINING,
 				'status' => SearchFields_Ticket::VIRTUAL_STATUS,
@@ -374,15 +374,14 @@ class ChRest_Tickets extends Extension_RestController implements IExtensionRestC
 				'bucket_id' => SearchFields_Ticket::TICKET_BUCKET_ID,
 				'content' => SearchFields_Ticket::FULLTEXT_MESSAGE_CONTENT,
 				'created' => SearchFields_Ticket::TICKET_CREATED_DATE,
-				'first_wrote' => SearchFields_Ticket::TICKET_FIRST_WROTE,
+				'first_wrote' => SearchFields_Ticket::TICKET_FIRST_WROTE_ID,
 				'group' => SearchFields_Ticket::TICKET_GROUP_ID,
 				'group_id' => SearchFields_Ticket::TICKET_GROUP_ID,
 				'id' => SearchFields_Ticket::TICKET_ID,
 				'status_id' => SearchFields_Ticket::TICKET_STATUS_ID,
-				'last_wrote' => SearchFields_Ticket::TICKET_LAST_WROTE,
+				'last_wrote' => SearchFields_Ticket::TICKET_LAST_WROTE_ID,
 				'mask' => SearchFields_Ticket::TICKET_MASK,
 				'org_id' => SearchFields_Ticket::TICKET_ORG_ID,
-				'org_name' => SearchFields_Ticket::ORG_NAME,
 				'requester' => SearchFields_Ticket::REQUESTER_ADDRESS,
 				'subject' => SearchFields_Ticket::TICKET_SUBJECT,
 				'updated' => SearchFields_Ticket::TICKET_UPDATED_DATE,
@@ -641,10 +640,7 @@ class ChRest_Tickets extends Extension_RestController implements IExtensionRestC
 		if(false == ($message = DAO_Message::get($message_id)))
 			$this->error(self::ERRNO_CUSTOM, "The given 'message_id' is invalid");
 
-		if(null == ($context_ext = Extension_DevblocksContext::get(CerberusContexts::CONTEXT_TICKET)))
-			$this->error(self::ERRNO_CUSTOM, "The ticket context could not be loaded");
-		
-		if(false === $context_ext->authorize($message->ticket_id, $worker))
+		if(false === Context_Ticket::isWriteableByActor($message->ticket_id, $worker))
 			$this->error(self::ERRNO_CUSTOM, "You do not have write access to this ticket");
 		
 		if(!empty($file_ids))

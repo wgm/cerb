@@ -23,11 +23,6 @@
 				<seg/>
 			</tuv>
 		</tu>
-		<tu tuid="acl.core.addybook">
-			<tuv xml:lang="ru_RU">
-				<seg>[Адресная книга] Может просматривать адресную книгу</seg>
-			</tuv>
-		</tu>
 		<tu tuid="acl.core.addybook.addy.actions.update">
 			<tuv xml:lang="ru_RU">
 				<seg>[Адресная книга] Может изменять адреса электронной почты контакта</seg>
@@ -76,11 +71,6 @@
 		<tu tuid="acl.core.display.actions.attachments.download">
 			<tuv xml:lang="ru_RU">
 				<seg>[Показ заявки] Может загружать вложения из заявки</seg>
-			</tuv>
-		</tu>
-		<tu tuid="acl.core.display.actions.comment">
-			<tuv xml:lang="ru_RU">
-				<seg>[Показ заявки] Может комментировать в заявках</seg>
 			</tuv>
 		</tu>
 		<tu tuid="acl.core.display.actions.forward">
@@ -303,7 +293,7 @@
 				<seg>[Отчеты] Может просматривать группу 'Отчеты по заявкам' </seg>
 			</tuv>
 		</tu>
-		<tu tuid="acl.reports.group.virtual_attendants">
+		<tu tuid="acl.reports.group.bots">
 			<tuv xml:lang="ru_RU">
 				<seg/>
 			</tuv>
@@ -583,11 +573,6 @@
 				<seg>Зарегистрированные контакты</seg>
 			</tuv>
 		</tu>
-		<tu tuid="attachment.display_name">
-			<tuv xml:lang="ru_RU">
-				<seg>Имя файла</seg>
-			</tuv>
-		</tu>
 		<tu tuid="attachment.id">
 			<tuv xml:lang="ru_RU">
 				<seg>Идентификатор вложения</seg>
@@ -616,11 +601,6 @@
 		<tu tuid="attachment.storage_sha1hash">
 			<tuv xml:lang="ru_RU">
 				<seg/>
-			</tuv>
-		</tu>
-		<tu tuid="attachment.storage_size">
-			<tuv xml:lang="ru_RU">
-				<seg>Размер (байт)</seg>
 			</tuv>
 		</tu>
 		<tu tuid="calls.activity.tab">
@@ -771,6 +751,11 @@
 		<tu tuid="common.attachments">
 			<tuv xml:lang="ru_RU">
 				<seg>Вложения</seg>
+			</tuv>
+		</tu>
+		<tu tuid="common.author">
+			<tuv xml:lang="ru_RU">
+				<seg/>
 			</tuv>
 		</tu>
 		<tu tuid="common.availability">
@@ -1393,6 +1378,11 @@
 				<seg>владелец</seg>
 			</tuv>
 		</tu>
+		<tu tuid="common.params">
+			<tuv xml:lang="ru_RU">
+				<seg>Параметры</seg>
+			</tuv>
+		</tu>
 		<tu tuid="common.password">
 			<tuv xml:lang="ru_RU">
 				<seg>пароль</seg>
@@ -1560,7 +1550,7 @@
 		</tu>
 		<tu tuid="common.size">
 			<tuv xml:lang="ru_RU">
-				<seg/>
+				<seg>Размер</seg>
 			</tuv>
 		</tu>
 		<tu tuid="common.snippets">
@@ -1953,11 +1943,6 @@
 				<seg/>
 			</tuv>
 		</tu>
-		<tu tuid="dao.cerb_plugin.author">
-			<tuv xml:lang="ru_RU">
-				<seg/>
-			</tuv>
-		</tu>
 		<tu tuid="dao.cerb_plugin.description">
 			<tuv xml:lang="ru_RU">
 				<seg/>
@@ -2059,11 +2044,6 @@
 			</tuv>
 		</tu>
 		<tu tuid="dao.decision_node.node_type">
-			<tuv xml:lang="ru_RU">
-				<seg/>
-			</tuv>
-		</tu>
-		<tu tuid="dao.decision_node.params">
 			<tuv xml:lang="ru_RU">
 				<seg/>
 			</tuv>
@@ -2239,36 +2219,6 @@
 			</tuv>
 		</tu>
 		<tu tuid="dao.trigger_event.is_disabled">
-			<tuv xml:lang="ru_RU">
-				<seg/>
-			</tuv>
-		</tu>
-		<tu tuid="dao.trigger_event.owner_context">
-			<tuv xml:lang="ru_RU">
-				<seg/>
-			</tuv>
-		</tu>
-		<tu tuid="dao.trigger_event.owner_context_id">
-			<tuv xml:lang="ru_RU">
-				<seg/>
-			</tuv>
-		</tu>
-		<tu tuid="dao.twitter_account.last_synced_at">
-			<tuv xml:lang="ru_RU">
-				<seg/>
-			</tuv>
-		</tu>
-		<tu tuid="dao.twitter_account.last_synced_msgid">
-			<tuv xml:lang="ru_RU">
-				<seg/>
-			</tuv>
-		</tu>
-		<tu tuid="dao.twitter_account.oauth_token">
-			<tuv xml:lang="ru_RU">
-				<seg/>
-			</tuv>
-		</tu>
-		<tu tuid="dao.twitter_account.screen_name">
 			<tuv xml:lang="ru_RU">
 				<seg/>
 			</tuv>
@@ -3186,11 +3136,6 @@
 		<tu tuid="mail_queue.is_queued">
 			<tuv xml:lang="ru_RU">
 				<seg>В очереди</seg>
-			</tuv>
-		</tu>
-		<tu tuid="mail_queue.params_json">
-			<tuv xml:lang="ru_RU">
-				<seg>Параметры</seg>
 			</tuv>
 		</tu>
 		<tu tuid="mail_queue.queue_delivery_date">
@@ -4143,7 +4088,7 @@
 				<seg>Отчеты по заявкам</seg>
 			</tuv>
 		</tu>
-		<tu tuid="reports.ui.group.virtual_attendant">
+		<tu tuid="reports.ui.group.bot">
 			<tuv xml:lang="ru_RU">
 				<seg/>
 			</tuv>
@@ -4283,7 +4228,7 @@
 				<seg>По Компании</seg>
 			</tuv>
 		</tu>
-		<tu tuid="reports.ui.virtual_attendant.usage">
+		<tu tuid="reports.ui.bot.usage">
 			<tuv xml:lang="ru_RU">
 				<seg/>
 			</tuv>

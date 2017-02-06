@@ -2,17 +2,17 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2017, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
 | The latest version of this license can be found here:
-| http://cerb.io/license
+| http://cerb.ai/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://cerb.io	    http://webgroup.media
+|	http://cerb.ai	    http://webgroup.media
 ***********************************************************************/
 
 class DAO_Task extends Cerb_ORMHelper {
@@ -76,7 +76,7 @@ class DAO_Task extends Cerb_ORMHelper {
 			)
 		);
 		
-		// Virtual Attendant events
+		// Bot events
 		Event_TaskCreatedByWorker::trigger($id, null);
 		
 		return $id;
@@ -412,11 +412,7 @@ class DAO_Task extends Cerb_ORMHelper {
 		);
 
 		$join_sql =
-			"FROM task t ".
-
-			// [JAS]: Dynamic table joins
-			(isset($tables['context_link']) ? "INNER JOIN context_link ON (context_link.to_context = 'cerberusweb.contexts.task' AND context_link.to_context_id = t.id) " : " ")
-			;
+			"FROM task t ";
 
 		$where_sql = "".
 			(!empty($wheres) ? sprintf("WHERE %s ",implode(' AND ',$wheres)) : "WHERE 1 ");
@@ -429,7 +425,6 @@ class DAO_Task extends Cerb_ORMHelper {
 			'join_sql' => &$join_sql,
 			'where_sql' => &$where_sql,
 			'tables' => &$tables,
-			'has_multiple_values' => &$has_multiple_values
 		);
 		
 		array_walk_recursive(
@@ -443,7 +438,6 @@ class DAO_Task extends Cerb_ORMHelper {
 			'select' => $select_sql,
 			'join' => $join_sql,
 			'where' => $where_sql,
-			'has_multiple_values' => $has_multiple_values,
 			'sort' => $sort_sql,
 		);
 		
@@ -461,10 +455,6 @@ class DAO_Task extends Cerb_ORMHelper {
 		settype($param_key, 'string');
 		
 		switch($param_key) {
-			case SearchFields_Task::VIRTUAL_CONTEXT_LINK:
-				self::_searchComponentsVirtualContextLinks($param, $from_context, $from_index, $args['join_sql'], $args['where_sql']);
-				break;
-				
 			case SearchFields_Task::VIRTUAL_HAS_FIELDSET:
 				self::_searchComponentsVirtualHasFieldset($param, $from_context, $from_index, $args['join_sql'], $args['where_sql']);
 				break;
@@ -491,7 +481,6 @@ class DAO_Task extends Cerb_ORMHelper {
 		$select_sql = $query_parts['select'];
 		$join_sql = $query_parts['join'];
 		$where_sql = $query_parts['where'];
-		$has_multiple_values = $query_parts['has_multiple_values'];
 		$sort_sql = $query_parts['sort'];
 		
 		// Build it
@@ -499,7 +488,6 @@ class DAO_Task extends Cerb_ORMHelper {
 			$select_sql.
 			$join_sql.
 			$where_sql.
-			($has_multiple_values ? 'GROUP BY t.id ' : '').
 			$sort_sql;
 		
 		if(false == ($rs = $db->SelectLimit($sql,$limit,$page*$limit)))
@@ -521,7 +509,7 @@ class DAO_Task extends Cerb_ORMHelper {
 			// We can skip counting if we have a less-than-full single page
 			if(!(0 == $page && $total < $limit)) {
 				$count_sql =
-					($has_multiple_values ? "SELECT COUNT(DISTINCT t.id) " : "SELECT COUNT(t.id) ").
+					"SELECT COUNT(t.id) ".
 					$join_sql.
 					$where_sql;
 				$total = $db->GetOneSlave($count_sql);
@@ -549,10 +537,8 @@ class SearchFields_Task extends DevblocksSearchFields {
 	
 	const VIRTUAL_CONTEXT_LINK = '*_context_link';
 	const VIRTUAL_HAS_FIELDSET = '*_has_fieldset';
+	const VIRTUAL_OWNER_SEARCH = '*_owner_search';
 	const VIRTUAL_WATCHERS = '*_workers';
-	
-	const CONTEXT_LINK = 'cl_context_from';
-	const CONTEXT_LINK_ID = 'cl_context_from_id';
 	
 	// Comment Content
 	const FULLTEXT_COMMENT_CONTENT = 'ftcc_content';
@@ -573,6 +559,14 @@ class SearchFields_Task extends DevblocksSearchFields {
 		switch($param->field) {
 			case self::FULLTEXT_COMMENT_CONTENT:
 				return self::_getWhereSQLFromCommentFulltextField($param, Search_CommentContent::ID, CerberusContexts::CONTEXT_TASK, self::getPrimaryKey());
+				break;
+				
+			case self::VIRTUAL_CONTEXT_LINK:
+				return self::_getWhereSQLFromContextLinksField($param, CerberusContexts::CONTEXT_TASK, self::getPrimaryKey());
+				break;
+				
+			case self::VIRTUAL_OWNER_SEARCH:
+				return self::_getWhereSQLFromVirtualSearchField($param, CerberusContexts::CONTEXT_WORKER, 't.owner_id');
 				break;
 				
 			case self::VIRTUAL_WATCHERS:
@@ -618,11 +612,9 @@ class SearchFields_Task extends DevblocksSearchFields {
 			
 			self::VIRTUAL_CONTEXT_LINK => new DevblocksSearchField(self::VIRTUAL_CONTEXT_LINK, '*', 'context_link', $translate->_('common.links'), null, false),
 			self::VIRTUAL_HAS_FIELDSET => new DevblocksSearchField(self::VIRTUAL_HAS_FIELDSET, '*', 'has_fieldset', $translate->_('common.fieldset'), null, false),
+			self::VIRTUAL_OWNER_SEARCH => new DevblocksSearchField(self::VIRTUAL_OWNER_SEARCH, '*', 'owner_search', null, null, false),
 			self::VIRTUAL_WATCHERS => new DevblocksSearchField(self::VIRTUAL_WATCHERS, '*', 'workers', $translate->_('common.watchers'), 'WS', false),
 			
-			self::CONTEXT_LINK => new DevblocksSearchField(self::CONTEXT_LINK, 'context_link', 'from_context', null, null, false),
-			self::CONTEXT_LINK_ID => new DevblocksSearchField(self::CONTEXT_LINK_ID, 'context_link', 'from_context_id', null, null, false),
-				
 			self::FULLTEXT_COMMENT_CONTENT => new DevblocksSearchField(self::FULLTEXT_COMMENT_CONTENT, 'ftcc', 'content', $translate->_('comment.filters.content'), 'FT', false),
 		);
 		
@@ -683,18 +675,16 @@ class View_Task extends C4_AbstractView implements IAbstractView_Subtotals, IAbs
 		
 		$this->addColumnsHidden(array(
 			SearchFields_Task::ID,
-			SearchFields_Task::CONTEXT_LINK,
-			SearchFields_Task::CONTEXT_LINK_ID,
 			SearchFields_Task::FULLTEXT_COMMENT_CONTENT,
 			SearchFields_Task::VIRTUAL_CONTEXT_LINK,
 			SearchFields_Task::VIRTUAL_HAS_FIELDSET,
+			SearchFields_Task::VIRTUAL_OWNER_SEARCH,
 			SearchFields_Task::VIRTUAL_WATCHERS,
 		));
 		
 		$this->addParamsHidden(array(
 			SearchFields_Task::ID,
-			SearchFields_Task::CONTEXT_LINK,
-			SearchFields_Task::CONTEXT_LINK_ID,
+			SearchFields_Task::VIRTUAL_OWNER_SEARCH,
 		));
 		
 		$this->addParamsDefault(array(
@@ -834,6 +824,9 @@ class View_Task extends C4_AbstractView implements IAbstractView_Subtotals, IAbs
 				array(
 					'type' => DevblocksSearchCriteria::TYPE_NUMBER,
 					'options' => array('param_key' => SearchFields_Task::ID),
+					'examples' => [
+						['type' => 'chooser', 'context' => CerberusContexts::CONTEXT_TASK, 'q' => ''],
+					]
 				),
 			'importance' => 
 				array(
@@ -847,8 +840,19 @@ class View_Task extends C4_AbstractView implements IAbstractView_Subtotals, IAbs
 				),
 			'owner' => 
 				array(
-					'type' => DevblocksSearchCriteria::TYPE_WORKER,
+					'type' => DevblocksSearchCriteria::TYPE_VIRTUAL,
+					'options' => array('param_key' => SearchFields_Task::VIRTUAL_OWNER_SEARCH),
+					'examples' => [
+						['type' => 'search', 'context' => CerberusContexts::CONTEXT_WORKER, 'q' => ''],
+					]
+				),
+			'owner.id' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_NUMBER,
 					'options' => array('param_key' => SearchFields_Task::OWNER_ID),
+					'examples' => [
+						['type' => 'chooser', 'context' => CerberusContexts::CONTEXT_WORKER, 'q' => ''],
+					]
 				),
 			'title' => 
 				array(
@@ -866,6 +870,10 @@ class View_Task extends C4_AbstractView implements IAbstractView_Subtotals, IAbs
 					'options' => array('param_key' => SearchFields_Task::VIRTUAL_WATCHERS),
 				),
 		);
+		
+		// Add quick search links
+		
+		$fields = self::_appendVirtualFiltersFromQuickSearchContexts('links', $fields, 'links');
 		
 		// Add searchable custom fields
 		
@@ -897,7 +905,14 @@ class View_Task extends C4_AbstractView implements IAbstractView_Subtotals, IAbs
 	
 	function getParamFromQuickSearchFieldTokens($field, $tokens) {
 		switch($field) {
+			case 'owner':
+				return DevblocksSearchCriteria::getVirtualQuickSearchParamFromTokens($field, $tokens, SearchFields_Task::VIRTUAL_OWNER_SEARCH);
+				break;
+				
 			default:
+				if($field == 'links' || substr($field, 0, 6) == 'links.')
+					return DevblocksSearchCriteria::getContextLinksParamFromTokens($field, $tokens);
+				
 				$search_fields = $this->getQuickSearchFields();
 				return DevblocksSearchCriteria::getParamFromQueryFieldTokens($field, $tokens, $search_fields);
 				break;
@@ -1000,7 +1015,14 @@ class View_Task extends C4_AbstractView implements IAbstractView_Subtotals, IAbs
 			case SearchFields_Task::VIRTUAL_HAS_FIELDSET:
 				$this->_renderVirtualHasFieldset($param);
 				break;
-			
+				
+			case SearchFields_Task::VIRTUAL_OWNER_SEARCH:
+				echo sprintf("%s matches <b>%s</b>",
+					DevblocksPlatform::strEscapeHtml(DevblocksPlatform::translateCapitalized('common.owner')),
+					DevblocksPlatform::strEscapeHtml($param->value)
+				);
+				break;
+				
 			case SearchFields_Task::VIRTUAL_WATCHERS:
 				$this->_renderVirtualWatchers($param);
 				break;
@@ -1093,6 +1115,16 @@ class View_Task extends C4_AbstractView implements IAbstractView_Subtotals, IAbs
 };
 
 class Context_Task extends Extension_DevblocksContext implements IDevblocksContextProfile, IDevblocksContextPeek, IDevblocksContextImport {
+	static function isReadableByActor($models, $actor) {
+		// Everyone can read
+		return CerberusContexts::allowEverything($models);
+	}
+	
+	static function isWriteableByActor($models, $actor) {
+		// Everyone can modify
+		return CerberusContexts::allowEverything($models);
+	}
+	
 	function profileGetUrl($context_id) {
 		if(empty($context_id))
 			return '';
@@ -1284,10 +1316,15 @@ class Context_Task extends Extension_DevblocksContext implements IDevblocksConte
 		
 		if(!$is_loaded) {
 			$labels = array();
-			CerberusContexts::getContext($context, $context_id, $labels, $values, null, true);
+			CerberusContexts::getContext($context, $context_id, $labels, $values, null, true, true);
 		}
 		
 		switch($token) {
+			case 'links':
+				$links = $this->_lazyLoadLinks($context, $context_id);
+				$values = array_merge($values, $fields);
+				break;
+			
 			case 'watchers':
 				$watchers = array(
 					$token => CerberusContexts::getWatchers($context, $context_id, true),
@@ -1296,7 +1333,7 @@ class Context_Task extends Extension_DevblocksContext implements IDevblocksConte
 				break;
 				
 			default:
-				if(substr($token,0,7) == 'custom_') {
+				if(DevblocksPlatform::strStartsWith($token, 'custom_')) {
 					$fields = $this->_lazyLoadCustomFields($token, $context, $context_id);
 					$values = array_merge($values, $fields);
 				}
@@ -1349,8 +1386,7 @@ class Context_Task extends Extension_DevblocksContext implements IDevblocksConte
 		
 		if(!empty($context) && !empty($context_id)) {
 			$params_req = array(
-				new DevblocksSearchCriteria(SearchFields_Task::CONTEXT_LINK,'=',$context),
-				new DevblocksSearchCriteria(SearchFields_Task::CONTEXT_LINK_ID,'=',$context_id),
+				new DevblocksSearchCriteria(SearchFields_Task::VIRTUAL_CONTEXT_LINK,'in',array($context.':'.$context_id)),
 			);
 		}
 		
@@ -1400,7 +1436,7 @@ class Context_Task extends Extension_DevblocksContext implements IDevblocksConte
 						DAO_ContextLink::getContextLinkCounts(
 							CerberusContexts::CONTEXT_TASK,
 							$context_id,
-							array(CerberusContexts::CONTEXT_WORKER, CerberusContexts::CONTEXT_CUSTOM_FIELDSET)
+							array(CerberusContexts::CONTEXT_CUSTOM_FIELDSET)
 						),
 				),
 			);

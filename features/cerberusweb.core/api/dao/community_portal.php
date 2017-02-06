@@ -2,17 +2,17 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2017, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
 | The latest version of this license can be found here:
-| http://cerb.io/license
+| http://cerb.ai/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://cerb.io	    http://webgroup.media
+|	http://cerb.ai	    http://webgroup.media
 ***********************************************************************/
 
 class DAO_CommunityTool extends Cerb_ORMHelper {
@@ -241,7 +241,6 @@ class DAO_CommunityTool extends Cerb_ORMHelper {
 			'select' => $select_sql,
 			'join' => $join_sql,
 			'where' => $where_sql,
-			'has_multiple_values' => $has_multiple_values,
 			'sort' => $sort_sql,
 		);
 		
@@ -268,14 +267,12 @@ class DAO_CommunityTool extends Cerb_ORMHelper {
 		$select_sql = $query_parts['select'];
 		$join_sql = $query_parts['join'];
 		$where_sql = $query_parts['where'];
-		$has_multiple_values = $query_parts['has_multiple_values'];
 		$sort_sql = $query_parts['sort'];
 		
 		$sql =
 			$select_sql.
 			$join_sql.
 			$where_sql.
-			($has_multiple_values ? 'GROUP BY ct.id ' : '').
 			$sort_sql;
 			
 		// [TODO] Could push the select logic down a level too
@@ -304,7 +301,7 @@ class DAO_CommunityTool extends Cerb_ORMHelper {
 			// We can skip counting if we have a less-than-full single page
 			if(!(0 == $page && $total < $limit)) {
 				$count_sql =
-					($has_multiple_values ? "SELECT COUNT(DISTINCT ct.id) " : "SELECT COUNT(ct.id) ").
+					"SELECT COUNT(ct.id) ".
 					$join_sql.
 					$where_sql;
 				$total = $db->GetOneSlave($count_sql);
@@ -676,7 +673,7 @@ class View_CommunityPortal extends C4_AbstractView implements IAbstractView_Quic
 					'type' => DevblocksSearchCriteria::TYPE_TEXT,
 					'options' => array('param_key' => SearchFields_CommunityTool::NAME, 'match' => DevblocksSearchCriteria::OPTION_TEXT_PARTIAL),
 				),
-			'portal' => 
+			'code' => 
 				array(
 					'type' => DevblocksSearchCriteria::TYPE_TEXT,
 					'options' => array('param_key' => SearchFields_CommunityTool::CODE, 'match' => DevblocksSearchCriteria::OPTION_TEXT_PARTIAL),
@@ -713,7 +710,7 @@ class View_CommunityPortal extends C4_AbstractView implements IAbstractView_Quic
 		$tpl->assign('view', $this);
 
 		// Tool Manifests
-		$tools = DevblocksPlatform::getExtensions('usermeet.tool', false, true);
+		$tools = DevblocksPlatform::getExtensions('usermeet.tool', false);
 		$tpl->assign('tool_extensions', $tools);
 		
 		// Custom fields

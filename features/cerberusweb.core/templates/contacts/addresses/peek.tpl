@@ -15,13 +15,13 @@
 			
 			<button type="button" class="cerb-peek-edit" data-context="{$peek_context}" data-context-id="{$dict->id}" data-edit="true"><span class="glyphicons glyphicons-cogwheel"></span> {'common.edit'|devblocks_translate|capitalize}</button>
 			{if $dict->id}<button type="button" class="cerb-peek-profile"><span class="glyphicons glyphicons-nameplate"></span> {'common.profile'|devblocks_translate|capitalize}</button>{/if}
-			<button type="button" class="cerb-peek-comments-add" data-context="{$peek_context}" data-context-id="{$dict->id}"><span class="glyphicons glyphicons-conversation"></span> {'common.comment'|devblocks_translate|capitalize}</button>
+			<button type="button" class="cerb-peek-comments-add" data-context="{CerberusContexts::CONTEXT_COMMENT}" data-context-id="0" data-edit="context:{$peek_context} context.id:{$dict->id}"><span class="glyphicons glyphicons-conversation"></span> {'common.comment'|devblocks_translate|capitalize}</button>
 			
 			{$email_parts = explode('@',$dict->email)}
 			{if is_array($email_parts) && 2==count($email_parts)}
 				{$domain = $email_parts.1}
 				<button type="button" onclick="window.open('http://www.{$domain|escape:'url'}');"><span class="glyphicons glyphicons-link"></span> {'common.website'|devblocks_translate|capitalize}</button>
-				<button type="button" class="cerb-search-trigger" data-context="{$peek_context}" data-query="email:(*@{$domain})"><span class="glyphicons glyphicons-search"></span> Similar</button>
+				<button type="button" class="cerb-search-trigger" data-context="{$peek_context}" data-query="host:{$domain}"><span class="glyphicons glyphicons-search"></span> Similar</button>
 			{/if}
 		</div>
 	</div>
@@ -60,7 +60,7 @@
 	</div>
 </fieldset>
 
-{include file="devblocks:cerberusweb.core::internal/peek/peek_links.tpl" links=$links}
+{include file="devblocks:cerberusweb.core::internal/profiles/profile_record_links.tpl" properties_links=$links peek=true page_context=$peek_context page_context_id=$dict->id}
 
 {include file="devblocks:cerberusweb.core::internal/peek/card_timeline_pager.tpl"}
 
@@ -75,6 +75,7 @@ $(function() {
 	$popup.one('popup_open',function(event,ui) {
 		// Title
 		$popup.dialog('option','title', '{'common.email_address'|devblocks_translate|escape:'javascript' nofilter}');
+		$popup.css('overflow', 'inherit');
 		
 		// Properties grid
 		$popup.find('div.cerb-properties-grid').cerbPropertyGrid();
@@ -92,8 +93,8 @@ $(function() {
 		
 		// Comments
 		$popup.find('button.cerb-peek-comments-add')
-			.cerbCommentTrigger()
-			.on('cerb-comment-saved', function() {
+			.cerbPeekTrigger()
+			.on('cerb-peek-saved', function() {
 				genericAjaxPopup($layer,'c=internal&a=showPeekPopup&context={$peek_context}&context_id={$dict->id}&view_id={$view_id}','reuse',false,'50%');
 			})
 			;

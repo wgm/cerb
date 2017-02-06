@@ -1,0 +1,1084 @@
+<?php
+class DAO_ClassifierEntity extends Cerb_ORMHelper {
+	const _CACHE_ALL = 'cerb_classifier_entities';
+	
+	const ID = 'id';
+	const NAME = 'name';
+	const TYPE = 'type';
+	const DESCRIPTION = 'description';
+	const PARAMS_JSON = 'params_json';
+	const UPDATED_AT = 'updated_at';
+
+	static function create($fields) {
+		$db = DevblocksPlatform::getDatabaseService();
+		
+		$sql = "INSERT INTO classifier_entity () VALUES ()";
+		$db->ExecuteMaster($sql);
+		$id = $db->LastInsertId();
+		
+		self::update($id, $fields);
+		
+		return $id;
+	}
+	
+	static function clearCache() {
+		$cache = DevblocksPlatform::getCacheService();
+		$cache->remove(self::_CACHE_ALL);
+	}
+	
+	static function update($ids, $fields, $check_deltas=true) {
+		if(!is_array($ids))
+			$ids = array($ids);
+		
+		// Make a diff for the requested objects in batches
+		
+		$chunks = array_chunk($ids, 100, true);
+		while($batch_ids = array_shift($chunks)) {
+			if(empty($batch_ids))
+				continue;
+				
+			// Send events
+			if($check_deltas) {
+				//CerberusContexts::checkpointChanges(CerberusContexts::CONTEXT_, $batch_ids);
+			}
+			
+			// Make changes
+			parent::_update($batch_ids, 'classifier_entity', $fields);
+			
+			// Send events
+			if($check_deltas) {
+				// Trigger an event about the changes
+				$eventMgr = DevblocksPlatform::getEventService();
+				$eventMgr->trigger(
+					new Model_DevblocksEvent(
+						'dao.classifier_entity.update',
+						array(
+							'fields' => $fields,
+						)
+					)
+				);
+				
+				// Log the context update
+				//DevblocksPlatform::markContextChanged(CerberusContexts::CONTEXT_, $batch_ids);
+			}
+		}
+		
+		self::clearCache();
+	}
+	
+	static function updateWhere($fields, $where) {
+		parent::_updateWhere('classifier_entity', $fields, $where);
+	}
+	
+	/**
+	 * @param string $where
+	 * @param mixed $sortBy
+	 * @param mixed $sortAsc
+	 * @param integer $limit
+	 * @return Model_ClassifierEntity[]
+	 */
+	static function getWhere($where=null, $sortBy=null, $sortAsc=true, $limit=null, $options=null) {
+		$db = DevblocksPlatform::getDatabaseService();
+
+		list($where_sql, $sort_sql, $limit_sql) = self::_getWhereSQL($where, $sortBy, $sortAsc, $limit);
+		
+		// SQL
+		$sql = "SELECT id, name, type, description, params_json, updated_at ".
+			"FROM classifier_entity ".
+			$where_sql.
+			$sort_sql.
+			$limit_sql
+		;
+		
+		if($options & Cerb_ORMHelper::OPT_GET_MASTER_ONLY) {
+			$rs = $db->ExecuteMaster($sql, _DevblocksDatabaseManager::OPT_NO_READ_AFTER_WRITE);
+		} else {
+			$rs = $db->ExecuteSlave($sql);
+		}
+		
+		return self::_getObjectsFromResult($rs);
+	}
+	
+	/**
+	 *
+	 * @param bool $nocache
+	 * @return Model_ClassifierEntity[]
+	 */
+	static function getAll($nocache=false) {
+		$cache = DevblocksPlatform::getCacheService();
+		if($nocache || null === ($objects = $cache->load(self::_CACHE_ALL))) {
+			$objects = self::getWhere(null, DAO_ClassifierEntity::NAME, true, null, Cerb_ORMHelper::OPT_GET_MASTER_ONLY);
+			
+			if(!is_array($objects))
+				return false;
+				
+			$cache->save($objects, self::_CACHE_ALL);
+		}
+		
+		return $objects;
+	}
+
+	/**
+	 * @param integer $id
+	 * @return Model_ClassifierEntity
+	 */
+	static function get($id) {
+		if(empty($id))
+			return null;
+		
+		$entities = DAO_ClassifierEntity::getAll();
+		
+		if(isset($entities[$id]))
+			return $entities[$id];
+		
+		return null;
+	}
+	
+	/**
+	 * 
+	 * @param array $ids
+	 * @return Model_ClassifierEntity[]
+	 */
+	static function getIds($ids) {
+		if(!is_array($ids))
+			$ids = [$ids];
+		
+		if(empty($ids))
+			return [];
+		
+		$entities = DAO_ClassifierEntity::getAll();
+		
+		if(empty($entities))
+			return [];
+		
+		return array_intersect_key($entities, array_flip($ids));
+	}
+	
+	static function getByName($key) {
+		$entities = DAO_ClassifierEntity::getAll();
+		$names = array_column(DevblocksPlatform::objectsToArrays($entities), 'name', 'id');
+		$names = array_map('strtolower', $names);
+		
+		if(false === ($pos = array_search($key, $names)))
+			return null;
+		
+		if(!isset($entities[$pos]))
+			return null;
+			
+		return $entities[$pos];
+	}
+	
+	static function getByType($type) {
+		$entities = DAO_ClassifierEntity::getAll();
+		
+		$entities = array_filter($entities, function($entity) use ($type) {
+			if($entity->type == $type)
+				return true;
+			
+			return false;
+		});
+		
+		return $entities;
+	}
+	
+	/**
+	 * @param resource $rs
+	 * @return Model_ClassifierEntity[]
+	 */
+	static private function _getObjectsFromResult($rs) {
+		$objects = array();
+		
+		if(!($rs instanceof mysqli_result))
+			return false;
+		
+		while($row = mysqli_fetch_assoc($rs)) {
+			$object = new Model_ClassifierEntity();
+			$object->id = intval($row['id']);
+			$object->description = $row['description'];
+			$object->name = $row['name'];
+			$object->type = $row['type'];
+			$object->updated_at = intval($row['updated_at']);
+
+			@$params_json = $row['params_json'];
+			
+			if($params_json && false != (@$params = json_decode($params_json, true)))
+				$object->params = $params;
+			
+			$objects[$object->id] = $object;
+		}
+		
+		mysqli_free_result($rs);
+		
+		return $objects;
+	}
+	
+	static function random() {
+		return self::_getRandom('classifier_entity');
+	}
+	
+	static function delete($ids) {
+		if(!is_array($ids))
+			$ids = array($ids);
+		
+		$db = DevblocksPlatform::getDatabaseService();
+		
+		if(empty($ids))
+			return;
+		
+		$ids_list = implode(',', $ids);
+		
+		$db->ExecuteMaster(sprintf("DELETE FROM classifier_entity WHERE id IN (%s)", $ids_list));
+		
+		// Fire event
+		$eventMgr = DevblocksPlatform::getEventService();
+		$eventMgr->trigger(
+			new Model_DevblocksEvent(
+				'context.delete',
+				array(
+					'context' => CerberusContexts::CONTEXT_CLASSIFIER_ENTITY,
+					'context_ids' => $ids
+				)
+			)
+		);
+		
+		self::clearCache();
+		return true;
+	}
+	
+	public static function getSearchQueryComponents($columns, $params, $sortBy=null, $sortAsc=null) {
+		$fields = SearchFields_ClassifierEntity::getFields();
+		
+		list($tables,$wheres) = parent::_parseSearchParams($params, $columns, 'SearchFields_ClassifierEntity', $sortBy);
+		
+		$select_sql = sprintf("SELECT ".
+			"classifier_entity.id as %s, ".
+			"classifier_entity.name as %s, ".
+			"classifier_entity.type as %s, ".
+			"classifier_entity.description as %s, ".
+			"classifier_entity.params_json as %s, ".
+			"classifier_entity.updated_at as %s ",
+				SearchFields_ClassifierEntity::ID,
+				SearchFields_ClassifierEntity::NAME,
+				SearchFields_ClassifierEntity::TYPE,
+				SearchFields_ClassifierEntity::DESCRIPTION,
+				SearchFields_ClassifierEntity::PARAMS_JSON,
+				SearchFields_ClassifierEntity::UPDATED_AT
+			);
+			
+		$join_sql = "FROM classifier_entity ";
+		
+		$where_sql = "".
+			(!empty($wheres) ? sprintf("WHERE %s ",implode(' AND ',$wheres)) : "WHERE 1 ");
+			
+		$sort_sql = self::_buildSortClause($sortBy, $sortAsc, $fields, $select_sql, 'SearchFields_ClassifierEntity');
+	
+		// Virtuals
+		
+		$args = array(
+			'join_sql' => &$join_sql,
+			'where_sql' => &$where_sql,
+			'tables' => &$tables,
+		);
+	
+		array_walk_recursive(
+			$params,
+			array('DAO_ClassifierEntity', '_translateVirtualParameters'),
+			$args
+		);
+		
+		return array(
+			'primary_table' => 'classifier_entity',
+			'select' => $select_sql,
+			'join' => $join_sql,
+			'where' => $where_sql,
+			'sort' => $sort_sql,
+		);
+	}
+	
+	private static function _translateVirtualParameters($param, $key, &$args) {
+		if(!is_a($param, 'DevblocksSearchCriteria'))
+			return;
+			
+		$from_context = CerberusContexts::CONTEXT_CLASSIFIER_ENTITY;
+		$from_index = 'classifier_entity.id';
+		
+		$param_key = $param->field;
+		settype($param_key, 'string');
+		
+		switch($param_key) {
+			case SearchFields_ClassifierEntity::VIRTUAL_HAS_FIELDSET:
+				self::_searchComponentsVirtualHasFieldset($param, $from_context, $from_index, $args['join_sql'], $args['where_sql']);
+				break;
+		}
+	}
+	
+	/**
+	 * Enter description here...
+	 *
+	 * @param array $columns
+	 * @param DevblocksSearchCriteria[] $params
+	 * @param integer $limit
+	 * @param integer $page
+	 * @param string $sortBy
+	 * @param boolean $sortAsc
+	 * @param boolean $withCounts
+	 * @return array
+	 */
+	static function search($columns, $params, $limit=10, $page=0, $sortBy=null, $sortAsc=null, $withCounts=true) {
+		$db = DevblocksPlatform::getDatabaseService();
+		
+		// Build search queries
+		$query_parts = self::getSearchQueryComponents($columns,$params,$sortBy,$sortAsc);
+
+		$select_sql = $query_parts['select'];
+		$join_sql = $query_parts['join'];
+		$where_sql = $query_parts['where'];
+		$sort_sql = $query_parts['sort'];
+		
+		$sql =
+			$select_sql.
+			$join_sql.
+			$where_sql.
+			$sort_sql;
+			
+		if($limit > 0) {
+			if(false == ($rs = $db->SelectLimit($sql,$limit,$page*$limit)))
+				return false;
+		} else {
+			if(false == ($rs = $db->ExecuteSlave($sql)))
+				return false;
+			$total = mysqli_num_rows($rs);
+		}
+		
+		if(!($rs instanceof mysqli_result))
+			return false;
+		
+		$results = array();
+		
+		while($row = mysqli_fetch_assoc($rs)) {
+			$object_id = intval($row[SearchFields_ClassifierEntity::ID]);
+			$results[$object_id] = $row;
+		}
+
+		$total = count($results);
+		
+		if($withCounts) {
+			// We can skip counting if we have a less-than-full single page
+			if(!(0 == $page && $total < $limit)) {
+				$count_sql =
+					"SELECT COUNT(classifier_entity.id) ".
+					$join_sql.
+					$where_sql;
+				$total = $db->GetOneSlave($count_sql);
+			}
+		}
+		
+		mysqli_free_result($rs);
+		
+		return array($results,$total);
+	}
+
+};
+
+class SearchFields_ClassifierEntity extends DevblocksSearchFields {
+	const ID = 'c_id';
+	const NAME = 'c_name';
+	const TYPE = 'c_type';
+	const DESCRIPTION = 'c_description';
+	const PARAMS_JSON = 'c_params_json';
+	const UPDATED_AT = 'c_updated_at';
+
+	const VIRTUAL_CONTEXT_LINK = '*_context_link';
+	const VIRTUAL_HAS_FIELDSET = '*_has_fieldset';
+	
+	static private $_fields = null;
+	
+	static function getPrimaryKey() {
+		return 'classifier_entity.id';
+	}
+	
+	static function getCustomFieldContextKeys() {
+		// [TODO] Context
+		return array(
+			'' => new DevblocksSearchFieldContextKeys('classifier_entity.id', self::ID),
+		);
+	}
+	
+	static function getWhereSQL(DevblocksSearchCriteria $param) {
+		switch($param->field) {
+			case self::VIRTUAL_CONTEXT_LINK:
+				return self::_getWhereSQLFromContextLinksField($param, CerberusContexts::CONTEXT_CLASSIFIER_ENTITY, self::getPrimaryKey());
+				break;
+				
+			default:
+				if('cf_' == substr($param->field, 0, 3)) {
+					return self::_getWhereSQLFromCustomFields($param);
+				} else {
+					return $param->getWhereSQL(self::getFields(), self::getPrimaryKey());
+				}
+				break;
+		}
+	}
+	
+	/**
+	 * @return DevblocksSearchField[]
+	 */
+	static function getFields() {
+		if(is_null(self::$_fields))
+			self::$_fields = self::_getFields();
+		
+		return self::$_fields;
+	}
+	
+	/**
+	 * @return DevblocksSearchField[]
+	 */
+	static function _getFields() {
+		$translate = DevblocksPlatform::getTranslationService();
+		
+		$columns = array(
+			self::ID => new DevblocksSearchField(self::ID, 'classifier_entity', 'id', $translate->_('common.id'), null, true),
+			self::NAME => new DevblocksSearchField(self::NAME, 'classifier_entity', 'name', $translate->_('common.name'), null, true),
+			self::TYPE => new DevblocksSearchField(self::TYPE, 'classifier_entity', 'type', $translate->_('common.type'), null, true),
+			self::DESCRIPTION => new DevblocksSearchField(self::DESCRIPTION, 'classifier_entity', 'description', $translate->_('common.description'), null, true),
+			self::PARAMS_JSON => new DevblocksSearchField(self::PARAMS_JSON, 'classifier_entity', 'params_json', null, null, true),
+			self::UPDATED_AT => new DevblocksSearchField(self::UPDATED_AT, 'classifier_entity', 'updated_at', $translate->_('common.updated'), null, true),
+
+			self::VIRTUAL_CONTEXT_LINK => new DevblocksSearchField(self::VIRTUAL_CONTEXT_LINK, '*', 'context_link', $translate->_('common.links'), null, false),
+			self::VIRTUAL_HAS_FIELDSET => new DevblocksSearchField(self::VIRTUAL_HAS_FIELDSET, '*', 'has_fieldset', $translate->_('common.fieldset'), null, false),
+		);
+		
+		// Custom Fields
+		$custom_columns = DevblocksSearchField::getCustomSearchFieldsByContexts(array_keys(self::getCustomFieldContextKeys()));
+		
+		if(!empty($custom_columns))
+			$columns = array_merge($columns, $custom_columns);
+
+		// Sort by label (translation-conscious)
+		DevblocksPlatform::sortObjects($columns, 'db_label');
+
+		return $columns;
+	}
+};
+
+class Model_ClassifierEntity {
+	public $id = 0;
+	public $name = null;
+	public $type = null;
+	public $description = null;
+	public $params = [];
+	public $updated_at = 0;
+};
+
+class View_ClassifierEntity extends C4_AbstractView implements IAbstractView_Subtotals, IAbstractView_QuickSearch {
+	const DEFAULT_ID = 'classifier_entity';
+
+	function __construct() {
+		$this->id = self::DEFAULT_ID;
+		$this->name = DevblocksPlatform::translateCapitalized('common.classifier.entities');
+		$this->renderLimit = 25;
+		$this->renderSortBy = SearchFields_ClassifierEntity::NAME;
+		$this->renderSortAsc = true;
+
+		$this->view_columns = array(
+			SearchFields_ClassifierEntity::NAME,
+			SearchFields_ClassifierEntity::DESCRIPTION,
+			SearchFields_ClassifierEntity::TYPE,
+			SearchFields_ClassifierEntity::UPDATED_AT,
+		);
+		
+		$this->addColumnsHidden(array(
+			SearchFields_ClassifierEntity::PARAMS_JSON,
+			SearchFields_ClassifierEntity::VIRTUAL_CONTEXT_LINK,
+			SearchFields_ClassifierEntity::VIRTUAL_HAS_FIELDSET,
+		));
+		
+		$this->addParamsHidden(array(
+			SearchFields_ClassifierEntity::PARAMS_JSON,
+		));
+		
+		$this->doResetCriteria();
+	}
+
+	function getData() {
+		$objects = DAO_ClassifierEntity::search(
+			$this->view_columns,
+			$this->getParams(),
+			$this->renderLimit,
+			$this->renderPage,
+			$this->renderSortBy,
+			$this->renderSortAsc,
+			$this->renderTotal
+		);
+		
+		$this->_lazyLoadCustomFieldsIntoObjects($objects, 'SearchFields_ClassifierEntity');
+		
+		return $objects;
+	}
+	
+	function getDataAsObjects($ids=null) {
+		return $this->_getDataAsObjects('DAO_ClassifierEntity', $ids);
+	}
+	
+	function getDataSample($size) {
+		return $this->_doGetDataSample('DAO_ClassifierEntity', $size);
+	}
+
+	function getSubtotalFields() {
+		$all_fields = $this->getParamsAvailable(true);
+		
+		$fields = array();
+
+		if(is_array($all_fields))
+		foreach($all_fields as $field_key => $field_model) {
+			$pass = false;
+			
+			switch($field_key) {
+				// Fields
+//				case SearchFields_ClassifierEntity::EXAMPLE:
+//					$pass = true;
+//					break;
+					
+				// Virtuals
+				case SearchFields_ClassifierEntity::VIRTUAL_CONTEXT_LINK:
+				case SearchFields_ClassifierEntity::VIRTUAL_HAS_FIELDSET:
+					$pass = true;
+					break;
+					
+				// Valid custom fields
+				default:
+					if('cf_' == substr($field_key,0,3))
+						$pass = $this->_canSubtotalCustomField($field_key);
+					break;
+			}
+			
+			if($pass)
+				$fields[$field_key] = $field_model;
+		}
+		
+		return $fields;
+	}
+	
+	function getSubtotalCounts($column) {
+		$counts = array();
+		$fields = $this->getFields();
+		$context = CerberusContexts::CONTEXT_CLASSIFIER_ENTITY;
+
+		if(!isset($fields[$column]))
+			return array();
+		
+		switch($column) {
+//			case SearchFields_ClassifierEntity::EXAMPLE_BOOL:
+//				$counts = $this->_getSubtotalCountForBooleanColumn($context, $column);
+//				break;
+
+//			case SearchFields_ClassifierEntity::EXAMPLE_STRING:
+//				$counts = $this->_getSubtotalCountForStringColumn($context, $column);
+//				break;
+				
+			case SearchFields_ClassifierEntity::VIRTUAL_CONTEXT_LINK:
+				$counts = $this->_getSubtotalCountForContextLinkColumn($context, $column);
+				break;
+
+			case SearchFields_ClassifierEntity::VIRTUAL_HAS_FIELDSET:
+				$counts = $this->_getSubtotalCountForHasFieldsetColumn($context, $column);
+				break;
+				
+			default:
+				// Custom fields
+				if('cf_' == substr($column,0,3)) {
+					$counts = $this->_getSubtotalCountForCustomColumn($context, $column);
+				}
+				
+				break;
+		}
+		
+		return $counts;
+	}
+	
+	function getQuickSearchFields() {
+		// [TODO] Implement quick search fields
+		$search_fields = SearchFields_ClassifierEntity::getFields();
+	
+		$fields = array(
+			'text' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_TEXT,
+					'options' => array('param_key' => SearchFields_ClassifierEntity::NAME, 'match' => DevblocksSearchCriteria::OPTION_TEXT_PARTIAL),
+				),
+			'description' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_TEXT,
+					'options' => array('param_key' => SearchFields_ClassifierEntity::DESCRIPTION, 'match' => DevblocksSearchCriteria::OPTION_TEXT_PARTIAL),
+				),
+			'id' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_NUMBER,
+					'options' => array('param_key' => SearchFields_ClassifierEntity::ID),
+					'examples' => [
+						['type' => 'chooser', 'context' => CerberusContexts::CONTEXT_CLASSIFIER_ENTITY, 'q' => ''],
+					]
+				),
+			'name' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_TEXT,
+					'options' => array('param_key' => SearchFields_ClassifierEntity::NAME, 'match' => DevblocksSearchCriteria::OPTION_TEXT_PARTIAL),
+				),
+			'updated' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_DATE,
+					'options' => array('param_key' => SearchFields_ClassifierEntity::UPDATED_AT),
+				),
+		);
+		
+		// Add quick search links
+		
+		$fields = self::_appendVirtualFiltersFromQuickSearchContexts('links', $fields, 'links');
+		
+		// Add searchable custom fields
+		
+		$fields = self::_appendFieldsFromQuickSearchContext(CerberusContexts::CONTEXT_CLASSIFIER_ENTITY, $fields, null);
+		
+		// Add is_sortable
+		
+		$fields = self::_setSortableQuickSearchFields($fields, $search_fields);
+		
+		// Sort by keys
+		ksort($fields);
+		
+		return $fields;
+	}	
+	
+	// [TODO] Implement quick search fields
+	function getParamFromQuickSearchFieldTokens($field, $tokens) {
+		switch($field) {
+			default:
+				if($field == 'links' || substr($field, 0, 6) == 'links.')
+					return DevblocksSearchCriteria::getContextLinksParamFromTokens($field, $tokens);
+				
+				$search_fields = $this->getQuickSearchFields();
+				return DevblocksSearchCriteria::getParamFromQueryFieldTokens($field, $tokens, $search_fields);
+				break;
+		}
+		
+		return false;
+	}
+	
+	function render() {
+		$this->_sanitize();
+		
+		$tpl = DevblocksPlatform::getTemplateService();
+		$tpl->assign('id', $this->id);
+		$tpl->assign('view', $this);
+
+		// Custom fields
+		$custom_fields = DAO_CustomField::getByContext(CerberusContexts::CONTEXT_CLASSIFIER_ENTITY);
+		$tpl->assign('custom_fields', $custom_fields);
+
+		$tpl->assign('view_template', 'devblocks:cerberusweb.core::internal/classifier/entity/view.tpl');
+		$tpl->display('devblocks:cerberusweb.core::internal/views/subtotals_and_view.tpl');
+	}
+
+	function renderCriteria($field) {
+		$tpl = DevblocksPlatform::getTemplateService();
+		$tpl->assign('id', $this->id);
+
+		switch($field) {
+			case SearchFields_ClassifierEntity::DESCRIPTION:
+			case SearchFields_ClassifierEntity::NAME:
+			case SearchFields_ClassifierEntity::TYPE:
+				$tpl->display('devblocks:cerberusweb.core::internal/views/criteria/__string.tpl');
+				break;
+				
+			case SearchFields_ClassifierEntity::ID:
+				$tpl->display('devblocks:cerberusweb.core::internal/views/criteria/__number.tpl');
+				break;
+				
+			case 'placeholder_bool':
+				$tpl->display('devblocks:cerberusweb.core::internal/views/criteria/__bool.tpl');
+				break;
+				
+			case SearchFields_ClassifierEntity::UPDATED_AT:
+				$tpl->display('devblocks:cerberusweb.core::internal/views/criteria/__date.tpl');
+				break;
+				
+			case SearchFields_ClassifierEntity::VIRTUAL_CONTEXT_LINK:
+				$contexts = Extension_DevblocksContext::getAll(false);
+				$tpl->assign('contexts', $contexts);
+				$tpl->display('devblocks:cerberusweb.core::internal/views/criteria/__context_link.tpl');
+				break;
+				
+			case SearchFields_ClassifierEntity::VIRTUAL_HAS_FIELDSET:
+				$this->_renderCriteriaHasFieldset($tpl, CerberusContexts::CONTEXT_CLASSIFIER_ENTITY);
+				break;
+				
+			default:
+				// Custom Fields
+				if('cf_' == substr($field,0,3)) {
+					$this->_renderCriteriaCustomField($tpl, substr($field,3));
+				} else {
+					echo ' ';
+				}
+				break;
+		}
+	}
+
+	function renderCriteriaParam($param) {
+		$field = $param->field;
+		$values = !is_array($param->value) ? array($param->value) : $param->value;
+
+		switch($field) {
+			default:
+				parent::renderCriteriaParam($param);
+				break;
+		}
+	}
+
+	function renderVirtualCriteria($param) {
+		$key = $param->field;
+		
+		$translate = DevblocksPlatform::getTranslationService();
+		
+		switch($key) {
+			case SearchFields_ClassifierEntity::VIRTUAL_CONTEXT_LINK:
+				$this->_renderVirtualContextLinks($param);
+				break;
+				
+			case SearchFields_ClassifierEntity::VIRTUAL_HAS_FIELDSET:
+				$this->_renderVirtualHasFieldset($param);
+				break;
+		}
+	}
+
+	function getFields() {
+		return SearchFields_ClassifierEntity::getFields();
+	}
+
+	function doSetCriteria($field, $oper, $value) {
+		$criteria = null;
+
+		switch($field) {
+			case SearchFields_ClassifierEntity::DESCRIPTION:
+			case SearchFields_ClassifierEntity::NAME:
+			case SearchFields_ClassifierEntity::TYPE:
+				$criteria = $this->_doSetCriteriaString($field, $oper, $value);
+				break;
+				
+			case SearchFields_ClassifierEntity::ID:
+				$criteria = new DevblocksSearchCriteria($field,$oper,$value);
+				break;
+				
+			case SearchFields_ClassifierEntity::UPDATED_AT:
+				$criteria = $this->_doSetCriteriaDate($field, $oper);
+				break;
+				
+			case 'placeholder_bool':
+				@$bool = DevblocksPlatform::importGPC($_REQUEST['bool'],'integer',1);
+				$criteria = new DevblocksSearchCriteria($field,$oper,$bool);
+				break;
+				
+			case SearchFields_ClassifierEntity::VIRTUAL_CONTEXT_LINK:
+				@$context_links = DevblocksPlatform::importGPC($_REQUEST['context_link'],'array',array());
+				$criteria = new DevblocksSearchCriteria($field,DevblocksSearchCriteria::OPER_IN,$context_links);
+				break;
+				
+			case SearchFields_ClassifierEntity::VIRTUAL_HAS_FIELDSET:
+				@$options = DevblocksPlatform::importGPC($_REQUEST['options'],'array',array());
+				$criteria = new DevblocksSearchCriteria($field,DevblocksSearchCriteria::OPER_IN,$options);
+				break;
+				
+			default:
+				// Custom Fields
+				if(substr($field,0,3)=='cf_') {
+					$criteria = $this->_doSetCriteriaCustomField($field, substr($field,3));
+				}
+				break;
+		}
+
+		if(!empty($criteria)) {
+			$this->addParam($criteria, $field);
+			$this->renderPage = 0;
+		}
+	}
+};
+
+class Context_ClassifierEntity extends Extension_DevblocksContext implements IDevblocksContextProfile, IDevblocksContextPeek { // IDevblocksContextImport
+	const ID = 'cerberusweb.contexts.classifier.entity';
+	
+	static function isReadableByActor($models, $actor) {
+		// Everyone can read
+		return CerberusContexts::allowEverything($models);
+	}
+	
+	static function isWriteableByActor($models, $actor) {
+		// Everyone can modify
+		return CerberusContexts::allowEverything($models);
+	}
+
+	function getRandom() {
+		return DAO_ClassifierEntity::random();
+	}
+	
+	function profileGetUrl($context_id) {
+		if(empty($context_id))
+			return '';
+	
+		$url_writer = DevblocksPlatform::getUrlService();
+		$url = $url_writer->writeNoProxy('c=profiles&type=classifier_entity&id='.$context_id, true);
+		return $url;
+	}
+	
+	function getMeta($context_id) {
+		$classifier_entity = DAO_ClassifierEntity::get($context_id);
+		$url_writer = DevblocksPlatform::getUrlService();
+		
+		$url = $this->profileGetUrl($context_id);
+		$friendly = DevblocksPlatform::strToPermalink($classifier_entity->name);
+		
+		if(!empty($friendly))
+			$url .= '-' . $friendly;
+		
+		return array(
+			'id' => $classifier_entity->id,
+			'name' => $classifier_entity->name,
+			'permalink' => $url,
+			//'updated' => $classifier_entity->updated_at, // [TODO]
+		);
+	}
+	
+	function getDefaultProperties() {
+		return array(
+			'updated_at',
+		);
+	}
+	
+	function getContext($classifier_entity, &$token_labels, &$token_values, $prefix=null) {
+		if(is_null($prefix))
+			$prefix = 'Classifier Entity:';
+		
+		$translate = DevblocksPlatform::getTranslationService();
+		$fields = DAO_CustomField::getByContext(CerberusContexts::CONTEXT_CLASSIFIER_ENTITY);
+
+		// Polymorph
+		if(is_numeric($classifier_entity)) {
+			$classifier_entity = DAO_ClassifierEntity::get($classifier_entity);
+		} elseif($classifier_entity instanceof Model_ClassifierEntity) {
+			// It's what we want already.
+		} elseif(is_array($classifier_entity)) {
+			$classifier_entity = Cerb_ORMHelper::recastArrayToModel($classifier_entity, 'Model_ClassifierEntity');
+		} else {
+			$classifier_entity = null;
+		}
+		
+		// Token labels
+		$token_labels = array(
+			'_label' => $prefix,
+			'description' => $prefix.$translate->_('common.description'),
+			'id' => $prefix.$translate->_('common.id'),
+			'name' => $prefix.$translate->_('common.name'),
+			'type' => $prefix.$translate->_('common.type'),
+			'updated_at' => $prefix.$translate->_('common.updated'),
+			'record_url' => $prefix.$translate->_('common.url.record'),
+		);
+		
+		// Token types
+		$token_types = array(
+			'_label' => 'context_url',
+			'description' => Model_CustomField::TYPE_SINGLE_LINE,
+			'id' => Model_CustomField::TYPE_NUMBER,
+			'name' => Model_CustomField::TYPE_SINGLE_LINE,
+			'type' => Model_CustomField::TYPE_SINGLE_LINE,
+			'updated_at' => Model_CustomField::TYPE_DATE,
+			'record_url' => Model_CustomField::TYPE_URL,
+		);
+		
+		// Custom field/fieldset token labels
+		if(false !== ($custom_field_labels = $this->_getTokenLabelsFromCustomFields($fields, $prefix)) && is_array($custom_field_labels))
+			$token_labels = array_merge($token_labels, $custom_field_labels);
+		
+		// Custom field/fieldset token types
+		if(false !== ($custom_field_types = $this->_getTokenTypesFromCustomFields($fields, $prefix)) && is_array($custom_field_types))
+			$token_types = array_merge($token_types, $custom_field_types);
+		
+		// Token values
+		$token_values = array();
+		
+		$token_values['_context'] = CerberusContexts::CONTEXT_CLASSIFIER_ENTITY;
+		$token_values['_types'] = $token_types;
+		
+		if($classifier_entity) {
+			$token_values['_loaded'] = true;
+			$token_values['_label'] = $classifier_entity->name;
+			$token_values['description'] = $classifier_entity->description;
+			$token_values['id'] = $classifier_entity->id;
+			$token_values['name'] = $classifier_entity->name;
+			$token_values['type'] = $classifier_entity->type;
+			$token_values['updated_at'] = $classifier_entity->updated_at;
+			
+			// Custom fields
+			$token_values = $this->_importModelCustomFieldsAsValues($classifier_entity, $token_values);
+			
+			// URL
+			$url_writer = DevblocksPlatform::getUrlService();
+			$token_values['record_url'] = $url_writer->writeNoProxy(sprintf("c=profiles&type=classifier_entity&id=%d-%s",$classifier_entity->id, DevblocksPlatform::strToPermalink($classifier_entity->name)), true);
+		}
+		
+		return true;
+	}
+
+	function lazyLoadContextValues($token, $dictionary) {
+		if(!isset($dictionary['id']))
+			return;
+		
+		$context = CerberusContexts::CONTEXT_CLASSIFIER_ENTITY;
+		$context_id = $dictionary['id'];
+		
+		@$is_loaded = $dictionary['_loaded'];
+		$values = array();
+		
+		if(!$is_loaded) {
+			$labels = array();
+			CerberusContexts::getContext($context, $context_id, $labels, $values, null, true, true);
+		}
+		
+		switch($token) {
+			case 'links':
+				$links = $this->_lazyLoadLinks($context, $context_id);
+				$values = array_merge($values, $fields);
+				break;
+		
+			default:
+				if(DevblocksPlatform::strStartsWith($token, 'custom_')) {
+					$fields = $this->_lazyLoadCustomFields($token, $context, $context_id);
+					$values = array_merge($values, $fields);
+				}
+				break;
+		}
+		
+		return $values;
+	}
+	
+	function getChooserView($view_id=null) {
+		$active_worker = CerberusApplication::getActiveWorker();
+
+		if(empty($view_id))
+			$view_id = 'chooser_'.str_replace('.','_',$this->id).time().mt_rand(0,9999);
+	
+		// View
+		$defaults = C4_AbstractViewModel::loadFromClass($this->getViewClass());
+		$defaults->id = $view_id;
+		$defaults->is_ephemeral = true;
+
+		$view = C4_AbstractViewLoader::getView($view_id, $defaults);
+		$view->name = 'Classifier Entity';
+		/*
+		$view->addParams(array(
+			SearchFields_ClassifierEntity::UPDATED_AT => new DevblocksSearchCriteria(SearchFields_ClassifierEntity::UPDATED_AT,'=',0),
+		), true);
+		*/
+		$view->renderSortBy = SearchFields_ClassifierEntity::UPDATED_AT;
+		$view->renderSortAsc = false;
+		$view->renderLimit = 10;
+		$view->renderFilters = false;
+		$view->renderTemplate = 'contextlinks_chooser';
+		
+		return $view;
+	}
+	
+	function getView($context=null, $context_id=null, $options=array(), $view_id=null) {
+		$view_id = !empty($view_id) ? $view_id : str_replace('.','_',$this->id);
+		
+		$defaults = C4_AbstractViewModel::loadFromClass($this->getViewClass());
+		$defaults->id = $view_id;
+
+		$view = C4_AbstractViewLoader::getView($view_id, $defaults);
+		$view->name = 'Classifier Entity';
+		
+		$params_req = array();
+		
+		if(!empty($context) && !empty($context_id)) {
+			$params_req = array(
+				new DevblocksSearchCriteria(SearchFields_ClassifierEntity::VIRTUAL_CONTEXT_LINK,'in',array($context.':'.$context_id)),
+			);
+		}
+		
+		$view->addParamsRequired($params_req, true);
+		
+		$view->renderTemplate = 'context';
+		return $view;
+	}
+	
+	function renderPeekPopup($context_id=0, $view_id='', $edit=false) {
+		$tpl = DevblocksPlatform::getTemplateService();
+		$tpl->assign('view_id', $view_id);
+		
+		$context = CerberusContexts::CONTEXT_CLASSIFIER_ENTITY;
+		
+		if(!empty($context_id)) {
+			$model = DAO_ClassifierEntity::get($context_id);
+		}
+		
+		if(empty($context_id) || $edit) {
+			if(isset($model))
+				$tpl->assign('model', $model);
+			
+			// Custom fields
+			$custom_fields = DAO_CustomField::getByContext($context, false);
+			$tpl->assign('custom_fields', $custom_fields);
+	
+			$custom_field_values = DAO_CustomFieldValue::getValuesByContextIds($context, $context_id);
+			if(isset($custom_field_values[$context_id]))
+				$tpl->assign('custom_field_values', $custom_field_values[$context_id]);
+			
+			$types = Model_CustomField::getTypes();
+			$tpl->assign('types', $types);
+			
+			// View
+			$tpl->assign('id', $context_id);
+			$tpl->assign('view_id', $view_id);
+			$tpl->display('devblocks:cerberusweb.core::internal/classifier/entity/peek_edit.tpl');
+			
+		} else {
+			// Counts
+			$activity_counts = array(
+				//'comments' => DAO_Comment::count($context, $context_id),
+			);
+			$tpl->assign('activity_counts', $activity_counts);
+			
+			// Links
+			$links = array(
+				$context => array(
+					$context_id => 
+						DAO_ContextLink::getContextLinkCounts(
+							$context,
+							$context_id,
+							array(CerberusContexts::CONTEXT_CUSTOM_FIELDSET)
+						),
+				),
+			);
+			$tpl->assign('links', $links);
+			
+			// Timeline
+			if($context_id) {
+				$timeline_json = Page_Profiles::getTimelineJson(Extension_DevblocksContext::getTimelineComments($context, $context_id));
+				$tpl->assign('timeline_json', $timeline_json);
+			}
+
+			// Context
+			if(false == ($context_ext = Extension_DevblocksContext::get($context)))
+				return;
+			
+			// Dictionary
+			$labels = array();
+			$values = array();
+			CerberusContexts::getContext($context, $model, $labels, $values, '', true, false);
+			$dict = DevblocksDictionaryDelegate::instance($values);
+			$tpl->assign('dict', $dict);
+			
+			$properties = $context_ext->getCardProperties();
+			$tpl->assign('properties', $properties);
+			
+			$tpl->display('devblocks:cerberusweb.core::internal/classifier/entity/peek.tpl');
+		}
+	}
+};

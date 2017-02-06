@@ -1,6 +1,7 @@
 {$div_id = "peek{uniqid()}"}
 {$peek_context = CerberusContexts::CONTEXT_BUCKET}
 {$group = $bucket->getGroup()}
+{$is_writeable = Context_Bucket::isWriteableByActor($bucket, $active_worker)}
 
 <div id="{$div_id}">
 	<div style="float:left;margin-right:10px;">
@@ -17,9 +18,9 @@
 		</h1>
 		
 		<div style="margin-top:5px;">
-			{if $active_worker->is_superuser || $active_worker->isGroupManager($group->id)}<button type="button" class="cerb-peek-edit" data-context="{$peek_context}" data-context-id="{$bucket->id}" data-edit="true"><span class="glyphicons glyphicons-cogwheel"></span> {'common.edit'|devblocks_translate|capitalize}</button>{/if}
+			{if $is_writeable}<button type="button" class="cerb-peek-edit" data-context="{$peek_context}" data-context-id="{$bucket->id}" data-edit="true"><span class="glyphicons glyphicons-cogwheel"></span> {'common.edit'|devblocks_translate|capitalize}</button>{/if}
 			{if $bucket}<button type="button" class="cerb-peek-profile"><span class="glyphicons glyphicons-nameplate"></span> {'common.profile'|devblocks_translate|capitalize}</button>{/if}
-			{if $bucket}<button type="button" class="cerb-peek-comments-add" data-context="{$peek_context}" data-context-id="{$bucket->id}"><span class="glyphicons glyphicons-conversation"></span> {'common.comment'|devblocks_translate|capitalize}</button>{/if}
+			{if $bucket}<button type="button" class="cerb-peek-comments-add" data-context="{CerberusContexts::CONTEXT_COMMENT}" data-context-id="0" data-edit="context:{$peek_context} context.id:{$bucket->id}"><span class="glyphicons glyphicons-conversation"></span> {'common.comment'|devblocks_translate|capitalize}</button>{/if}
 		</div>
 	</div>
 </div>
@@ -61,7 +62,7 @@
 </fieldset>
 
 {* [TODO] Custom fields and fieldsets *}
-{include file="devblocks:cerberusweb.core::internal/peek/peek_links.tpl" links=$links}
+{include file="devblocks:cerberusweb.core::internal/profiles/profile_record_links.tpl" properties_links=$links peek=true page_context=$peek_context page_context_id=$bucket->id}
 
 {include file="devblocks:cerberusweb.core::internal/peek/card_timeline_pager.tpl"}
 
@@ -75,11 +76,13 @@ $(function() {
 
 	$popup.one('popup_open',function(event,ui) {
 		$popup.dialog('option','title', "{'common.bucket'|devblocks_translate|capitalize|escape:'javascript' nofilter}");
+		$popup.css('overflow', 'inherit');
 		
 		// Properties grid
 		$popup.find('div.cerb-properties-grid').cerbPropertyGrid();
 		
 		// Edit button
+		{if $is_writeable}
 		$popup.find('button.cerb-peek-edit')
 			.cerbPeekTrigger({ 'view_id': '{$view_id}' })
 			.on('cerb-peek-saved', function(e) {
@@ -89,11 +92,12 @@ $(function() {
 				genericAjaxPopupClose($layer);
 			})
 			;
+		{/if}
 		
 		// Comments
 		$popup.find('button.cerb-peek-comments-add')
-			.cerbCommentTrigger()
-			.on('cerb-comment-saved', function() {
+			.cerbPeekTrigger()
+			.on('cerb-peek-saved', function() {
 				genericAjaxPopup($layer,'c=internal&a=showPeekPopup&context={$peek_context}&context_id={$bucket->id}&view_id={$view_id}','reuse',false,'50%');
 			})
 			;

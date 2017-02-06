@@ -2,17 +2,17 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2017, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
 | The latest version of this license can be found here:
-| http://cerb.io/license
+| http://cerb.ai/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://cerb.io	    http://webgroup.media
+|	http://cerb.ai	    http://webgroup.media
 ***********************************************************************/
 
 class Page_Custom extends CerberusPageExtension {
@@ -47,7 +47,7 @@ class Page_Custom extends CerberusPageExtension {
 			return;
 		
 		if(null == ($page = DAO_WorkspacePage::get($tab->workspace_page_id))
-			|| !$page->isReadableByWorker($active_worker)
+			|| !Context_WorkspacePage::isReadableByActor($page, $active_worker)
 			)
 			return;
 		
@@ -102,32 +102,20 @@ class Page_Custom extends CerberusPageExtension {
 		$defaults = C4_AbstractViewModel::loadFromClass('View_WorkspacePage');
 		
 		if(null != ($view = C4_AbstractViewLoader::getView($view_id, $defaults))) {
-			$worker_group_ids = array_keys($active_worker->getMemberships());
-			$worker_role_ids = array_keys(DAO_WorkerRole::getRolesByWorker($active_worker->id));
-			
-			// Restrict owners
-			$params = array( '_ownership' => array(
-					DevblocksSearchCriteria::GROUP_OR,
-					SearchFields_WorkspacePage::OWNER_CONTEXT => new DevblocksSearchCriteria(SearchFields_WorkspacePage::OWNER_CONTEXT,DevblocksSearchCriteria::OPER_EQ,CerberusContexts::CONTEXT_APPLICATION),
-					array(
-						DevblocksSearchCriteria::GROUP_AND,
-						SearchFields_WorkspacePage::OWNER_CONTEXT => new DevblocksSearchCriteria(SearchFields_WorkspacePage::OWNER_CONTEXT,DevblocksSearchCriteria::OPER_EQ,CerberusContexts::CONTEXT_WORKER),
-						SearchFields_WorkspacePage::OWNER_CONTEXT_ID => new DevblocksSearchCriteria(SearchFields_WorkspacePage::OWNER_CONTEXT_ID,DevblocksSearchCriteria::OPER_EQ,$active_worker->id),
-					),
-					array(
-						DevblocksSearchCriteria::GROUP_AND,
-						SearchFields_WorkspacePage::OWNER_CONTEXT => new DevblocksSearchCriteria(SearchFields_WorkspacePage::OWNER_CONTEXT,DevblocksSearchCriteria::OPER_EQ,CerberusContexts::CONTEXT_GROUP),
-						SearchFields_WorkspacePage::OWNER_CONTEXT_ID => new DevblocksSearchCriteria(SearchFields_WorkspacePage::OWNER_CONTEXT_ID,DevblocksSearchCriteria::OPER_IN,$worker_group_ids),
-					),
-					array(
-						DevblocksSearchCriteria::GROUP_AND,
-						SearchFields_WorkspacePage::OWNER_CONTEXT => new DevblocksSearchCriteria(SearchFields_WorkspacePage::OWNER_CONTEXT,DevblocksSearchCriteria::OPER_EQ,CerberusContexts::CONTEXT_ROLE),
-						SearchFields_WorkspacePage::OWNER_CONTEXT_ID => new DevblocksSearchCriteria(SearchFields_WorkspacePage::OWNER_CONTEXT_ID,DevblocksSearchCriteria::OPER_IN,$worker_role_ids),
-					),
-				)
-			);
-			
-			$view->addParamsRequired($params, true);
+			if(!$active_worker->is_superuser) {
+				$worker_group_ids = array_keys($active_worker->getMemberships());
+				$worker_role_ids = array_keys(DAO_WorkerRole::getRolesByWorker($active_worker->id));
+				
+				// Restrict owners
+				
+				$params = $view->getParamsFromQuickSearch(sprintf('(owner.app:cerb OR owner.worker:(id:[%d]) OR owner.group:(id:[%s]) OR owner.role:(id:[%s])',
+					$active_worker->id,
+					implode(',', $worker_group_ids),
+					implode(',', $worker_role_ids)
+				));
+				
+				$view->addParamsRequired(['_ownership' => $params[0]], true);
+			}
 			
 			$tpl->assign('view', $view);
 		}
@@ -142,7 +130,7 @@ class Page_Custom extends CerberusPageExtension {
 		if(null == ($page = DAO_WorkspacePage::get($page_id)))
 			return;
 		
-		if(!$page->isReadableByWorker($active_worker))
+		if(!Context_WorkspacePage::isReadableByActor($page, $active_worker))
 			return;
 			
 		$point = sprintf("pages.worker.%d.%d",
@@ -314,7 +302,7 @@ class Page_Custom extends CerberusPageExtension {
 			$view->renderLimit = 10;
 			$view->view_columns = array(
 				SearchFields_Ticket::BUCKET_RESPONSIBILITY,
-				SearchFields_Ticket::TICKET_LAST_WROTE,
+				SearchFields_Ticket::TICKET_LAST_WROTE_ID,
 				SearchFields_Ticket::TICKET_UPDATED_DATE,
 				SearchFields_Ticket::TICKET_GROUP_ID,
 				SearchFields_Ticket::TICKET_BUCKET_ID,
@@ -480,8 +468,7 @@ class Page_Custom extends CerberusPageExtension {
 			if(!isset($pages[$page_id]))
 				continue;
 
-			// Check write permission
-			if(!$pages[$page_id]->isReadableByWorker($active_worker))
+			if(!Context_WorkspacePage::isReadableByActor($pages[$page_id], $active_worker))
 				continue;
 			
 			$menu[] = $page_id;
@@ -500,7 +487,7 @@ class Page_Custom extends CerberusPageExtension {
 		if(null == ($page = DAO_WorkspacePage::get($page_id)))
 			return;
 		
-		if(!$page->isReadableByWorker($active_worker))
+		if(!Context_WorkspacePage::isReadableByActor($page, $active_worker))
 			return;
 		
 		$tab_ids = DevblocksPlatform::sanitizeArray(DevblocksPlatform::parseCsvString($tab_ids_str), 'integer', array('nonzero','unique'));
@@ -518,7 +505,7 @@ class Page_Custom extends CerberusPageExtension {
 		if(null == ($page = DAO_WorkspacePage::get($page_id)))
 			return;
 		
-		if(!$page->isWriteableByWorker($active_worker))
+		if(!Context_WorkspacePage::isWriteableByActor($page, $active_worker))
 			return;
 
 		$tpl->assign('page', $page);
@@ -552,7 +539,7 @@ class Page_Custom extends CerberusPageExtension {
 			$menu = array();
 		
 		if(null != ($page = DAO_WorkspacePage::get($page_id))) {
-			if($page->isReadableByWorker($active_worker)) {
+			if(Context_WorkspacePage::isReadableByActor($page, $active_worker)) {
 				if(empty($toggle)) {
 					if(false !== ($idx = array_search($page_id, $menu))) {
 						unset($menu[$idx]);
@@ -598,7 +585,7 @@ class Page_Custom extends CerberusPageExtension {
 			if(null == ($page = DAO_WorkspacePage::get($page_id)))
 				throw new Exception("Page not found.");
 			
-			if(!$page->isWriteableByWorker($active_worker))
+			if(!Context_WorkspacePage::isWriteableByActor($page, $active_worker))
 				throw new Exception("Write access to page is denied.");
 			
 			$tab_id = null;
@@ -687,7 +674,7 @@ class Page_Custom extends CerberusPageExtension {
 			return;
 		
 		if(null == ($page = DAO_WorkspacePage::get($tab->workspace_page_id))
-			|| !$page->isReadableByWorker($active_worker)
+			|| !Context_WorkspacePage::isReadableByActor($page, $active_worker)
 			)
 			return;
 
@@ -716,7 +703,7 @@ class Page_Custom extends CerberusPageExtension {
 			return;
 	
 		if(null == ($page = DAO_WorkspacePage::get($tab->workspace_page_id))
-			|| !$page->isReadableByWorker($active_worker)
+			|| !Context_WorkspacePage::isReadableByActor($page, $active_worker)
 		)
 			return;
 	
@@ -786,40 +773,21 @@ class Page_Custom extends CerberusPageExtension {
 			if(null == ($page = DAO_WorkspacePage::get($id)))
 				return;
 	
-			if(!$page->isWriteableByWorker($active_worker))
+			if(!Context_WorkspacePage::isWriteableByActor($page, $active_worker))
 				return;
 			
 			$page_users = $page->getUsers();
 			$tpl->assign('page_users', $page_users);
-				
+			
+			$tpl->assign('workers', DAO_Worker::getAll());
+			
 			$tpl->assign('workspace_page', $page);
 		}
 	
-		// Owners
+		// Owner
+		$owners_menu = Extension_DevblocksContext::getOwnerTree();
+		$tpl->assign('owners_menu', $owners_menu);
 		
-		$roles = DAO_WorkerRole::getAll();
-		$tpl->assign('roles', $roles);
-	
-		$workers = DAO_Worker::getAll();
-		$tpl->assign('workers', $workers);
-	
-		$groups = DAO_Group::getAll();
-		$tpl->assign('groups', $groups);
-	
-		$owner_groups = array();
-		foreach($groups as $k => $v) {
-			if($active_worker->is_superuser || $active_worker->isGroupManager($k))
-				$owner_groups[$k] = $v;
-		}
-		$tpl->assign('owner_groups', $owner_groups);
-	
-		$owner_roles = array();
-		foreach($roles as $k => $v) { /* @var $v Model_WorkerRole */
-			if($active_worker->is_superuser)
-				$owner_roles[$k] = $v;
-		}
-		$tpl->assign('owner_roles', $owner_roles);
-	
 		// Extensions
 		
 		$page_extensions = Extension_WorkspacePage::getAll(false);
@@ -848,8 +816,8 @@ class Page_Custom extends CerberusPageExtension {
 		if(!empty($workspace_page_id)) {
 			if(null == ($workspace_page = DAO_WorkspacePage::get($workspace_page_id)))
 				return;
-				
-			if(!$workspace_page->isWriteableByWorker($active_worker))
+			
+			if(!Context_WorkspacePage::isWriteableByActor($workspace_page, $active_worker))
 				return;
 		}
 	
@@ -992,7 +960,7 @@ class Page_Custom extends CerberusPageExtension {
 		if(null == ($page = DAO_WorkspacePage::get($tab->workspace_page_id)))
 			return;
 	
-		if(!$page->isWriteableByWorker($active_worker))
+		if(!Context_WorkspacePage::isWriteableByActor($page, $active_worker))
 			return;
 	
 		$tpl->assign('workspace_page', $page);
@@ -1031,7 +999,7 @@ class Page_Custom extends CerberusPageExtension {
 			return;
 		}
 	
-		if(!$workspace_page->isWriteableByWorker($active_worker)) {
+		if(!Context_WorkspacePage::isWriteableByActor($workspace_page, $active_worker)) {
 			echo json_encode(false);
 			return;
 		}
@@ -1080,7 +1048,7 @@ class Page_Custom extends CerberusPageExtension {
 		if(null == ($page = DAO_WorkspacePage::get($page_id)))
 			return;
 		
-		if(!$page->isReadableByWorker($active_worker))
+		if(!Context_WorkspacePage::isReadableByActor($page, $active_worker))
 			return;
 		
 		$tpl->assign('page', $page);
@@ -1105,7 +1073,7 @@ class Page_Custom extends CerberusPageExtension {
 		if(null == ($page = DAO_WorkspacePage::get($tab->workspace_page_id)))
 			return;
 		
-		if(!$page->isReadableByWorker($active_worker))
+		if(!Context_WorkspacePage::isReadableByActor($page, $active_worker))
 			return;
 
 		if(null == ($tab_extension = $tab->getExtension()))

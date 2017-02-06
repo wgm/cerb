@@ -2,17 +2,17 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2017, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
 | The latest version of this license can be found here:
-| http://cerb.io/license
+| http://cerb.ai/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://cerb.io	    http://webgroup.media
+|	http://cerb.ai	    http://webgroup.media
 ***********************************************************************/
 
 class PageSection_ProfilesOrganization extends Extension_PageSection {
@@ -128,7 +128,7 @@ class PageSection_ProfilesOrganization extends Extension_PageSection {
 					DAO_ContextLink::getContextLinkCounts(
 						CerberusContexts::CONTEXT_ORG,
 						$org->id,
-						array(CerberusContexts::CONTEXT_WORKER, CerberusContexts::CONTEXT_CUSTOM_FIELDSET)
+						array(CerberusContexts::CONTEXT_CUSTOM_FIELDSET)
 					),
 			);
 		}
@@ -172,7 +172,7 @@ class PageSection_ProfilesOrganization extends Extension_PageSection {
 		
 		$active_worker = CerberusApplication::getActiveWorker();
 
-		header('Content-Type: application/json; charset=' . LANG_CHARSET_CODE);
+		header('Content-Type: application/json; charset=utf-8');
 		
 		try {
 		
@@ -191,6 +191,7 @@ class PageSection_ProfilesOrganization extends Extension_PageSection {
 				
 			} else { // create/edit
 				@$org_name = DevblocksPlatform::importGPC($_REQUEST['org_name'],'string','');
+				@$aliases = DevblocksPlatform::importGPC($_REQUEST['aliases'],'string','');
 				@$street = DevblocksPlatform::importGPC($_REQUEST['street'],'string','');
 				@$city = DevblocksPlatform::importGPC($_REQUEST['city'],'string','');
 				@$province = DevblocksPlatform::importGPC($_REQUEST['province'],'string','');
@@ -223,18 +224,6 @@ class PageSection_ProfilesOrganization extends Extension_PageSection {
 						if(false == ($id = DAO_ContactOrg::create($fields)))
 							throw new Exception_DevblocksAjaxValidationError("Failed to create a new record.");
 						
-						// Watchers
-						@$add_watcher_ids = DevblocksPlatform::sanitizeArray(DevblocksPlatform::importGPC($_REQUEST['add_watcher_ids'],'array',array()),'integer',array('unique','nonzero'));
-						if(!empty($add_watcher_ids))
-							CerberusContexts::addWatchers(CerberusContexts::CONTEXT_ORG, $id, $add_watcher_ids);
-						
-						// Context Link (if given)
-						@$link_context = DevblocksPlatform::importGPC($_REQUEST['link_context'],'string','');
-						@$link_context_id = DevblocksPlatform::importGPC($_REQUEST['link_context_id'],'integer','');
-						if(!empty($id) && !empty($link_context) && !empty($link_context_id)) {
-							DAO_ContextLink::setLink(CerberusContexts::CONTEXT_ORG, $id, $link_context, $link_context_id);
-						}
-						
 						// View marquee
 						if(!empty($id) && !empty($view_id)) {
 							C4_AbstractView::setMarqueeContextCreated($view_id, CerberusContexts::CONTEXT_ORG, $id);
@@ -249,6 +238,9 @@ class PageSection_ProfilesOrganization extends Extension_PageSection {
 						// Custom field saves
 						@$field_ids = DevblocksPlatform::importGPC($_POST['field_ids'], 'array', array());
 						DAO_CustomFieldValue::handleFormPost(CerberusContexts::CONTEXT_ORG, $id, $field_ids);
+						
+						// Aliases
+						DAO_ContextAlias::set(CerberusContexts::CONTEXT_ORG, $id, DevblocksPlatform::parseCrlfString($org_name . "\n" . $aliases));
 						
 						// Avatar image
 						@$avatar_image = DevblocksPlatform::importGPC($_REQUEST['avatar_image'], 'string', '');

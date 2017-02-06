@@ -1,4 +1,6 @@
 {$owner_meta = $comment->getOwnerMeta()}
+{$is_writeable = Context_Comment::isWriteableByActor($comment, $active_worker)}
+
 <div id="comment{$comment->id}">
 	<div class="block" style="overflow:auto;margin-bottom:10px;">
 		<span class="tag" style="background-color:rgb(71,133,210);color:white;margin-right:5px;">{'common.comment'|devblocks_translate|lower}</span>
@@ -8,8 +10,7 @@
 				(system)
 			{else}
 				{if $owner_meta.context_ext instanceof IDevblocksContextPeek} 
-				{* [TODO] Use peek triggers? *}
-				<a href="javascript:;" onclick="genericAjaxPopup('peek','c=internal&a=showPeekPopup&context={$comment->owner_context}&context_id={$comment->owner_context_id}', null, false, '50%');">{$owner_meta.name}</a>
+				<a href="javascript:;" class="cerb-peek-trigger" data-context="{$comment->owner_context}" data-context-id="{$comment->owner_context_id}">{$owner_meta.name}</a>
 				{elseif !empty($owner_meta.permalink)} 
 				<a href="{$owner_meta.permalink}" target="_blank">{$owner_meta.name}</a>
 				{else}
@@ -26,9 +27,7 @@
 				<button type="button" onclick="genericAjaxPopup('permalink', 'c=internal&a=showPermalinkPopup&url={$permalink_url|escape:'url'}');" title="{'common.permalink'|devblocks_translate|lower}"><span class="glyphicons glyphicons-link"></span></button>
 			{/if}
 			
-			{if !$readonly && ($active_worker->is_superuser || ($comment->owner_context == CerberusContexts::CONTEXT_WORKER && $comment->owner_context_id == $active_worker->id))}
-				<button type="button" onclick="if(confirm('Are you sure you want to permanently delete this comment?')) { genericAjaxGet('', 'c=internal&a=commentDelete&id={$comment->id}', function(o) { $('#comment{$comment->id}').remove(); } ); } "><span class="glyphicons glyphicons-circle-remove" title="{'common.delete'|devblocks_translate|lower}"></span></button>
-			{/if}
+			<button type="button" class="cerb-peek-trigger" data-context="{CerberusContexts::CONTEXT_COMMENT}" data-context-id="{$comment->id}"><span class="glyphicons glyphicons-cogwheel" title="{'common.edit'|devblocks_translate|lower}"></span></button>
 		</div>
 		
 		{if isset($owner_meta.context_ext->manifest->params.alias)}
@@ -51,15 +50,17 @@
 
 <script type="text/javascript">
 $(function() {
-	var $comment = $('#comment{$comment->id}');
-	
-	$comment.hover(
-		function() {
-			$(this).find('div.toolbar').show();
-		},
-		function() {
-			$(this).find('div.toolbar').hide();
-		}
-	);
+	var $comment = $('#comment{$comment->id}')
+		.hover(
+			function() {
+				$(this).find('div.toolbar').show();
+			},
+			function() {
+				$(this).find('div.toolbar').hide();
+			}
+		)
+		.find('.cerb-peek-trigger')
+			.cerbPeekTrigger()
+		;
 });
 </script>

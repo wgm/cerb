@@ -2,17 +2,17 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2017, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
 | The latest version of this license can be found here:
-| http://cerb.io/license
+| http://cerb.ai/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://cerb.io	    http://webgroup.media
+|	http://cerb.ai	    http://webgroup.media
 ***********************************************************************/
 /*
  * IMPORTANT LICENSING NOTE from your friends at Cerb
@@ -405,7 +405,7 @@ class ChKbAjaxController extends DevblocksControllerExtension {
 			// Files
 			@$file_ids = DevblocksPlatform::importGPC($_REQUEST['file_ids'], 'array', array());
 			if(is_array($file_ids))
-				DAO_AttachmentLink::setLinks(CerberusContexts::CONTEXT_KB_ARTICLE, $id, $file_ids);
+				DAO_Attachment::setLinks(CerberusContexts::CONTEXT_KB_ARTICLE, $id, $file_ids);
 		}
 		
 		// JSON
@@ -777,7 +777,6 @@ class DAO_KbCategory extends Cerb_ORMHelper {
 			'select' => $select_sql,
 			'join' => $join_sql,
 			'where' => $where_sql,
-			'has_multiple_values' => true,
 			'sort' => $sort_sql,
 		);
 		
@@ -793,14 +792,12 @@ class DAO_KbCategory extends Cerb_ORMHelper {
 		$select_sql = $query_parts['select'];
 		$join_sql = $query_parts['join'];
 		$where_sql = $query_parts['where'];
-		$has_multiple_values = $query_parts['has_multiple_values'];
 		$sort_sql = $query_parts['sort'];
 		
 		$sql =
 			$select_sql.
 			$join_sql.
 			$where_sql.
-			($has_multiple_values ? 'GROUP BY kbc.id ' : '').
 			$sort_sql;
 		
 		if(false == ($rs = $db->SelectLimit($sql,$limit,$page*$limit)))
@@ -822,7 +819,7 @@ class DAO_KbCategory extends Cerb_ORMHelper {
 			// We can skip counting if we have a less-than-full single page
 			if(!(0 == $page && $total < $limit)) {
 				$count_sql =
-					($has_multiple_values ? "SELECT COUNT(DISTINCT kbc.id) " : "SELECT COUNT(kbc.id) ").
+					"SELECT COUNT(kbc.id) ".
 					$join_sql.
 					$where_sql;
 				$total = $db->GetOneSlave($count_sql);
@@ -904,8 +901,14 @@ class SearchFields_KbCategory extends DevblocksSearchFields {
 };
 
 class Context_KbCategory extends Extension_DevblocksContext {
-	function authorize($context_id, Model_Worker $worker) {
-		return TRUE;
+	static function isReadableByActor($models, $actor) {
+		// Everyone can read
+		return CerberusContexts::allowEverything($models);
+	}
+	
+	static function isWriteableByActor($models, $actor) {
+		// Everyone can modify
+		return CerberusContexts::allowEverything($models);
 	}
 	
 	function getRandom() {
@@ -1000,10 +1003,15 @@ class Context_KbCategory extends Extension_DevblocksContext {
 		
 		if(!$is_loaded) {
 			$labels = array();
-			CerberusContexts::getContext($context, $context_id, $labels, $values, null, true);
+			CerberusContexts::getContext($context, $context_id, $labels, $values, null, true, true);
 		}
 		
 		switch($token) {
+			case 'links':
+				$links = $this->_lazyLoadLinks($context, $context_id);
+				$values = array_merge($values, $fields);
+				break;
+			
 			case 'watchers':
 				$watchers = array(
 					$token => CerberusContexts::getWatchers($context, $context_id, true),
@@ -1012,7 +1020,7 @@ class Context_KbCategory extends Extension_DevblocksContext {
 				break;
 				
 			default:
-				if(substr($token,0,7) == 'custom_') {
+				if(DevblocksPlatform::strStartsWith($token, 'custom_')) {
 					$fields = $this->_lazyLoadCustomFields($token, $context, $context_id);
 					$values = array_merge($values, $fields);
 				}
@@ -1056,8 +1064,7 @@ class Context_KbCategory extends Extension_DevblocksContext {
 		
 		if(!empty($context) && !empty($context_id)) {
 			$params_req = array(
-				//new DevblocksSearchCriteria(SearchFields_KbCategory::CONTEXT_LINK,'=',$context),
-				//new DevblocksSearchCriteria(SearchFields_KbCategory::CONTEXT_LINK_ID,'=',$context_id),
+				//new DevblocksSearchCriteria(SearchFields_KbCategory::VIRTUAL_CONTEXT_LINK,'in',array($context.':'.$context_id)),
 			);
 		}
 		

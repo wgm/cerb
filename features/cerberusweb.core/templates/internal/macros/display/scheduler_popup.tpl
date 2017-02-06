@@ -14,13 +14,15 @@
 {/if}
 <input type="hidden" name="_csrf_token" value="{$session.csrf_token}">
 
-<b>Behavior:</b><br>
+<b>{'common.behavior'|devblocks_translate|capitalize}:</b><br>
 {if !empty($macro->title)}
-	{$macro->title}
+	<ul class="bubbles">
+		<li><a href="javascript:;" class="cerb-peek-trigger" data-context="{CerberusContexts::CONTEXT_BEHAVIOR}" data-context-id="{$macro->id}">{$macro->title}</a></li>
+	</ul>
 {else}
 	{$event = DevblocksPlatform::getExtension($macro->event_point, false)}
 	{$event->name}
-{/if}	
+{/if}
 <br>
 <br>
 
@@ -37,7 +39,7 @@
 	{if empty($job)}
 		<input type="text" name="run_date" size="32" value="now" placeholder="+2 hours; tomorrow 5pm"><br>
 	{else}
-		{if $editable}
+		{if $is_writeable}
 			<input type="text" name="run_date" size="32" value="{if !empty($job->run_relative)}{$job->run_literal}{else}{$job->run_date|devblocks_date}{/if}" placeholder="+2 hours; tomorrow 5pm"><br>
 		{else}
 			{$job->run_date|devblocks_date}<br>
@@ -161,7 +163,7 @@
 	</tbody>
 </table>
 
-{if !empty($job) && $editable}
+{if !empty($job) && $is_writeable}
 <fieldset class="delete" style="display:none;">
 	<input type="hidden" name="do_delete" value="0">
 	<legend>Delete this scheduled behavior?</legend>
@@ -176,7 +178,7 @@
 		<button type="submit"><span class="glyphicons glyphicons-circle-ok" style="color:rgb(0,180,0);"></span> {'common.ok'|devblocks_translate}</button>
 		<button type="button" onclick="genericAjaxPopup('simulate_behavior','c=internal&a=showBehaviorSimulatorPopup&trigger_id={$macro->id}&context={$context}&context_id={$context_id}','reuse',false,'50%');"> <span class="glyphicons glyphicons-cogwheel"></span> Simulator</button>
 	{else}
-		{if $editable}
+		{if $is_writeable}
 			<button type="button" class="save" onclick="genericAjaxPopupPostCloseReloadView(null,'frmScheduledBehaviorPeek', null, false, 'behavior_save');"><span class="glyphicons glyphicons-circle-ok" style="color:rgb(0,180,0);"></span> {'common.ok'|devblocks_translate}</button>
 			<button type="button" onclick="genericAjaxPopup('simulate_behavior','c=internal&a=showBehaviorSimulatorPopup&trigger_id={$job->behavior_id}&context={$job->context}&context_id={$job->context_id}','reuse',false,'50%');"> <span class="glyphicons glyphicons-cogwheel"></span> Simulator</button>
 			<button type="button" class="delete" onclick="$(this).closest('div').hide().prev('fieldset.delete').show();"><span class="glyphicons glyphicons-circle-remove" style="color:rgb(200,0,0);"></span> {'common.delete'|devblocks_translate|capitalize}</button>
@@ -193,11 +195,12 @@ $(function() {
 	var $popup = genericAjaxPopupFetch('peek');
 	
 	$popup.one('popup_open', function(event,ui) {
-		var $this = $(this);
-		var $frm = $this.find('form');
+		var $frm = $popup.find('form:first');
 		
-		$this.dialog('option','title',"Schedule Behavior");
-		$this.find('input:text').first().select();
+		$popup.dialog('option','title',"Schedule Behavior");
+		$popup.find('input:text').first().select();
+		
+		$popup.find('.cerb-peek-trigger').cerbPeekTrigger();
 		
 		// Repeat freq
 		

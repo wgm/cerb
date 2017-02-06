@@ -7,12 +7,12 @@
 |
 | This source code is released under the Devblocks Public License.
 | The latest version of this license can be found here:
-| http://cerb.io/license
+| http://cerb.ai/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://cerb.io	    http://webgroup.media
+|	http://cerb.ai	    http://webgroup.media
 ***********************************************************************/
 
 class PageSection_ProfilesMailTransport extends Extension_PageSection {
@@ -68,7 +68,7 @@ class PageSection_ProfilesMailTransport extends Extension_PageSection {
 		);
 		
 		$properties['updated'] = array(
-			'label' => mb_ucfirst($translate->_('common.updated')),
+			'label' => DevblocksPlatform::translateCapitalized('common.updated'),
 			'type' => Model_CustomField::TYPE_DATE,
 			'value' => $mail_transport->updated_at,
 		);
@@ -96,7 +96,7 @@ class PageSection_ProfilesMailTransport extends Extension_PageSection {
 					DAO_ContextLink::getContextLinkCounts(
 						'cerberusweb.contexts.mail.transport',
 						$mail_transport->id,
-						array(CerberusContexts::CONTEXT_WORKER, CerberusContexts::CONTEXT_CUSTOM_FIELDSET)
+						array(CerberusContexts::CONTEXT_CUSTOM_FIELDSET)
 					),
 			),
 		);

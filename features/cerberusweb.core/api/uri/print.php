@@ -2,17 +2,17 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2017, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
 | The latest version of this license can be found here:
-| http://cerb.io/license
+| http://cerb.ai/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://cerb.io	    http://webgroup.media
+|	http://cerb.ai	    http://webgroup.media
 ***********************************************************************/
 
 class ChPrintController extends DevblocksControllerExtension {
@@ -55,6 +55,12 @@ class ChPrintController extends DevblocksControllerExtension {
 				if(false == ($group = $ticket->getGroup()))
 					break;
 				
+				// Make sure we're allowed to view this ticket or message
+				if(!Context_Ticket::isReadableByActor($ticket, $active_worker)) {
+					echo "<H1>" . $translate->_('common.access_denied') . "</H1>";
+					return;
+				}
+				
 				$convo_timeline = array();
 				$messages = $ticket->getMessages();
 				foreach($messages as $message_id => $message) { /* @var $message Model_Message */
@@ -89,12 +95,6 @@ class ChPrintController extends DevblocksControllerExtension {
 				}
 				$tpl->assign('message_notes', $message_notes);
 				
-				// Make sure we're allowed to view this ticket or message
-				if(!$group->isReadableByWorker($active_worker)) {
-					echo "<H1>" . $translate->_('common.access_denied') . "</H1>";
-					return;
-				}
-				
 				// Watchers
 				$context_watchers = CerberusContexts::getWatchers(CerberusContexts::CONTEXT_TICKET, $ticket->id);
 				$tpl->assign('context_watchers', $context_watchers);
@@ -113,7 +113,7 @@ class ChPrintController extends DevblocksControllerExtension {
 					break;
 				
 				// Make sure we're allowed to view this ticket or message
-				if(!$group->isReadableByWorker($active_worker)) {
+				if(!Context_Ticket::isReadableByActor($ticket, $active_worker)) {
 					echo "<H1>" . $translate->_('common.access_denied') . "</H1>";
 					return;
 				}

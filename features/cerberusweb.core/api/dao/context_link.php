@@ -2,17 +2,17 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2017, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
 | The latest version of this license can be found here:
-| http://cerb.io/license
+| http://cerb.ai/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://cerb.io	    http://webgroup.media
+|	http://cerb.ai	    http://webgroup.media
 ***********************************************************************/
 
 class DAO_ContextLink extends Cerb_ORMHelper {
@@ -98,7 +98,7 @@ class DAO_ContextLink extends Cerb_ORMHelper {
 		
 		// Are we following something?
 		if($dst_context == CerberusContexts::CONTEXT_WORKER) {
-			// If worker is actor and target, and we're not inside a Virtual Attendant
+			// If worker is actor and target, and we're not inside a bot
 			if($active_worker && $active_worker->id == $dst_context_id && 0 == EventListener_Triggers::getDepth()) {
 				$entry = array(
 					//{{actor}} started watching {{target_object}} {{target}}

@@ -120,6 +120,9 @@ class _DevblocksClassLoadManager {
 	}
 	
 	private function _initServices() {
+		$this->registerClasses(DEVBLOCKS_PATH . 'api/services/bayes_classifier.php', array(
+			'_DevblocksBayesClassifierService',
+		));
 		$this->registerClasses(DEVBLOCKS_PATH . 'api/services/database.php', array(
 			'_DevblocksDatabaseManager',
 		));
@@ -129,6 +132,9 @@ class _DevblocksClassLoadManager {
 		));
 		$this->registerClasses(DEVBLOCKS_PATH . 'api/services/email.php', array(
 			'_DevblocksEmailManager',
+		));
+		$this->registerClasses(DEVBLOCKS_PATH . 'api/services/encryption.php', array(
+			'_DevblocksEncryptionService',
 		));
 		$this->registerClasses(DEVBLOCKS_PATH . 'api/services/event.php', array(
 			'_DevblocksEventManager',

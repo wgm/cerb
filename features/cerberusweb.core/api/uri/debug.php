@@ -2,17 +2,17 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2017, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
 | The latest version of this license can be found here:
-| http://cerb.io/license
+| http://cerb.ai/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://cerb.io	    http://webgroup.media
+|	http://cerb.ai	    http://webgroup.media
 ***********************************************************************/
 
 class ChDebugController extends DevblocksControllerExtension  {
@@ -94,7 +94,7 @@ class ChDebugController extends DevblocksControllerExtension  {
 			case 'status':
 				@$db = DevblocksPlatform::getDatabaseService();
 
-				header('Content-Type: application/json; charset=' . LANG_CHARSET_CODE);
+				header('Content-Type: application/json; charset=utf-8');
 
 				$tickets_by_status = array();
 				
@@ -135,7 +135,7 @@ class ChDebugController extends DevblocksControllerExtension  {
 						'portals' => intval(@$db->GetOneMaster('SELECT count(id) FROM community_tool')),
 						'tickets' => intval($db->GetOneMaster('SELECT count(id) FROM ticket')),
 						'tickets_status' => $tickets_by_status,
-						'va' => intval($db->GetOneMaster('SELECT count(id) FROM virtual_attendant')),
+						'va' => intval($db->GetOneMaster('SELECT count(id) FROM bot')),
 						'va_behaviors' => intval($db->GetOneMaster('SELECT count(id) FROM trigger_event')),
 						'webhooks' => intval($db->GetOneMaster('SELECT count(id) FROM webhook_listener')),
 						'workers' => intval($db->GetOneMaster('SELECT count(id) FROM worker')),
@@ -218,7 +218,6 @@ class ChDebugController extends DevblocksControllerExtension  {
 					"[php.ini] file_uploads: %s\n".
 					"[php.ini] upload_max_filesize: %s\n".
 					"[php.ini] post_max_size: %s\n".
-					"[php.ini] safe_mode: %s\n".
 					"\n".
 					"[PHP:Extension] MySQL: %s\n".
 					"[PHP:Extension] MailParse: %s\n".
@@ -260,7 +259,6 @@ class ChDebugController extends DevblocksControllerExtension  {
 					ini_get('file_uploads'),
 					ini_get('upload_max_filesize'),
 					ini_get('post_max_size'),
-					ini_get('safe_mode'),
 					(extension_loaded("mysql") ? 'YES' : 'NO'),
 					(extension_loaded("mailparse") ? 'YES' : 'NO'),
 					(extension_loaded("curl") ? 'YES' : 'NO'),
@@ -345,19 +343,19 @@ class ChDebugController extends DevblocksControllerExtension  {
 				
 				break;
 				
-			case 'export_attendants':
-				$event_mfts = DevblocksPlatform::getExtensions('devblocks.event', false, true);
+			case 'export_bots':
+				$event_mfts = DevblocksPlatform::getExtensions('devblocks.event', false);
 
 				header("Content-type: application/json");
 				
 				$output = array(
-					'virtual_attendants' => array(),
+					'bots' => array(),
 				);
 				
-				$vas = DAO_VirtualAttendant::getAll();
+				$vas = DAO_Bot::getAll();
 				
 				foreach($vas as $va) {
-					$output['virtual_attendants'][$va->id] = array(
+					$output['bots'][$va->id] = array(
 						'label' => $va->name,
 						'owner_context' => $va->owner_context,
 						'owner_context_id' => $va->owner_context_id,
@@ -369,12 +367,12 @@ class ChDebugController extends DevblocksControllerExtension  {
 					foreach($behaviors as $behavior) {
 						if(false !== ($json = $behavior->exportToJson())) {
 							$json_array = json_decode($json, true);
-							$output['virtual_attendants'][$va->id]['behaviors'][] = $json_array;
+							$output['bots'][$va->id]['behaviors'][] = $json_array;
 						}
 					}
 				}
 				
-				echo DevblocksPlatform::strFormatJson(json_encode($output));
+				echo DevblocksPlatform::strFormatJson($output);
 				break;
 				
 			default:
@@ -397,7 +395,7 @@ class ChDebugController extends DevblocksControllerExtension  {
 								<li><a href='%s'>Requirements Checker</a></li>
 								<li><a href='%s'>Debug Report (for technical support)</a></li>
 								<li><a href='%s'>phpinfo()</a></li>
-								<li><a href='%s'>Export Virtual Attendants</a></li>
+								<li><a href='%s'>Export Bots</a></li>
 							</ul>
 						</form>
 					</body>
@@ -407,7 +405,7 @@ class ChDebugController extends DevblocksControllerExtension  {
 					$url_service->write('c=debug&a=check'),
 					$url_service->write('c=debug&a=report'),
 					$url_service->write('c=debug&a=phpinfo'),
-					$url_service->write('c=debug&a=export_attendants')
+					$url_service->write('c=debug&a=export_bots')
 				);
 				break;
 		}

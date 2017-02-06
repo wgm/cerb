@@ -80,20 +80,21 @@ namespace Cerb\Impex\Exporters {
 				while($stmt->fetch()) {
 					if(0 == $count++ % 2000) {
 						$dir = sprintf(CerbImpex::getOption('output_dir') . '03-orgs-%06d/', ++$bins);
-						mkdir($dir, 0700, true);
+						if(!file_exists($dir))
+							mkdir($dir, 0700, true);
 					}
 					
 					$doc = simplexml_load_string('<organization/>');
-					$doc->addChild('name', $name);
-					$doc->addChild('street', $street);
-					$doc->addChild('city', $city);
-					$doc->addChild('province', $province);
-					$doc->addChild('postal', $postal);
-					$doc->addChild('country', $country);
-					$doc->addChild('phone', $phone);
-					$doc->addChild('website', $website);
-					$doc->addChild('created', $created);
-					$doc->addChild('updated', $updated);
+					$doc->name = $name;
+					$doc->street = $street;
+					$doc->city = $city;
+					$doc->province = $province;
+					$doc->postal = $postal;
+					$doc->country = $country;
+					$doc->phone = $phone;
+					$doc->website = $website;
+					$doc->created = $created;
+					$doc->updated -> $updated;
 					
 					$doc->asXML(sprintf("%s%09d.xml", $dir, $id));
 				}
@@ -147,7 +148,8 @@ SQL;
 				while($stmt->fetch()) {
 					if(0 == $count++ % 2000) {
 						$dir = sprintf(CerbImpex::getOption('output_dir') . '02-tickets-%06d/', ++$bins);
-						mkdir($dir, 0700, true);
+						if(!file_exists($dir))
+							mkdir($dir, 0700, true);
 					}
 					
 					$doc = simplexml_load_string('<ticket/>');
@@ -175,7 +177,7 @@ SQL;
 SELECT m.created_date, m.is_outgoing, 
 (SELECT headers FROM message_headers WHERE message_id = m.id) as headers,
 (SELECT data FROM storage_message_content WHERE chunk = 1 AND id = m.id) as content,
-(SELECT GROUP_CONCAT(attachment_id) FROM attachment_link WHERE context = 'cerberusweb.contexts.message' AND context_id = m.id) AS attachment_ids
+(SELECT GROUP_CONCAT(to_context_id) FROM context_link WHERE from_context = 'cerberusweb.contexts.message' AND from_context_id = m.id AND to_context = 'cerberusweb.contexts.attachment') AS attachment_ids
 FROM message m 
 WHERE ticket_id = $id
 SQL;
@@ -204,7 +206,7 @@ SQL;
 							if(!empty($attachment_ids)) {
 								$xml_attachments = $xml_message->addChild('attachments');
 								
-								$sql_attachments = sprintf("SELECT id, display_name, mime_type, storage_size, storage_key, storage_extension FROM attachment WHERE id IN (%s)", $attachment_ids);
+								$sql_attachments = sprintf("SELECT id, name, mime_type, storage_size, storage_key, storage_extension FROM attachment WHERE id IN (%s)", $attachment_ids);
 								$res = $db->query($sql_attachments);
 								
 								if($res && $res instanceof \mysqli_result)
@@ -213,7 +215,7 @@ SQL;
 									
 									if(file_exists($file_path) && is_readable($file_path)) {
 										$xml_attachment = $xml_attachments->addChild('attachment');
-										$xml_attachment->name = $row['display_name'];
+										$xml_attachment->name = $row['name'];
 										$xml_attachment->mimetype = $row['mime_type'];
 										$xml_attachment->size = $row['storage_size'];
 										

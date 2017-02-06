@@ -5,10 +5,6 @@
 <input type="hidden" name="action" value="savePeekJson">
 <input type="hidden" name="view_id" value="{$view_id}">
 <input type="hidden" name="id" value="{$task->id}">
-{if !empty($link_context)}
-<input type="hidden" name="link_context" value="{$link_context}">
-<input type="hidden" name="link_context_id" value="{$link_context_id}">
-{/if}
 <input type="hidden" name="do_delete" value="0">
 <input type="hidden" name="_csrf_token" value="{$session.csrf_token}">
 
@@ -17,14 +13,14 @@
 	
 	<table cellpadding="0" cellspacing="2" border="0" width="98%">
 		<tr>
-			<td width="1%" nowrap="nowrap" align="right">{'common.title'|devblocks_translate|capitalize}: </td>
+			<td width="1%" nowrap="nowrap">{'common.title'|devblocks_translate|capitalize}: </td>
 			<td width="99%">
 				<input type="text" name="title" style="width:98%;" value="{$task->title}" autofocus="autofocus">
 			</td>
 		</tr>
 		
 		<tr>
-			<td width="1%" nowrap="nowrap" align="right" valign="top">{'common.status'|devblocks_translate|capitalize}: </td>
+			<td width="1%" nowrap="nowrap" valign="top">{'common.status'|devblocks_translate|capitalize}: </td>
 			<td width="99%">
 				<label><input type="radio" name="completed" value="0" {if empty($task->is_completed)}checked="checked"{/if}> {'status.open'|devblocks_translate|capitalize}</label>
 				<label><input type="radio" name="completed" value="1" {if $task->is_completed}checked="checked"{/if}> {'status.completed'|devblocks_translate|capitalize}</label>
@@ -32,7 +28,7 @@
 		</tr>
 		
 		<tr>
-			<td width="1%" nowrap="nowrap" align="right" valign="top">{'task.due_date'|devblocks_translate|capitalize}: </td>
+			<td width="1%" nowrap="nowrap" valign="top">{'task.due_date'|devblocks_translate|capitalize}: </td>
 			<td width="99%">
 				<input type="text" name="due_date" size="45" class="input_date" value="{if !empty($task->due_date)}{$task->due_date|devblocks_date}{/if}">
 			</td>
@@ -40,9 +36,9 @@
 		
 		{* Importance *}
 		<tr>
-			<td width="0%" nowrap="nowrap" valign="middle" align="right">{'common.importance'|devblocks_translate|capitalize}: </td>
+			<td width="0%" nowrap="nowrap" valign="middle">{'common.importance'|devblocks_translate|capitalize}: </td>
 			<td width="100%">
-				<div class="cerb-delta-slider-container">
+				<div class="cerb-delta-slider-container" style="margin-left:10px;">
 				<input type="hidden" name="importance" value="{$task->importance|default:0}">
 					<div class="cerb-delta-slider {if $task->importance < 50}cerb-slider-green{elseif $task->importance > 50}cerb-slider-red{else}cerb-slider-gray{/if}">
 						<span class="cerb-delta-slider-midpoint"></span>
@@ -53,9 +49,9 @@
 		
 		{* Owner *}
 		<tr>
-			<td width="1%" nowrap="nowrap" align="right" valign="middle">{'common.owner'|devblocks_translate|capitalize}:</td>
+			<td width="1%" nowrap="nowrap" valign="middle">{'common.owner'|devblocks_translate|capitalize}: </td>
 			<td width="99%" valign="top">
-					<button type="button" class="chooser-abstract" data-field-name="owner_id" data-context="{CerberusContexts::CONTEXT_WORKER}" data-single="true" data-query="" data-autocomplete="if-null"><span class="glyphicons glyphicons-search"></span></button>
+					<button type="button" class="chooser-abstract" data-field-name="owner_id" data-context="{CerberusContexts::CONTEXT_WORKER}" data-single="true" data-query="" data-autocomplete="" data-autocomplete-if-empty="true"><span class="glyphicons glyphicons-search"></span></button>
 					
 					<ul class="bubbles chooser-container">
 						{if $task}
@@ -101,12 +97,8 @@
 <div class="status"></div>
 
 <div class="buttons">
-	{if $active_worker->hasPriv('core.tasks.actions.create')}
-		<button type="button" class="submit"><span class="glyphicons glyphicons-circle-ok" style="color:rgb(0,180,0);"></span> {'common.save_changes'|devblocks_translate|capitalize}</button>
-		{if $active_worker->hasPriv('core.tasks.actions.delete') && !empty($task)}<button type="button" onclick="$(this).parent().siblings('fieldset.delete').fadeIn();$(this).closest('div').fadeOut();"><span class="glyphicons glyphicons-circle-remove" style="color:rgb(200,0,0);"></span> {'common.delete'|devblocks_translate|capitalize}</button>{/if}
-	{else}
-		<div class="error">{'error.core.no_acl.edit'|devblocks_translate}</div>
-	{/if}
+	<button type="button" class="submit"><span class="glyphicons glyphicons-circle-ok" style="color:rgb(0,180,0);"></span> {'common.save_changes'|devblocks_translate|capitalize}</button>
+	{if $active_worker->hasPriv('core.tasks.actions.delete') && !empty($task)}<button type="button" onclick="$(this).parent().siblings('fieldset.delete').fadeIn();$(this).closest('div').fadeOut();"><span class="glyphicons glyphicons-circle-remove" style="color:rgb(200,0,0);"></span> {'common.delete'|devblocks_translate|capitalize}</button>{/if}
 </div>
 
 </form>

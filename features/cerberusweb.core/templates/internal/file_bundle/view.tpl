@@ -87,7 +87,7 @@
 			<td data-column="{$column}">
 				<input type="checkbox" name="row_id[]" value="{$result.f_id}" style="display:none;">
 				<a href="{devblocks_url}c=profiles&type=file_bundle&id={$result.f_id}-{$result.f_name|devblocks_permalink}{/devblocks_url}" class="subject">{$result.f_name}</a>
-				{if CerberusContexts::isWriteableByActor($result.f_owner_context, $result.f_owner_context_id, $active_worker)}<button type="button" class="peek" onclick="genericAjaxPopup('peek','c=internal&a=showPeekPopup&context={$view_context}&context_id={$result.f_id}&view_id={$view->id}',null,false,'50%');"><span class="glyphicons glyphicons-new-window-alt" style="margin-left:2px" title="{$translate->_('views.peek')}"></span></button>{/if}
+				<button type="button" class="peek" onclick="genericAjaxPopup('peek','c=internal&a=showPeekPopup&context={$view_context}&context_id={$result.f_id}&view_id={$view->id}',null,false,'50%');"><span class="glyphicons glyphicons-new-window-alt" style="margin-left:2px" title="{$translate->_('views.peek')}"></span></button>
 			</td>
 			{elseif $column == "f_updated_at"}
 				<td data-column="{$column}" title="{$result.$column|devblocks_date}">
@@ -103,9 +103,13 @@
 					{if !is_null($owner_context_ext)}
 						{$meta = $owner_context_ext->getMeta($owner_context_id)}
 						{if !empty($meta)}
-						{$meta.name} 
+							<img src="{devblocks_url}c=avatars&context={$owner_context_ext->id}&context_id={$owner_context_id}{/devblocks_url}?v={$meta.updated}" style="height:1.5em;width:1.5em;border-radius:0.75em;vertical-align:middle;">
+							{if $owner_context_id} 
+							<a href="javascript:;" class="cerb-peek-trigger no-underline" data-context="{$owner_context}" data-context-id="{$owner_context_id}">{$meta.name}</a>
+							{else}
+							{$meta.name}
+							{/if}
 						{/if}
-						({$owner_context_ext->manifest->name})
 					{/if}
 				</td>
 			{else}

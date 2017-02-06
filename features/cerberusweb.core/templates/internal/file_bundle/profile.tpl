@@ -1,5 +1,6 @@
 {$page_context = CerberusContexts::CONTEXT_FILE_BUNDLE}
 {$page_context_id = $file_bundle->id}
+{$is_writeable = Context_FileBundle::isWriteableByActor($file_bundle, $active_worker)}
 
 <div style="float:left">
 	<h1>{$file_bundle->name}</h1>
@@ -26,7 +27,7 @@
 		{include file="devblocks:cerberusweb.core::internal/macros/display/button.tpl" context=$page_context context_id=$page_context_id macros=$macros return_url=$return_url}
 		
 		<!-- Edit -->
-		{if $file_bundle->isWriteableByActor($active_worker)}
+		{if $is_writeable}
 		<button type="button" id="btnDisplayFileBundleEdit" title="{'common.edit'|devblocks_translate|capitalize}"><span class="glyphicons glyphicons-cogwheel"></span></button>
 		{/if}
 	</form>
@@ -65,7 +66,7 @@
 	<span>
 		<ul class="bubbles">
 			{foreach from=$attachments item=attachment}
-			<li><a href="{devblocks_url}c=files&guid={$attachment->storage_sha1hash}&name={$attachment->display_name|escape:'url'}{/devblocks_url}" target="_blank">{$attachment->display_name} ({$attachment->storage_size|devblocks_prettybytes:1})</a></li>
+			<li><a href="{devblocks_url}c=files&id={$attachment->id}&name={$attachment->name|escape:'url'}{/devblocks_url}" target="_blank">{$attachment->name} ({$attachment->storage_size|devblocks_prettybytes:1})</a></li>
 			{/foreach}
 		</ul>
 	</span>
@@ -89,11 +90,10 @@
 
 <div id="file_bundleTabs">
 	<ul>
-		{$tabs = [activity,comments,links]}
+		{$tabs = [activity, comments]}
 
-		<li><a href="{devblocks_url}ajax.php?c=internal&a=showTabActivityLog&scope=target&point={$point}&context={$page_context}&context_id={$page_context_id}{/devblocks_url}">{'common.activity_log'|devblocks_translate|capitalize}</a></li>
+		<li><a href="{devblocks_url}ajax.php?c=internal&a=showTabActivityLog&scope=target&point={$point}&context={$page_context}&context_id={$page_context_id}{/devblocks_url}">{'common.log'|devblocks_translate|capitalize}</a></li>
 		<li><a href="{devblocks_url}ajax.php?c=internal&a=showTabContextComments&point={$point}&context={$page_context}&id={$page_context_id}{/devblocks_url}">{$translate->_('common.comments')|capitalize} <div class="tab-badge">{DAO_Comment::count($page_context, $page_context_id)|default:0}</div></a></li>
-		<li><a href="{devblocks_url}ajax.php?c=internal&a=showTabContextLinks&point={$point}&context={$page_context}&id={$page_context_id}{/devblocks_url}">{$translate->_('common.links')} <div class="tab-badge">{DAO_ContextLink::count($page_context, $page_context_id)|default:0}</div></a></li>
 
 		{foreach from=$tab_manifests item=tab_manifest}
 			{$tabs[] = $tab_manifest->params.uri}
@@ -110,6 +110,7 @@
 	
 		var tabs = $("#file_bundleTabs").tabs(tabOptions);
 		
+		{if $is_writeable}
 		$('#btnDisplayFileBundleEdit').bind('click', function() {
 			$popup = genericAjaxPopup('peek','c=internal&a=showPeekPopup&context={$page_context}&context_id={$page_context_id}',null,false,'50%');
 			$popup.one('file_bundle_save', function(event) {
@@ -117,6 +118,7 @@
 				document.location.reload();
 			});
 		});
+		{/if}
 
 		{include file="devblocks:cerberusweb.core::internal/macros/display/menu_script.tpl" selector_button=null selector_menu=null}
 	});

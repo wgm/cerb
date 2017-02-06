@@ -2,17 +2,17 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2017, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
 | The latest version of this license can be found here:
-| http://cerb.io/license
+| http://cerb.ai/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://cerb.io	    http://webgroup.media
+|	http://cerb.ai	    http://webgroup.media
 ***********************************************************************/
 /*
  * IMPORTANT LICENSING NOTE from your friends at Cerb
@@ -526,7 +526,6 @@ class ParserFile {
 	public $mime_type = '';
 	public $file_size = 0;
 	public $parsed_attachment_id = 0;
-	public $parsed_attachment_guid = '';
 
 	function __destruct() {
 		if(file_exists($this->tmpname)) {
@@ -920,7 +919,7 @@ class CerberusParser {
 		
 		// Reject?
 		if(isset($pre_actions['reject'])) {
-			$logger->warn('Rejecting based on Virtual Attendant filtering.');
+			$logger->warn('Rejecting based on bot filtering.');
 			return NULL;
 		}
 		
@@ -971,7 +970,7 @@ class CerberusParser {
 					
 					// Remove a matched attachment
 					if($matched) {
-						$logger->info(sprintf("Removing attachment '%s' based on Virtual Attendant filtering.", $filename));
+						$logger->info(sprintf("Removing attachment '%s' based on bot filtering.", $filename));
 						@unlink($file->tmpname);
 						unset($message->files[$filename]);
 						continue;
@@ -1030,7 +1029,7 @@ class CerberusParser {
 						
 						if(false == ($file_id = DAO_Attachment::getBySha1Hash($sha1_hash, $filename))) {
 							$fields = array(
-								DAO_Attachment::DISPLAY_NAME => $filename,
+								DAO_Attachment::NAME => $filename,
 								DAO_Attachment::MIME_TYPE => $file->mime_type,
 								DAO_Attachment::STORAGE_SHA1HASH => $sha1_hash,
 							);
@@ -1331,7 +1330,7 @@ class CerberusParser {
 				// Dupe detection
 				if(null == ($file_id = DAO_Attachment::getBySha1Hash($sha1_hash, $filename))) {
 					$fields = array(
-						DAO_Attachment::DISPLAY_NAME => $filename,
+						DAO_Attachment::NAME => $filename,
 						DAO_Attachment::MIME_TYPE => $file->mime_type,
 						DAO_Attachment::STORAGE_SHA1HASH => $sha1_hash,
 					);
@@ -1347,12 +1346,12 @@ class CerberusParser {
 				// Link
 				if($file_id) {
 					$file->parsed_attachment_id = $file_id;
-					$file->parsed_attachment_guid = DAO_AttachmentLink::create($file_id, CerberusContexts::CONTEXT_MESSAGE, $model->getMessageId());
+					DAO_Attachment::setLinks(CerberusContexts::CONTEXT_MESSAGE, $model->getMessageId(), $file_id);
 				}
 				
 				// Rewrite any inline content-id images in the HTML part
 				if(isset($file->info) && isset($file->info['content-id'])) {
-					$inline_cid_url = $url_writer->write('c=files&guid=' . $file->parsed_attachment_guid . '&name=' . urlencode($filename), true);
+					$inline_cid_url = $url_writer->write('c=files&id=' . $file_id . '&name=' . urlencode($filename), true);
 					$message->htmlbody = str_replace('cid:' . $file->info['content-id'], $inline_cid_url, $message->htmlbody);
 				}
 			}
@@ -1368,7 +1367,7 @@ class CerberusParser {
 			
 			if(null == ($file_id = DAO_Attachment::getBySha1Hash($sha1_hash, 'original_message.html'))) {
 				$fields = array(
-					DAO_Attachment::DISPLAY_NAME => 'original_message.html',
+					DAO_Attachment::NAME => 'original_message.html',
 					DAO_Attachment::MIME_TYPE => 'text/html',
 					DAO_Attachment::STORAGE_SHA1HASH => $sha1_hash,
 				);
@@ -1380,7 +1379,7 @@ class CerberusParser {
 			
 			// Link the HTML part to the message
 			if(!empty($file_id)) {
-				DAO_AttachmentLink::create($file_id, CerberusContexts::CONTEXT_MESSAGE, $model->getMessageId());
+				DAO_Attachment::setLinks(CerberusContexts::CONTEXT_MESSAGE, $model->getMessageId(), $file_id);
 				
 				// This built-in field is faster than searching for the HTML part again in the attachments
 				DAO_Message::update($message_id, array(

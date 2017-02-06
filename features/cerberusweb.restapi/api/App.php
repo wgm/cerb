@@ -2,17 +2,17 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2017, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
 | The latest version of this license can be found here:
-| http://cerb.io/license
+| http://cerb.ai/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://cerb.io	    http://webgroup.media
+|	http://cerb.ai	    http://webgroup.media
 ***********************************************************************/
 /*
  * IMPORTANT LICENSING NOTE from your friends at Cerb
@@ -193,7 +193,7 @@ class Ch_RestFrontController implements DevblocksHttpRequestHandler {
 	protected $_payload = '';
 	
 	private function _getRestControllers() {
-		$manifests = DevblocksPlatform::getExtensions('cerberusweb.rest.controller', false, true);
+		$manifests = DevblocksPlatform::getExtensions('cerberusweb.rest.controller', false);
 		$controllers = array();
 		
 		if(is_array($manifests))
@@ -234,7 +234,7 @@ class Ch_RestFrontController implements DevblocksHttpRequestHandler {
 		$url_path = $url_parts['path'];
 		$url_query = $this->_sortQueryString($_SERVER['QUERY_STRING']);
 		$string_to_sign_prefix = "$verb\n$header_date\n$url_path\n$url_query\n$this->_payload";
-
+		
 		if(!$this->_validateRfcDate($header_date)) {
 			Plugin_RestAPI::render(array('__status'=>'error', 'message'=>"Access denied! (Invalid timestamp)"));
 		}
@@ -622,7 +622,10 @@ abstract class Extension_RestController extends DevblocksExtension {
 						unset($filters[$key]);
 					}
 				}
-				$params[$field] = new DevblocksSearchCriteria($field, $filter[1], $filter[2]);
+				
+				if(!empty($field)) {
+					$params[$field] = new DevblocksSearchCriteria($field, $filter[1], $filter[2]);
+				}
 			}
 		}
 		return $params;

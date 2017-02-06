@@ -32,7 +32,7 @@
 
 <div>
 	<b>{'reports.ui.filters.worker'|devblocks_translate}</b>
-	<button type="button" class="chooser-abstract" data-field-name="worker_id[]" data-context="{CerberusContexts::CONTEXT_WORKER}" data-query="" data-autocomplete="true"><span class="glyphicons glyphicons-search"></span></button>
+	<button type="button" class="chooser-abstract" data-field-name="worker_id[]" data-context="{CerberusContexts::CONTEXT_WORKER}" data-query="" data-autocomplete=""><span class="glyphicons glyphicons-search"></span></button>
 	<ul class="bubbles chooser-container">
 		{foreach from=$filter_worker_ids item=filter_worker_id}
 		{$filter_worker = $workers.{$filter_worker_id}}
@@ -45,7 +45,7 @@
 
 <div>
 	<b>{'reports.ui.filters.group'|devblocks_translate}</b> 
-	<button type="button" class="chooser-abstract" data-field-name="group_id[]" data-context="{CerberusContexts::CONTEXT_GROUP}" data-query="" data-autocomplete="true"><span class="glyphicons glyphicons-search"></span></button>
+	<button type="button" class="chooser-abstract" data-field-name="group_id[]" data-context="{CerberusContexts::CONTEXT_GROUP}" data-query="" data-autocomplete=""><span class="glyphicons glyphicons-search"></span></button>
 	<ul class="bubbles chooser-container">
 		{foreach from=$filter_group_ids item=filter_group_id}
 		{$filter_group = $groups.{$filter_group_id}}
@@ -55,13 +55,6 @@
 		{/foreach}
 	</ul>
 </div>
-
-<b>{'reports.ui.filters.ticket.status'|devblocks_translate}</b>
-<label><input type="checkbox" name="filter_statuses[]" value="open" {if is_array($filter_statuses) && in_array('open', $filter_statuses)}checked="checked"{/if}> {'status.open'|devblocks_translate}</label>
-<label><input type="checkbox" name="filter_statuses[]" value="waiting" {if is_array($filter_statuses) && in_array('waiting', $filter_statuses)}checked="checked"{/if}> {'status.waiting'|devblocks_translate}</label>
-<label><input type="checkbox" name="filter_statuses[]" value="closed" {if is_array($filter_statuses) && in_array('closed', $filter_statuses)}checked="checked"{/if}> {'status.closed'|devblocks_translate}</label>
-<label><input type="checkbox" name="filter_statuses[]" value="deleted" {if is_array($filter_statuses) && in_array('deleted', $filter_statuses)}checked="checked"{/if}> {'status.deleted'|devblocks_translate}</label>
-<br> 
 
 <button type="submit" id="btnSubmit">{'reports.common.run_report'|devblocks_translate|capitalize}</button>
 </form>

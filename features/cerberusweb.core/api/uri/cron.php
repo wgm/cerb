@@ -2,17 +2,17 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2017, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
 | The latest version of this license can be found here:
-| http://cerb.io/license
+| http://cerb.ai/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://cerb.io	    http://webgroup.media
+|	http://cerb.ai	    http://webgroup.media
 ***********************************************************************/
 
 class ChCronController extends DevblocksControllerExtension {
@@ -57,6 +57,8 @@ class ChCronController extends DevblocksControllerExtension {
 		
 		@set_time_limit(600); // 10 mins
 		
+		CerberusContexts::pushActivityDefaultActor(CerberusContexts::CONTEXT_APPLICATION, 0);
+		
 		$url = DevblocksPlatform::getUrlService();
 		$time_left = intval(ini_get('max_execution_time')) ?: 86400;
 		
@@ -79,7 +81,7 @@ class ChCronController extends DevblocksControllerExtension {
 			"<BODY>"; // onload=\"setTimeout(\\\"window.location.replace('".$url->write('c=cron')."')\\\",30);\"
 		}
 
-		$cron_manifests = DevblocksPlatform::getExtensions('cerberusweb.cron', true, true);
+		$cron_manifests = DevblocksPlatform::getExtensions('cerberusweb.cron', true);
 		$jobs = array();
 		
 		if(empty($job_ids)) { // do everything
@@ -94,7 +96,7 @@ class ChCronController extends DevblocksControllerExtension {
 						case 'cron.storage':
 						case 'cron.search':
 						case 'cron.mail_queue':
-						case 'cron.virtual_attendant.scheduled_behavior':
+						case 'cron.bot.scheduled_behavior':
 							return false;
 							break;
 					}
@@ -153,6 +155,8 @@ class ChCronController extends DevblocksControllerExtension {
 			echo "</BODY>".
 			"</HTML>";
 		}
+		
+		CerberusContexts::popActivityDefaultActor();
 		
 		exit;
 	}

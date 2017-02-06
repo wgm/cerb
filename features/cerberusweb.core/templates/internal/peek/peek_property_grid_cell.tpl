@@ -18,7 +18,7 @@
 	{$worker_id = $dict->$k}
 	{$worker = DAO_Worker::get($worker_id)}
 	{if $worker}
-		<ul class="bubbles">
+		<ul class="bubbles" style="margin-right:5px;">
 		<li class="bubble-gray">
 			<img src="{devblocks_url}c=avatars&context=worker&context_id={$worker_id}{/devblocks_url}?v={$worker->updated}" style="height:16px;width:16px;border-radius:16px;vertical-align:middle;">
 			<a href="javascript:;" class="cerb-peek-trigger no-underline" data-context="{CerberusContexts::CONTEXT_WORKER}" data-context-id="{$worker_id}">{$worker->getName()}</a>
@@ -31,12 +31,15 @@
 		{$k_context = $k_prefix|cat:"_context"}
 		{$k_id = $k_prefix|cat:"id"}
 		{$k_label = $k_prefix|cat:"_label"}
-		{if $dict->$k_context && $dict->$k_id}
-			<ul class="bubbles">
+		{if $dict->$k_context}
+			<ul class="bubbles" style="margin-right:5px;">
 				<li class="bubble-gray">
 					{$k_alias = ''}
 					{$k_updated = 0}
-					{if $dict->$k_context == "{CerberusContexts::CONTEXT_ADDRESS}"}
+					{if $dict->$k_context == "{CerberusContexts::CONTEXT_APPLICATION}"}
+						{$k_alias = 'app'}
+						{$k_updated = $k_prefix|cat:"updated"}
+					{elseif $dict->$k_context == "{CerberusContexts::CONTEXT_ADDRESS}"}
 						{$k_alias = 'address'}
 						{$k_updated = $k_prefix|cat:"updated"}
 					{elseif $dict->$k_context == "{CerberusContexts::CONTEXT_CONTACT}"}
@@ -48,8 +51,8 @@
 					{elseif $dict->$k_context == "{CerberusContexts::CONTEXT_ORG}"}
 						{$k_alias = 'org'}
 						{$k_updated = $k_prefix|cat:"updated"}
-					{elseif $dict->$k_context == "{CerberusContexts::CONTEXT_VIRTUAL_ATTENDANT}"}
-						{$k_alias = 'va'}
+					{elseif $dict->$k_context == "{CerberusContexts::CONTEXT_BOT}"}
+						{$k_alias = 'bot'}
 						{$k_updated = $k_prefix|cat:"updated_at"}
 					{elseif $dict->$k_context == "{CerberusContexts::CONTEXT_WORKER}"}
 						{$k_alias = 'worker'}
@@ -58,7 +61,7 @@
 					{if $k_alias && $k_updated}
 						<img src="{devblocks_url}c=avatars&context={$k_alias}&context_id={$dict->$k_id}{/devblocks_url}?v={$dict->$k_updated}" style="height:16px;width:16px;border-radius:16px;vertical-align:middle;">
 					{/if}
-					<a href="javascript:;" class="cerb-peek-trigger no-underline" data-context="{$dict->$k_context}" data-context-id="{$dict->$k_id}">{$dict->$k_label}</a>
+					<a href="javascript:;" class="cerb-peek-trigger no-underline" data-context="{$dict->$k_context}" data-context-id="{$dict->$k_id}">{$dict->$k_label|truncate:64}</a>
 				</li>
 			</ul>
 		{/if}
@@ -72,6 +75,8 @@
 	<a href="tel:{$dict->$k}">{$dict->$k}</a>
 {elseif $types.$k == 'size_bytes'}
 	{$dict->$k|devblocks_prettybytes}
+{elseif $types.$k == 'time_mins'}
+	{{$dict->$k*60}|devblocks_prettysecs:2}
 {elseif $types.$k == 'time_secs'}
 	{$dict->$k|devblocks_prettysecs:2}
 {else}

@@ -16,19 +16,23 @@
 		</h1>
 		
 		<div style="margin-top:5px;">
-			{if !empty($dict->id)}
-				{$object_recommendations = DAO_ContextRecommendation::getByContexts($peek_context, array($dict->id))}
-				{include file="devblocks:cerberusweb.core::internal/recommendations/context_recommend_button.tpl" context=$peek_context context_id=$dict->id full=true recommend_group_id=$dict->group_id recommend_bucket_id=$dict->bucket_id}
-			{/if}
-		
-			{if !empty($dict->id)}
-				{$object_watchers = DAO_ContextLink::getContextLinks($peek_context, array($dict->id), CerberusContexts::CONTEXT_WORKER)}
-				{include file="devblocks:cerberusweb.core::internal/watchers/context_follow_button.tpl" context=$peek_context context_id=$dict->id full=true}
+			{*<button type="button" class="" onclick="genericAjaxPopup('va','c=internal&a=startBotInteraction', null, false, '300');"><img src="{devblocks_url}c=avatars&context=app&id=0{/devblocks_url}" style="width:22px;height:22px;margin:-3px 0px 0px 2px;"></button>*}
+			
+			{if $is_writeable}
+				{if !empty($dict->id)}
+					{$object_recommendations = DAO_ContextRecommendation::getByContexts($peek_context, array($dict->id))}
+					{include file="devblocks:cerberusweb.core::internal/recommendations/context_recommend_button.tpl" context=$peek_context context_id=$dict->id full=true recommend_group_id=$dict->group_id recommend_bucket_id=$dict->bucket_id}
+				{/if}
+			
+				{if !empty($dict->id)}
+					{$object_watchers = DAO_ContextLink::getContextLinks($peek_context, array($dict->id), CerberusContexts::CONTEXT_WORKER)}
+					{include file="devblocks:cerberusweb.core::internal/watchers/context_follow_button.tpl" context=$peek_context context_id=$dict->id full=true}
+				{/if}
 			{/if}
 			
-			<button type="button" class="cerb-peek-edit" data-context="{$peek_context}" data-context-id="{$dict->id}" data-edit="true"><span class="glyphicons glyphicons-cogwheel"></span> {'common.edit'|devblocks_translate|capitalize}</button>
-			{if $dict->id}<button type="button" class="cerb-peek-profile"><span class="glyphicons glyphicons-nameplate"></span> {'common.profile'|devblocks_translate|capitalize}</button>{/if}
-			<button type="button" class="cerb-peek-comments-add" data-context="{$peek_context}" data-context-id="{$dict->id}"><span class="glyphicons glyphicons-conversation"></span> {'common.comment'|devblocks_translate|capitalize}</button>
+			{if $is_writeable}<button type="button" class="cerb-peek-edit" data-context="{$peek_context}" data-context-id="{$dict->id}" data-edit="true"><span class="glyphicons glyphicons-cogwheel"></span> {'common.edit'|devblocks_translate|capitalize}</button>{/if}
+			{if $is_readable}<button type="button" class="cerb-peek-profile"><span class="glyphicons glyphicons-nameplate"></span> {'common.profile'|devblocks_translate|capitalize}</button>{/if}
+			{if $is_writeable}<button type="button" class="cerb-peek-comments-add" data-context="{CerberusContexts::CONTEXT_COMMENT}" data-context-id="0" data-edit="context:{$peek_context} context.id:{$dict->id}"><span class="glyphicons glyphicons-conversation"></span> {'common.comment'|devblocks_translate|capitalize}</button>{/if}
 		</div>
 	</div>
 </div>
@@ -76,12 +80,15 @@
 	<div style="margin-top:5px;">
 		<button type="button" class="cerb-search-trigger" data-context="{CerberusContexts::CONTEXT_ADDRESS}" data-query="ticket.id:{$dict->id}"><div class="badge-count">{$activity_counts.participants|default:0}</div> {'common.participants'|devblocks_translate|capitalize}</button>
 		<button type="button" class="cerb-search-trigger" data-context="{CerberusContexts::CONTEXT_MESSAGE}" data-query="ticket.id:{$dict->id}"><div class="badge-count">{$activity_counts.messages|default:0}</div> {'common.messages'|devblocks_translate|capitalize}</button>
+		<button type="button" class="cerb-search-trigger" data-context="{CerberusContexts::CONTEXT_COMMENT}" data-query="on.ticket:(id:{$dict->id})"><div class="badge-count">{$activity_counts.comments|default:0}</div> {'common.comments'|devblocks_translate|capitalize}</button>
 	</div>
 </fieldset>
 
-{include file="devblocks:cerberusweb.core::internal/peek/peek_links.tpl" links=$links}
+{include file="devblocks:cerberusweb.core::internal/profiles/profile_record_links.tpl" properties_links=$links peek=true page_context=$peek_context page_context_id=$dict->id}
 
+{if $is_readable}
 {include file="devblocks:cerberusweb.core::internal/peek/card_timeline_pager.tpl"}
+{/if}
 
 <script type="text/javascript">
 $(function() {
@@ -89,15 +96,17 @@ $(function() {
 	var $popup = genericAjaxPopupFind($div);
 	var $layer = $popup.attr('data-layer');
 	
-	var $timeline = {$timeline_json|default:'{}' nofilter};
+	{if $is_readable}var $timeline = {$timeline_json|default:'{}' nofilter};{/if}
 	
 	$popup.one('popup_open',function(event,ui) {
 		$popup.dialog('option','title', "{'common.ticket'|devblocks_translate|capitalize|escape:'javascript' nofilter}");
+		$popup.css('overflow', 'inherit');
 		
 		// Properties grid
 		$popup.find('div.cerb-properties-grid').cerbPropertyGrid();
 		
 		// Edit button
+		{if $is_writeable}
 		$popup.find('button.cerb-peek-edit')
 			.cerbPeekTrigger({ 'view_id': '{$view_id}' })
 			.on('cerb-peek-saved', function(e) {
@@ -107,14 +116,17 @@ $(function() {
 				genericAjaxPopupClose($layer);
 			})
 			;
+		{/if}
 		
 		// Comments
+		{if $is_readable}
 		$popup.find('button.cerb-peek-comments-add')
-			.cerbCommentTrigger()
-			.on('cerb-comment-saved', function() {
+			.cerbPeekTrigger()
+			.on('cerb-peek-saved', function() {
 				genericAjaxPopup($layer,'c=internal&a=showPeekPopup&context={$peek_context}&context_id={$dict->id}&view_id={$view_id}','reuse',false,'50%');
 			})
 			;
+		{/if}
 		
 		// Peek triggers
 		$popup.find('a.cerb-peek-trigger')
@@ -137,7 +149,9 @@ $(function() {
 		});
 		
 		// Timeline
+		{if $is_readable}
 		{include file="devblocks:cerberusweb.core::internal/peek/card_timeline_script.tpl"}
+		{/if}
 	});
 });
 </script>

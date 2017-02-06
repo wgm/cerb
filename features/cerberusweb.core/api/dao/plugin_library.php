@@ -2,17 +2,17 @@
 /***********************************************************************
  | Cerb(tm) developed by Webgroup Media, LLC.
  |-----------------------------------------------------------------------
- | All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
+ | All source code & content (c) Copyright 2002-2017, Webgroup Media LLC
  |   unless specifically noted otherwise.
  |
  | This source code is released under the Devblocks Public License.
  | The latest version of this license can be found here:
- | http://cerb.io/license
+ | http://cerb.ai/license
  |
  | By using this software, you acknowledge having read this license
  | and agree to be bound thereby.
  | ______________________________________________________________________
- |	http://cerb.io	    http://webgroup.media
+ |	http://cerb.ai	    http://webgroup.media
  ***********************************************************************/
 
 class DAO_PluginLibrary extends Cerb_ORMHelper {
@@ -30,9 +30,13 @@ class DAO_PluginLibrary extends Cerb_ORMHelper {
 	static function create($fields) {
 		$db = DevblocksPlatform::getDatabaseService();
 		
-		$sql = "INSERT INTO plugin_library () VALUES ()";
+		@$id = $fields[self::ID];
+		
+		if(empty($id))
+			return false;
+		
+		$sql = sprintf("INSERT INTO plugin_library (id) VALUES (%d)", $id);
 		$db->ExecuteMaster($sql);
-		$id = $db->LastInsertId();
 		
 		self::update($id, $fields);
 		
@@ -179,8 +183,6 @@ class DAO_PluginLibrary extends Cerb_ORMHelper {
 			
 		$join_sql = "FROM plugin_library ";
 		
-		$has_multiple_values = false; // [TODO] Temporary when custom fields disabled
-				
 		$where_sql = "".
 			(!empty($wheres) ? sprintf("WHERE %s ",implode(' AND ',$wheres)) : "WHERE 1 ");
 			
@@ -191,7 +193,6 @@ class DAO_PluginLibrary extends Cerb_ORMHelper {
 			'select' => $select_sql,
 			'join' => $join_sql,
 			'where' => $where_sql,
-			'has_multiple_values' => $has_multiple_values,
 			'sort' => $sort_sql,
 		);
 		
@@ -219,14 +220,12 @@ class DAO_PluginLibrary extends Cerb_ORMHelper {
 		$select_sql = $query_parts['select'];
 		$join_sql = $query_parts['join'];
 		$where_sql = $query_parts['where'];
-		$has_multiple_values = $query_parts['has_multiple_values'];
 		$sort_sql = $query_parts['sort'];
 		
 		$sql =
 			$select_sql.
 			$join_sql.
 			$where_sql.
-			($has_multiple_values ? 'GROUP BY plugin_library.id ' : '').
 			$sort_sql;
 			
 		if($limit > 0) {
@@ -254,7 +253,7 @@ class DAO_PluginLibrary extends Cerb_ORMHelper {
 			// We can skip counting if we have a less-than-full single page
 			if(!(0 == $page && $total < $limit)) {
 				$count_sql =
-					($has_multiple_values ? "SELECT COUNT(DISTINCT plugin_library.id) " : "SELECT COUNT(plugin_library.id) ").
+					"SELECT COUNT(plugin_library.id) ".
 					$join_sql.
 					$where_sql;
 				$total = $db->GetOneSlave($count_sql);
@@ -497,7 +496,7 @@ class SearchFields_PluginLibrary extends DevblocksSearchFields {
 			self::ID => new DevblocksSearchField(self::ID, 'plugin_library', 'id', $translate->_('common.id'), Model_CustomField::TYPE_NUMBER, true),
 			self::PLUGIN_ID => new DevblocksSearchField(self::PLUGIN_ID, 'plugin_library', 'plugin_id', $translate->_('dao.plugin_library.plugin_id'), null, true),
 			self::NAME => new DevblocksSearchField(self::NAME, 'plugin_library', 'name', $translate->_('common.name'), Model_CustomField::TYPE_SINGLE_LINE, true),
-			self::AUTHOR => new DevblocksSearchField(self::AUTHOR, 'plugin_library', 'author', $translate->_('dao.cerb_plugin.author'), Model_CustomField::TYPE_SINGLE_LINE, true),
+			self::AUTHOR => new DevblocksSearchField(self::AUTHOR, 'plugin_library', 'author', $translate->_('common.author'), Model_CustomField::TYPE_SINGLE_LINE, true),
 			self::DESCRIPTION => new DevblocksSearchField(self::DESCRIPTION, 'plugin_library', 'description', $translate->_('dao.cerb_plugin.description'), Model_CustomField::TYPE_MULTI_LINE, true),
 			self::LINK => new DevblocksSearchField(self::LINK, 'plugin_library', 'link', $translate->_('common.url'), Model_CustomField::TYPE_URL, true),
 			self::LATEST_VERSION => new DevblocksSearchField(self::LATEST_VERSION, 'plugin_library', 'latest_version', $translate->_('dao.cerb_plugin.version'), null, true),
@@ -781,7 +780,7 @@ class View_PluginLibrary extends C4_AbstractView implements IAbstractView_QuickS
 					'type' => DevblocksSearchCriteria::TYPE_TEXT,
 					'options' => array('param_key' => SearchFields_PluginLibrary::DESCRIPTION, 'match' => DevblocksSearchCriteria::OPTION_TEXT_PARTIAL),
 				),
-			'pluginId' => 
+			'plugin.id' => 
 				array(
 					'type' => DevblocksSearchCriteria::TYPE_TEXT,
 					'options' => array('param_key' => SearchFields_PluginLibrary::PLUGIN_ID, 'match' => DevblocksSearchCriteria::OPTION_TEXT_PARTIAL),

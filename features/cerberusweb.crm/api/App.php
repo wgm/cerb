@@ -2,17 +2,17 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2017, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
 | The latest version of this license can be found here:
-| http://cerb.io/license
+| http://cerb.ai/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://cerb.io	    http://webgroup.media
+|	http://cerb.ai	    http://webgroup.media
 ***********************************************************************/
 
 class CrmEventListener extends DevblocksEventListenerExtension {
@@ -27,73 +27,6 @@ class CrmEventListener extends DevblocksEventListenerExtension {
 		}
 	}
 };
-
-if (class_exists('Extension_ContextProfileTab')):
-class CrmOrgOppTab extends Extension_ContextProfileTab {
-	function showTab($context, $context_id) {
-		if(0 != strcasecmp($context, CerberusContexts::CONTEXT_ORG))
-			return;
-
-		$org_id = $context_id;
-		
-		$tpl = DevblocksPlatform::getTemplateService();
-
-		if(null == ($org = DAO_ContactOrg::get($org_id)))
-			return;
-			
-		$tpl->assign('org_id', $org_id);
-		
-		$defaults = C4_AbstractViewModel::loadFromClass('View_CrmOpportunity');
-		$defaults->id = 'org_opps';
-		
-		$view = C4_AbstractViewLoader::getView('org_opps', $defaults);
-		
-		$view->name = "Org: " . $org->name;
-		$view->addParamsRequired(array(
-			SearchFields_CrmOpportunity::ORG_ID => new DevblocksSearchCriteria(SearchFields_CrmOpportunity::ORG_ID,'=',$org_id)
-		), true);
-
-		$tpl->assign('view', $view);
-		
-		$tpl->display('devblocks:cerberusweb.core::internal/views/search_and_view.tpl');
-	}
-};
-endif;
-
-if (class_exists('Extension_ContextProfileTab')):
-class CrmTicketOppTab extends Extension_ContextProfileTab {
-	function showTab($context, $context_id) {
-		if($context != CerberusContexts::CONTEXT_TICKET)
-			return;
-
-		$ticket_id = $context_id;
-		
-		$tpl = DevblocksPlatform::getTemplateService();
-
-		$ticket = DAO_Ticket::get($ticket_id);
-		$tpl->assign('ticket_id', $ticket_id);
-		
-		$requesters = DAO_Ticket::getRequestersByTicket($ticket_id);
-		
-		if(null == ($view = C4_AbstractViewLoader::getView('ticket_opps'))) {
-			$view = new View_CrmOpportunity();
-			$view->id = 'ticket_opps';
-		}
-
-		$view->name = sprintf("Opportunities: %s recipient(s)", count($requesters));
-		$view->addParamsRequired(array(
-			SearchFields_CrmOpportunity::PRIMARY_EMAIL_ID => new DevblocksSearchCriteria(SearchFields_CrmOpportunity::PRIMARY_EMAIL_ID,'in',array_keys($requesters)),
-		), true);
-		
-		$tpl->assign('view', $view);
-		
-		$tpl->display('devblocks:cerberusweb.core::internal/views/search_and_view.tpl');
-	}
-	
-	function saveTab() {
-	}
-};
-endif;
 
 if(class_exists('Extension_DevblocksEventAction')):
 class VaAction_CreateOpportunity extends Extension_DevblocksEventAction {
@@ -248,8 +181,8 @@ class VaAction_CreateOpportunity extends Extension_DevblocksEventAction {
 		// Comment content
 		if(!empty($comment)) {
 			$fields = array(
-				DAO_Comment::OWNER_CONTEXT => CerberusContexts::CONTEXT_VIRTUAL_ATTENDANT,
-				DAO_Comment::OWNER_CONTEXT_ID => $trigger->virtual_attendant_id,
+				DAO_Comment::OWNER_CONTEXT => CerberusContexts::CONTEXT_BOT,
+				DAO_Comment::OWNER_CONTEXT_ID => $trigger->bot_id,
 				DAO_Comment::COMMENT => $comment,
 				DAO_Comment::CONTEXT => CerberusContexts::CONTEXT_OPPORTUNITY,
 				DAO_Comment::CONTEXT_ID => $opp_id,

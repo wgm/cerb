@@ -6,13 +6,6 @@
 <input type="hidden" name="a" value="saveComposePeek">
 <input type="hidden" name="view_id" value="{$view_id}">
 <input type="hidden" name="draft_id" value="{$draft->id}">
-{if !empty($link_context)}
-<input type="hidden" name="link_context" value="{$link_context}">
-<input type="hidden" name="link_context_id" value="{$link_context_id}">
-{elseif !empty($draft->params.link_context)}
-<input type="hidden" name="link_context" value="{$draft->params.link_context}">
-<input type="hidden" name="link_context_id" value="{$draft->params.link_context_id}">
-{/if}
 <input type="hidden" name="format" value="{if ($draft && $draft->params.format == 'parsedown') || $mail_reply_html}parsedown{/if}">
 <input type="hidden" name="_csrf_token" value="{$session.csrf_token}">
 
@@ -98,7 +91,7 @@
 							Insert: 
 							<input type="text" size="25" class="context-snippet autocomplete" {if $pref_keyboard_shortcuts}placeholder="(Ctrl+Shift+I)"{/if}>
 							<button type="button" onclick="ajax.chooserSnippet('snippets',$('#divComposeContent{$random}'), { '{CerberusContexts::CONTEXT_WORKER}':'{$active_worker->id}' });"><span class="glyphicons glyphicons-search"></span></button>
-							<button type="button" onclick="var txt = encodeURIComponent($('#divComposeContent{$random}').selection('get')); genericAjaxPopup('add_snippet','c=internal&a=showSnippetsPeek&id=0&owner_context={CerberusContexts::CONTEXT_WORKER}&owner_context_id={$active_worker->id}&context=&text=' + txt,null,false,'50%');"><span class="glyphicons glyphicons-circle-plus"></span></button>
+							<button type="button" onclick="var txt = encodeURIComponent($('#divComposeContent{$random}').selection('get')); genericAjaxPopup('add_snippet','c=internal&a=showPeekPopup&context={CerberusContexts::CONTEXT_SNIPPET}&context_id=0&edit=1&text=' + txt,null,false,'50%');"><span class="glyphicons glyphicons-circle-plus"></span></button>
 						</div>
 					</fieldset>
 				</div>
@@ -206,7 +199,7 @@
 	{foreach from=$draft->params.file_ids item=file_id}
 		{$file = DAO_Attachment::get($file_id)}
 		{if !empty($file)}
-			<li><input type="hidden" name="file_ids[]" value="{$file_id}">{$file->display_name} ({$file->storage_size} bytes) <a href="javascript:;" onclick="$(this).parent().remove();"><span class="glyphicons glyphicons-circle-remove"></span></a></li>
+			<li><input type="hidden" name="file_ids[]" value="{$file_id}">{$file->name} ({$file->storage_size} bytes) <a href="javascript:;" onclick="$(this).parent().remove();"><span class="glyphicons glyphicons-circle-remove"></span></a></li>
 		{/if} 
 	{/foreach}
 	{/if}

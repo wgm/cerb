@@ -2,17 +2,17 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2017, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
 | The latest version of this license can be found here:
-| http://cerb.io/license
+| http://cerb.ai/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://cerb.io	    http://webgroup.media
+|	http://cerb.ai	    http://webgroup.media
 ***********************************************************************/
 
 class PageSection_ProfilesOpportunity extends Extension_PageSection {
@@ -93,7 +93,7 @@ class PageSection_ProfilesOpportunity extends Extension_PageSection {
 		);
 		
 		$properties['updated_date'] = array(
-			'label' => mb_ucfirst($translate->_('common.updated')),
+			'label' => DevblocksPlatform::translateCapitalized('common.updated'),
 			'type' => Model_CustomField::TYPE_DATE,
 			'value' => $opp->updated_date,
 		);
@@ -121,7 +121,7 @@ class PageSection_ProfilesOpportunity extends Extension_PageSection {
 					DAO_ContextLink::getContextLinkCounts(
 						CerberusContexts::CONTEXT_OPPORTUNITY,
 						$opp->id,
-						array(CerberusContexts::CONTEXT_WORKER, CerberusContexts::CONTEXT_CUSTOM_FIELDSET)
+						array(CerberusContexts::CONTEXT_CUSTOM_FIELDSET)
 					),
 			),
 		);
@@ -132,7 +132,7 @@ class PageSection_ProfilesOpportunity extends Extension_PageSection {
 					DAO_ContextLink::getContextLinkCounts(
 						CerberusContexts::CONTEXT_ADDRESS,
 						$opp->primary_email_id,
-						array(CerberusContexts::CONTEXT_WORKER, CerberusContexts::CONTEXT_CUSTOM_FIELDSET)
+						array(CerberusContexts::CONTEXT_CUSTOM_FIELDSET)
 					),
 			);
 		}
@@ -196,7 +196,7 @@ class PageSection_ProfilesOpportunity extends Extension_PageSection {
 		// Worker
 		$active_worker = CerberusApplication::getActiveWorker();
 		
-		header('Content-Type: application/json; charset=' . LANG_CHARSET_CODE);
+		header('Content-Type: application/json; charset=utf-8');
 
 		try {
 			if(!empty($id) && !empty($do_delete)) { // delete
@@ -245,14 +245,6 @@ class PageSection_ProfilesOpportunity extends Extension_PageSection {
 						throw new Exception_DevblocksAjaxValidationError("You don't have permission to create this record.");
 					
 					$id = DAO_CrmOpportunity::create($fields);
-					
-					// Context Link (if given)
-					// [TODO]
-					@$link_context = DevblocksPlatform::importGPC($_REQUEST['link_context'],'string','');
-					@$link_context_id = DevblocksPlatform::importGPC($_REQUEST['link_context_id'],'integer','');
-					if(!empty($id) && !empty($link_context) && !empty($link_context_id)) {
-						DAO_ContextLink::setLink(CerberusContexts::CONTEXT_OPPORTUNITY, $id, $link_context, $link_context_id);
-					}
 					
 					// View marquee
 					if(!empty($id) && !empty($view_id)) {

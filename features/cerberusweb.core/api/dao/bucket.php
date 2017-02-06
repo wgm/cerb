@@ -2,17 +2,17 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2017, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
 | The latest version of this license can be found here:
-| http://cerb.io/license
+| http://cerb.ai/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://cerb.io	    http://webgroup.media
+|	http://cerb.ai	    http://webgroup.media
 ***********************************************************************/
 
 class DAO_Bucket extends Cerb_ORMHelper {
@@ -431,7 +431,6 @@ class DAO_Bucket extends Cerb_ORMHelper {
 			);
 			
 		$join_sql = "FROM bucket ".
-			(isset($tables['context_link']) ? sprintf("INNER JOIN context_link ON (context_link.to_context = %s AND context_link.to_context_id = bucket.id) ", Cerb_ORMHelper::qstr(CerberusContexts::CONTEXT_BUCKET)) : " ").
 			'';
 		
 		$where_sql = "".
@@ -445,7 +444,6 @@ class DAO_Bucket extends Cerb_ORMHelper {
 			'join_sql' => &$join_sql,
 			'where_sql' => &$where_sql,
 			'tables' => &$tables,
-			'has_multiple_values' => &$has_multiple_values
 		);
 	
 		array_walk_recursive(
@@ -459,7 +457,6 @@ class DAO_Bucket extends Cerb_ORMHelper {
 			'select' => $select_sql,
 			'join' => $join_sql,
 			'where' => $where_sql,
-			'has_multiple_values' => $has_multiple_values,
 			'sort' => $sort_sql,
 		);
 	}
@@ -475,10 +472,6 @@ class DAO_Bucket extends Cerb_ORMHelper {
 		settype($param_key, 'string');
 		
 		switch($param_key) {
-			case SearchFields_Bucket::VIRTUAL_CONTEXT_LINK:
-				self::_searchComponentsVirtualContextLinks($param, $from_context, $from_index, $args['join_sql'], $args['where_sql']);
-				break;
-		
 			case SearchFields_Bucket::VIRTUAL_HAS_FIELDSET:
 				self::_searchComponentsVirtualHasFieldset($param, $from_context, $from_index, $args['join_sql'], $args['where_sql']);
 				break;
@@ -506,14 +499,12 @@ class DAO_Bucket extends Cerb_ORMHelper {
 		$select_sql = $query_parts['select'];
 		$join_sql = $query_parts['join'];
 		$where_sql = $query_parts['where'];
-		$has_multiple_values = $query_parts['has_multiple_values'];
 		$sort_sql = $query_parts['sort'];
 		
 		$sql =
 			$select_sql.
 			$join_sql.
 			$where_sql.
-			($has_multiple_values ? 'GROUP BY bucket.id ' : '').
 			$sort_sql;
 			
 		if($limit > 0) {
@@ -543,7 +534,7 @@ class DAO_Bucket extends Cerb_ORMHelper {
 			// We can skip counting if we have a less-than-full single page
 			if(!(0 == $page && $total < $limit)) {
 				$count_sql =
-					($has_multiple_values ? "SELECT COUNT(DISTINCT bucket.id) " : "SELECT COUNT(bucket.id) ").
+					"SELECT COUNT(bucket.id) ".
 					$join_sql.
 					$where_sql;
 				$total = $db->GetOneSlave($count_sql);
@@ -569,11 +560,9 @@ class SearchFields_Bucket extends DevblocksSearchFields {
 	const IS_DEFAULT = 'b_is_default';
 
 	const VIRTUAL_CONTEXT_LINK = '*_context_link';
+	const VIRTUAL_GROUP_SEARCH = '*_group_search';
 	const VIRTUAL_HAS_FIELDSET = '*_has_fieldset';
 	const VIRTUAL_WATCHERS = '*_workers';
-	
-	const CONTEXT_LINK = 'cl_context_from';
-	const CONTEXT_LINK_ID = 'cl_context_from_id';
 	
 	static private $_fields = null;
 	
@@ -584,12 +573,19 @@ class SearchFields_Bucket extends DevblocksSearchFields {
 	static function getCustomFieldContextKeys() {
 		return array(
 			CerberusContexts::CONTEXT_BUCKET => new DevblocksSearchFieldContextKeys('bucket.id', self::ID),
-			CerberusContexts::CONTEXT_GROUP => new DevblocksSearchFieldContextKeys('bucket.group_id', self::GROUP_ID),
 		);
 	}
 	
 	static function getWhereSQL(DevblocksSearchCriteria $param) {
 		switch($param->field) {
+			case self::VIRTUAL_CONTEXT_LINK:
+				return self::_getWhereSQLFromContextLinksField($param, CerberusContexts::CONTEXT_BUCKET, self::getPrimaryKey());
+				break;
+			
+			case self::VIRTUAL_GROUP_SEARCH:
+				return self::_getWhereSQLFromVirtualSearchField($param, CerberusContexts::CONTEXT_GROUP, 'bucket.group_id');
+				break;
+				
 			case self::VIRTUAL_WATCHERS:
 				return self::_getWhereSQLFromWatchersField($param, CerberusContexts::CONTEXT_BUCKET, self::getPrimaryKey());
 				break;
@@ -632,11 +628,9 @@ class SearchFields_Bucket extends DevblocksSearchFields {
 			self::IS_DEFAULT => new DevblocksSearchField(self::IS_DEFAULT, 'bucket', 'is_default', $translate->_('common.default'), Model_CustomField::TYPE_CHECKBOX, true),
 				
 			self::VIRTUAL_CONTEXT_LINK => new DevblocksSearchField(self::VIRTUAL_CONTEXT_LINK, '*', 'context_link', $translate->_('common.links'), null, false),
+			self::VIRTUAL_GROUP_SEARCH => new DevblocksSearchField(self::VIRTUAL_GROUP_SEARCH, '*', 'group_search', null, null, false),
 			self::VIRTUAL_HAS_FIELDSET => new DevblocksSearchField(self::VIRTUAL_HAS_FIELDSET, '*', 'has_fieldset', $translate->_('common.fieldset'), null, false),
 			self::VIRTUAL_WATCHERS => new DevblocksSearchField(self::VIRTUAL_WATCHERS, '*', 'workers', $translate->_('common.watchers'), 'WS', false),
-			
-			self::CONTEXT_LINK => new DevblocksSearchField(self::CONTEXT_LINK, 'context_link', 'from_context', null, null, false),
-			self::CONTEXT_LINK_ID => new DevblocksSearchField(self::CONTEXT_LINK_ID, 'context_link', 'from_context_id', null, null, false),
 		);
 		
 		// Custom Fields
@@ -848,6 +842,39 @@ class Model_Bucket {
 class Context_Bucket extends Extension_DevblocksContext implements IDevblocksContextProfile, IDevblocksContextPeek {
 	const ID = CerberusContexts::CONTEXT_BUCKET;
 	
+	static function isReadableByActor($models, $actor) {
+		// Everyone can read
+		return CerberusContexts::allowEverything($models);
+	}
+	
+	static function isWriteableByActor($models, $actor) {
+		// Only admins and group managers can modify
+		
+		if(false == ($actor = CerberusContexts::polymorphActorToDictionary($actor)))
+			CerberusContexts::denyEverything($models);
+		
+		if(CerberusContexts::isActorAnAdmin($actor))
+			return CerberusContexts::allowEverything($models);
+		
+		if(false == ($dicts = CerberusContexts::polymorphModelsToDictionaries($models, CerberusContexts::CONTEXT_BUCKET)))
+			return CerberusContexts::denyEverything($models);
+		
+		DevblocksDictionaryDelegate::bulkLazyLoad($dicts, 'group_');
+		
+		$results = array_fill_keys(array_keys($dicts), false);
+			
+		foreach($dicts as $id => $dict) {
+			$group_dict = $dict->extract('group_');
+			$results[$id] = Context_Group::isWriteableByActor($group_dict, $actor);
+		}
+		
+		if(is_array($models)) {
+			return $results;
+		} else {
+			return array_shift($results);
+		}
+	}
+	
 	function profileGetUrl($context_id) {
 		if(empty($context_id))
 			return '';
@@ -880,24 +907,6 @@ class Context_Bucket extends Extension_DevblocksContext implements IDevblocksCon
 			'replyto__label',
 			'updated_at',
 		);
-	}
-	
-	function authorize($context_id, Model_Worker $worker) {
-		// Security
-		try {
-			if(empty($worker))
-				throw new Exception();
-			
-			// [TODO] Check group
-			//if($worker->isGroupMember($context_id))
-				
-			return TRUE;
-				
-		} catch (Exception $e) {
-			// Fail
-		}
-		
-		return FALSE;
 	}
 	
 	/**
@@ -975,6 +984,8 @@ class Context_Bucket extends Extension_DevblocksContext implements IDevblocksCon
 			$token_values['name'] = $bucket->name;
 			$token_values['updated_at'] = $bucket->updated_at;
 			
+			$token_values['group_id'] = $bucket->group_id;
+			
 			if(false != ($replyto = $bucket->getReplyTo()))
 				$token_values['replyto_id'] = $replyto->address_id;
 			
@@ -1009,6 +1020,20 @@ class Context_Bucket extends Extension_DevblocksContext implements IDevblocksCon
 			$token_values
 		);
 		
+		// Group
+		$merge_token_labels = array();
+		$merge_token_values = array();
+		CerberusContexts::getContext(CerberusContexts::CONTEXT_GROUP, null, $merge_token_labels, $merge_token_values, '', true);
+
+		CerberusContexts::merge(
+			'group_',
+			$prefix.'Group:',
+			$merge_token_labels,
+			$merge_token_values,
+			$token_labels,
+			$token_values
+		);
+		
 		return true;
 	}
 	
@@ -1024,7 +1049,7 @@ class Context_Bucket extends Extension_DevblocksContext implements IDevblocksCon
 		
 		if(!$is_loaded) {
 			$labels = array();
-			CerberusContexts::getContext($context, $context_id, $labels, $values, null, true);
+			CerberusContexts::getContext($context, $context_id, $labels, $values, null, true, true);
 		}
 		
 		switch($token) {
@@ -1036,7 +1061,7 @@ class Context_Bucket extends Extension_DevblocksContext implements IDevblocksCon
 				break;
 				
 			default:
-				if(substr($token,0,7) == 'custom_') {
+				if(DevblocksPlatform::strStartsWith($token, 'custom_')) {
 					$fields = $this->_lazyLoadCustomFields($token, $context, $context_id);
 					$values = array_merge($values, $fields);
 				}
@@ -1081,8 +1106,7 @@ class Context_Bucket extends Extension_DevblocksContext implements IDevblocksCon
 		
 		if(!empty($context) && !empty($context_id)) {
 			$params_req = array(
-				new DevblocksSearchCriteria(SearchFields_Bucket::CONTEXT_LINK,'=',$context),
-				new DevblocksSearchCriteria(SearchFields_Bucket::CONTEXT_LINK_ID,'=',$context_id),
+				new DevblocksSearchCriteria(SearchFields_Bucket::VIRTUAL_CONTEXT_LINK,'in',array($context.':'.$context_id)),
 			);
 		}
 		
@@ -1181,7 +1205,7 @@ class Context_Bucket extends Extension_DevblocksContext implements IDevblocksCon
 						DAO_ContextLink::getContextLinkCounts(
 							CerberusContexts::CONTEXT_BUCKET,
 							$context_id,
-							array(CerberusContexts::CONTEXT_WORKER, CerberusContexts::CONTEXT_CUSTOM_FIELDSET)
+							array(CerberusContexts::CONTEXT_CUSTOM_FIELDSET)
 						),
 				),
 			);
@@ -1237,11 +1261,13 @@ class View_Bucket extends C4_AbstractView implements IAbstractView_Subtotals, IA
 			SearchFields_Bucket::REPLY_SIGNATURE,
 			SearchFields_Bucket::REPLY_HTML_TEMPLATE_ID,
 			SearchFields_Bucket::VIRTUAL_CONTEXT_LINK,
+			SearchFields_Bucket::VIRTUAL_GROUP_SEARCH,
 			SearchFields_Bucket::VIRTUAL_HAS_FIELDSET,
 			SearchFields_Bucket::VIRTUAL_WATCHERS,
 		));
 		
 		$this->addParamsHidden(array(
+			SearchFields_Bucket::VIRTUAL_GROUP_SEARCH,
 		));
 		
 		$this->doResetCriteria();
@@ -1352,12 +1378,18 @@ class View_Bucket extends C4_AbstractView implements IAbstractView_Subtotals, IA
 			'group' => 
 				array(
 					'type' => DevblocksSearchCriteria::TYPE_VIRTUAL,
-					'options' => array('param_key' => SearchFields_Bucket::GROUP_ID),
+					'options' => array('param_key' => SearchFields_Bucket::VIRTUAL_GROUP_SEARCH),
+					'examples' => [
+						['type' => 'search', 'context' => CerberusContexts::CONTEXT_GROUP, 'q' => ''],
+					]
 				),
 			'id' => 
 				array(
 					'type' => DevblocksSearchCriteria::TYPE_NUMBER,
 					'options' => array('param_key' => SearchFields_Bucket::ID),
+					'examples' => [
+						['type' => 'chooser', 'context' => CerberusContexts::CONTEXT_BUCKET, 'q' => ''],
+					]
 				),
 			'name' => 
 				array(
@@ -1370,6 +1402,10 @@ class View_Bucket extends C4_AbstractView implements IAbstractView_Subtotals, IA
 					'options' => array('param_key' => SearchFields_Bucket::UPDATED_AT),
 				),
 		);
+		
+		// Add quick search links
+		
+		$fields = self::_appendVirtualFiltersFromQuickSearchContexts('links', $fields, 'links');
 		
 		// Add searchable custom fields
 		
@@ -1388,45 +1424,7 @@ class View_Bucket extends C4_AbstractView implements IAbstractView_Subtotals, IA
 	function getParamFromQuickSearchFieldTokens($field, $tokens) {
 		switch($field) {
 			case 'group':
-				$field_key = SearchFields_Bucket::GROUP_ID;
-				$oper = null;
-				$terms = array();
-				
-				if(false == CerbQuickSearchLexer::getOperArrayFromTokens($tokens, $oper, $terms))
-					return false;
-				
-				$groups = DAO_Group::getAll();
-				
-				if(!is_array($terms))
-					break;
-				
-				$group_ids = array();
-				
-				foreach($terms as $term) {
-					// Match IDs
-					if(is_numeric($term) && isset($groups[$term])) {
-						$group_id = intval($term);
-						$group_ids[$group_id] = true;
-						continue;
-					}
-						
-					foreach($groups as $group_id => $group) {
-						if(isset($group_ids[$group_id]))
-							continue;
-						
-						if(false !== stristr($group->name, $term)) {
-							$group_ids[$group_id] = true;
-						}
-					}
-				}
-				
-				if(!empty($group_ids)) {
-					return new DevblocksSearchCriteria(
-						$field_key,
-						$oper,
-						array_keys($group_ids)
-					);
-				}
+				return DevblocksSearchCriteria::getVirtualQuickSearchParamFromTokens($field, $tokens, SearchFields_Bucket::VIRTUAL_GROUP_SEARCH);
 				break;
 			
 			case 'ticket.id':
@@ -1445,6 +1443,9 @@ class View_Bucket extends C4_AbstractView implements IAbstractView_Subtotals, IA
 				break;
 				
 			default:
+				if($field == 'links' || substr($field, 0, 6) == 'links.')
+					return DevblocksSearchCriteria::getContextLinksParamFromTokens($field, $tokens);
+				
 				$search_fields = $this->getQuickSearchFields();
 				return DevblocksSearchCriteria::getParamFromQueryFieldTokens($field, $tokens, $search_fields);
 				break;
@@ -1560,6 +1561,10 @@ class View_Bucket extends C4_AbstractView implements IAbstractView_Subtotals, IA
 				$this->_renderVirtualContextLinks($param);
 				break;
 				
+			case SearchFields_Bucket::VIRTUAL_GROUP_SEARCH:
+				echo sprintf("Group matches <b>%s</b>", DevblocksPlatform::strEscapeHtml($param->value));
+				break;
+			
 			case SearchFields_Bucket::VIRTUAL_HAS_FIELDSET:
 				$this->_renderVirtualHasFieldset($param);
 				break;

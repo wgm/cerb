@@ -2,17 +2,17 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2017, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
 | The latest version of this license can be found here:
-| http://cerb.io/license
+| http://cerb.ai/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://cerb.io	    http://webgroup.media
+|	http://cerb.ai	    http://webgroup.media
 ***********************************************************************/
 
 class PageSection_ProfilesCalendarRecurringProfile extends Extension_PageSection {
@@ -29,6 +29,7 @@ class PageSection_ProfilesCalendarRecurringProfile extends Extension_PageSection
 		$id = array_shift($stack); // 123
 
 		@$id = intval($id);
+		$context = CerberusContexts::CONTEXT_CALENDAR_EVENT_RECURRING;
 		
 		if(null == ($calendar_recurring_profile = DAO_CalendarRecurringProfile::get($id))) {
 			return;
@@ -100,28 +101,35 @@ class PageSection_ProfilesCalendarRecurringProfile extends Extension_PageSection
 			
 		// Custom Fields
 
-		@$values = array_shift(DAO_CustomFieldValue::getValuesByContextIds(CerberusContexts::CONTEXT_CALENDAR_EVENT_RECURRING, $calendar_recurring_profile->id)) or array();
+		@$values = array_shift(DAO_CustomFieldValue::getValuesByContextIds($context, $calendar_recurring_profile->id)) or array();
 		$tpl->assign('custom_field_values', $values);
 		
-		$properties_cfields = Page_Profiles::getProfilePropertiesCustomFields(CerberusContexts::CONTEXT_CALENDAR_EVENT_RECURRING, $values);
+		$properties_cfields = Page_Profiles::getProfilePropertiesCustomFields($context, $values);
 		
 		if(!empty($properties_cfields))
 			$properties = array_merge($properties, $properties_cfields);
 		
 		// Custom Fieldsets
 
-		$properties_custom_fieldsets = Page_Profiles::getProfilePropertiesCustomFieldsets(CerberusContexts::CONTEXT_CALENDAR_EVENT_RECURRING, $calendar_recurring_profile->id, $values);
+		$properties_custom_fieldsets = Page_Profiles::getProfilePropertiesCustomFieldsets($context, $calendar_recurring_profile->id, $values);
 		$tpl->assign('properties_custom_fieldsets', $properties_custom_fieldsets);
+		
+		// Search buttons
+		
+		$owner_counts = array(
+			'comments' => DAO_Comment::count($context, $id),
+		);
+		$tpl->assign('owner_counts', $owner_counts);
 		
 		// Link counts
 		
 		$properties_links = array(
-			CerberusContexts::CONTEXT_CALENDAR_EVENT_RECURRING => array(
+			$context => array(
 				$calendar_recurring_profile->id => 
 					DAO_ContextLink::getContextLinkCounts(
-						CerberusContexts::CONTEXT_CALENDAR_EVENT_RECURRING,
+						$context,
 						$calendar_recurring_profile->id,
-						array(CerberusContexts::CONTEXT_WORKER, CerberusContexts::CONTEXT_CUSTOM_FIELDSET)
+						array(CerberusContexts::CONTEXT_CUSTOM_FIELDSET)
 					),
 			),
 		);
@@ -132,7 +140,7 @@ class PageSection_ProfilesCalendarRecurringProfile extends Extension_PageSection
 					DAO_ContextLink::getContextLinkCounts(
 						CerberusContexts::CONTEXT_CALENDAR,
 						$calendar_recurring_profile->calendar_id,
-						array(CerberusContexts::CONTEXT_WORKER, CerberusContexts::CONTEXT_CUSTOM_FIELDSET)
+						array(CerberusContexts::CONTEXT_CUSTOM_FIELDSET)
 					),
 			);
 		}
@@ -159,7 +167,7 @@ class PageSection_ProfilesCalendarRecurringProfile extends Extension_PageSection
 		$tpl->display('devblocks:cerberusweb.core::internal/calendar_recurring_profile/profile.tpl');
 	}
 	
-	function savePeekPopupJsonAction() {
+	function savePeekJsonAction() {
 		@$view_id = DevblocksPlatform::importGPC($_REQUEST['view_id'], 'string', '');
 		
 		$default_tz = DevblocksPlatform::getTimezone();
@@ -180,66 +188,88 @@ class PageSection_ProfilesCalendarRecurringProfile extends Extension_PageSection
 		
 		header("Content-type: application/json");
 		
-		if(empty($calendar_id))
-			return;
-		
-		if(!empty($id) && !empty($do_delete)) { // Delete
-			DAO_CalendarRecurringProfile::delete($id);
-			
-			echo json_encode(array(
-				'action' => 'delete',
-			));
-			
-		} else {
-			if(empty($id)) { // New
-				$fields = array(
-					DAO_CalendarRecurringProfile::CALENDAR_ID => $calendar_id,
-					DAO_CalendarRecurringProfile::EVENT_NAME => $event_name,
-					DAO_CalendarRecurringProfile::EVENT_START => $event_start ?: 'midnight',
-					DAO_CalendarRecurringProfile::EVENT_END => $event_end ?: '',
-					DAO_CalendarRecurringProfile::TZ => $tz,
-					DAO_CalendarRecurringProfile::RECUR_START => $recur_start,
-					DAO_CalendarRecurringProfile::RECUR_END => $recur_end,
-					DAO_CalendarRecurringProfile::IS_AVAILABLE => $is_available ? 1 : 0,
-					DAO_CalendarRecurringProfile::PATTERNS => $patterns,
-				);
+		try {
+			if(!empty($id) && !empty($do_delete)) { // Delete
+				// [TODO] ACL
+				DAO_CalendarRecurringProfile::delete($id);
 				
-				if(false == ($id = DAO_CalendarRecurringProfile::create($fields)))
-					return false;
+				echo json_encode(array(
+					'status' => true,
+					'id' => intval($id),
+					'view_id' => $view_id,
+					'action' => 'delete',
+				));
+				return;
 				
-				// Context Link (if given)
-				@$link_context = DevblocksPlatform::importGPC($_REQUEST['link_context'],'string','');
-				@$link_context_id = DevblocksPlatform::importGPC($_REQUEST['link_context_id'],'integer','');
-				if(!empty($id) && !empty($link_context) && !empty($link_context_id)) {
-					DAO_ContextLink::setLink(CerberusContexts::CONTEXT_CALENDAR_EVENT_RECURRING, $id, $link_context, $link_context_id);
+			} else {
+				if(empty($event_name))
+					throw new Exception_DevblocksAjaxValidationError("The 'Name:' field is required.", 'event_name');
+				
+				if(empty($calendar_id))
+					throw new Exception_DevblocksAjaxValidationError("The 'Calendar:' field is required.", 'calendar_id');
+				
+				if(empty($id)) { // New
+					$fields = array(
+						DAO_CalendarRecurringProfile::CALENDAR_ID => $calendar_id,
+						DAO_CalendarRecurringProfile::EVENT_NAME => $event_name,
+						DAO_CalendarRecurringProfile::EVENT_START => $event_start ?: 'midnight',
+						DAO_CalendarRecurringProfile::EVENT_END => $event_end ?: '',
+						DAO_CalendarRecurringProfile::TZ => $tz,
+						DAO_CalendarRecurringProfile::RECUR_START => $recur_start,
+						DAO_CalendarRecurringProfile::RECUR_END => $recur_end,
+						DAO_CalendarRecurringProfile::IS_AVAILABLE => $is_available ? 1 : 0,
+						DAO_CalendarRecurringProfile::PATTERNS => $patterns,
+					);
+					
+					if(false == ($id = DAO_CalendarRecurringProfile::create($fields)))
+						return false;
+					
+					if(!empty($view_id) && !empty($id))
+						C4_AbstractView::setMarqueeContextCreated($view_id, CerberusContexts::CONTEXT_CALENDAR_EVENT_RECURRING, $id);
+					
+				} else { // Edit
+					$fields = array(
+						DAO_CalendarRecurringProfile::EVENT_NAME => $event_name,
+						DAO_CalendarRecurringProfile::EVENT_START => $event_start ?: 'midnight',
+						DAO_CalendarRecurringProfile::EVENT_END => $event_end ?: '',
+						DAO_CalendarRecurringProfile::TZ => $tz,
+						DAO_CalendarRecurringProfile::RECUR_START => $recur_start,
+						DAO_CalendarRecurringProfile::RECUR_END => $recur_end,
+						DAO_CalendarRecurringProfile::IS_AVAILABLE => $is_available ? 1 : 0,
+						DAO_CalendarRecurringProfile::PATTERNS => $patterns,
+					);
+					DAO_CalendarRecurringProfile::update($id, $fields);
+					
 				}
+	
+				// Custom fields
+				@$field_ids = DevblocksPlatform::importGPC($_REQUEST['field_ids'], 'array', array());
+				DAO_CustomFieldValue::handleFormPost(CerberusContexts::CONTEXT_CALENDAR_EVENT_RECURRING, $id, $field_ids);
 				
-				if(!empty($view_id) && !empty($id))
-					C4_AbstractView::setMarqueeContextCreated($view_id, CerberusContexts::CONTEXT_CALENDAR_EVENT_RECURRING, $id);
-				
-			} else { // Edit
-				$fields = array(
-					DAO_CalendarRecurringProfile::EVENT_NAME => $event_name,
-					DAO_CalendarRecurringProfile::EVENT_START => $event_start ?: 'midnight',
-					DAO_CalendarRecurringProfile::EVENT_END => $event_end ?: '',
-					DAO_CalendarRecurringProfile::TZ => $tz,
-					DAO_CalendarRecurringProfile::RECUR_START => $recur_start,
-					DAO_CalendarRecurringProfile::RECUR_END => $recur_end,
-					DAO_CalendarRecurringProfile::IS_AVAILABLE => $is_available ? 1 : 0,
-					DAO_CalendarRecurringProfile::PATTERNS => $patterns,
-				);
-				DAO_CalendarRecurringProfile::update($id, $fields);
-				
+				echo json_encode(array(
+					'status' => true,
+					'id' => intval($id),
+					'label' => $event_name,
+					'view_id' => $view_id,
+					'action' => 'modify',
+					'month' => intval(date('m', time())),
+					'year' => intval(date('Y', time())),
+				));
+				return;
 			}
-
-			// Custom fields
-			@$field_ids = DevblocksPlatform::importGPC($_REQUEST['field_ids'], 'array', array());
-			DAO_CustomFieldValue::handleFormPost(CerberusContexts::CONTEXT_CALENDAR_EVENT_RECURRING, $id, $field_ids);
-			
+				
+		} catch (Exception_DevblocksAjaxValidationError $e) {
 			echo json_encode(array(
-				'action' => 'modify',
-				'month' => intval(date('m', time())),
-				'year' => intval(date('Y', time())),
+				'status' => false,
+				'error' => $e->getMessage(),
+				'field' => $e->getFieldName(),
+			));
+			return;
+			
+		} catch (Exception $e) {
+			echo json_encode(array(
+				'status' => false,
+				'error' => 'An error occurred.',
 			));
 			return;
 		}

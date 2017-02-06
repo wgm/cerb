@@ -6,7 +6,7 @@ include_once(DEVBLOCKS_PATH . "api/services/bootstrap/cache.php");
 include_once(DEVBLOCKS_PATH . "api/services/bootstrap/database.php");
 include_once(DEVBLOCKS_PATH . "api/services/bootstrap/classloader.php");
 
-define('PLATFORM_BUILD', 2015101601);
+define('PLATFORM_BUILD', 2016122701);
 
 /**
  * A platform container for plugin/extension registries.
@@ -14,7 +14,44 @@ define('PLATFORM_BUILD', 2015101601);
  * @author Jeff Standen <jeff@webgroupmedia.com>
  */
 class DevblocksPlatform extends DevblocksEngine {
+	const TRANSLATE_NONE = 0;
+	const TRANSLATE_UCFIRST = 1;
+	const TRANSLATE_CAPITALIZE = 2;
+	const TRANSLATE_UPPER = 4;
+	const TRANSLATE_LOWER = 8;
+	
 	private function __construct() { return false; }
+	
+	static function translate($token, $format = DevblocksPlatform::TRANSLATE_NONE) {
+		$translate = DevblocksPlatform::getTranslationService();
+		$string = $translate->_($token);
+		
+		switch($format) {
+			case self::TRANSLATE_UCFIRST:
+				return mb_ucfirst($string);
+				break;
+				
+			case self::TRANSLATE_CAPITALIZE:
+				return mb_convert_case($string, MB_CASE_TITLE);
+				break;
+				
+			case self::TRANSLATE_UPPER:
+				return mb_convert_case($string, MB_CASE_UPPER);
+				break;
+				
+			case self::TRANSLATE_LOWER:
+				return mb_convert_case($string, MB_CASE_LOWER);
+				break;
+				
+			default:
+				return $string;
+				break;
+		}
+	}
+	
+	static function translateCapitalized($token) {
+		return self::translate($token, DevblocksPlatform::TRANSLATE_CAPITALIZE);
+	}
 
 	static function installPluginZip($zip_filename) {
 		$plugin_path = APP_STORAGE_PATH . '/plugins/';
@@ -188,17 +225,7 @@ class DevblocksPlatform extends DevblocksEngine {
 	 * @test DevblocksPlatformTest
 	 */
 	static function importGPC($var, $cast=null, $default=null) {
-		@$magic_quotes = (function_exists('get_magic_quotes_gpc') && get_magic_quotes_gpc()) ? true : false;
-
-		if(!is_null($var)) {
-			if(is_string($var)) {
-				$var = $magic_quotes ? stripslashes($var) : $var;
-			} elseif(is_array($var)) {
-				if($magic_quotes)
-					array_walk_recursive($var, array('DevblocksPlatform','_stripMagicQuotes'));
-			}
-			
-		} elseif (is_null($var) && !is_null($default)) {
+		if (is_null($var) && !is_null($default)) {
 			$var = $default;
 		}
 
@@ -206,11 +233,6 @@ class DevblocksPlatform extends DevblocksEngine {
 			$var = self::importVar($var, $cast, $default);
 		
 		return $var;
-	}
-
-	static private function _stripMagicQuotes(&$item, $key) {
-		if(is_string($item))
-			$item = stripslashes($item);
 	}
 
 	/**
@@ -298,22 +320,44 @@ class DevblocksPlatform extends DevblocksEngine {
 			return intval($string);
 			
 		} else {
-			$value = intval($string);
-			$unit = strtolower(substr($string, -1));
-			 
+			if(!preg_match('#(\d+)(.*)#', $string, $matches))
+				return false;
+			
+			$value = intval($matches[1]);
+			$unit = strtolower(trim($matches[2]));
+			
 			switch($unit) {
 				default:
 				case 'b':
 					return $value;
 					break;
 				case 'k':
-					return $value * 1024; // 1024^1
+				case 'kb':
+					return $value * 1000;
+					break;
+				case 'kib':
+					return $value * 1024;
 					break;
 				case 'm':
-					return $value * 1048576; // 1024^2
+				case 'mb':
+					return $value * pow(1000,2);
+					break;
+				case 'mib':
+					return $value * pow(1024,2);
 					break;
 				case 'g':
-					return $value * 1073741824; // 1024^3
+				case 'gb':
+					return $value * pow(1000,3);
+					break;
+				case 'gib':
+					return $value * pow(1024,3);
+					break;
+				case 't':
+				case 'tb':
+					return $value * pow(1000,4);
+					break;
+				case 'tib':
+					return $value * pow(1024,4);
 					break;
 			}
 		}
@@ -377,6 +421,23 @@ class DevblocksPlatform extends DevblocksEngine {
 		return $strings;
 	}
 	
+	static function objectToArray($object) {
+		return json_decode(json_encode($object), true);
+	}
+	
+	static function objectsToArrays($objects) {
+		$arrays = [];
+		
+		foreach($objects as $key => $object) {
+			if(!is_object($object))
+				continue;
+			
+			$arrays[$key] = self::objectToArray($object);
+		}
+		
+		return $arrays;
+	}
+	
 	/**
 	 * 
 	 * @param integer $version
@@ -403,6 +464,28 @@ class DevblocksPlatform extends DevblocksEngine {
 		
 		// Return as a dot-delimited string
 		return implode('.', $parts);
+	}
+	
+	static function strStartsWith($string, $prefixes) {
+		if(!is_array($prefixes))
+			$prefixes = [$prefixes];
+		
+		foreach($prefixes as $prefix)
+			if(substr($string, 0, strlen($prefix)) == $prefix)
+				return true;
+		
+		return false;
+	}
+	
+	static function strEndsWith($string, $suffixes) {
+		if(!is_array($suffixes))
+			$suffixes = [$suffixes];
+		
+		foreach($suffixes as $suffix)
+			if(substr($string, -strlen($suffix)) == $suffix)
+				return true;
+		
+		return false;
 	}
 	
 	/**
@@ -1410,22 +1493,26 @@ class DevblocksPlatform extends DevblocksEngine {
 	
 	/**
 	 * Takes a comma-separated value string and returns an array of tokens.
-	 * [TODO] Move to a FormHelper service?
 	 *
 	 * @param string $string
 	 * @param boolean $keep_blanks
 	 * @param mixed $typecast
+	 * @param boolean $limit
 	 * @return array
 	 * @test DevblocksPlatformTest
 	 */
-	static function parseCsvString($string, $keep_blanks=false, $typecast=null) {
+	static function parseCsvString($string, $keep_blanks=false, $typecast=null, $limit=null) {
 		if(0 == strlen($string))
 			return array();
 		
 		if(!$keep_blanks)
 			$string = rtrim($string, ', ');
 		
-		$tokens = explode(',', $string);
+		if($limit) {
+			$tokens = explode(',', $string, $limit);
+		} else {
+			$tokens = explode(',', $string);
+		}
 
 		if(!is_array($tokens))
 			return array();
@@ -1491,63 +1578,20 @@ class DevblocksPlatform extends DevblocksEngine {
 	}
 	
 	/**
-	 * Indents a flat JSON string to make it more human-readable.
-	 *
-	 * @author http://www.daveperrett.com/articles/2008/03/11/format-json-with-php/
-	 * @todo This won't be needed when we require PHP 5.4+ with JSON_PRETTY_PRINT
+	 * Indents a flat JSON string or array to make it more human-readable.
 	 *
 	 * @param string $json The original JSON string to process.
 	 * @return string Indented version of the original JSON string.
 	 * @test DevblocksPlatformTest
 	 */
 	static function strFormatJson($json) {
-		$result = '';
-		$pos = 0;
-		$strLen  = strlen($json);
-		$indentStr = '  ';
-		$newLine = "\n";
-		$prevChar = '';
-		$outOfQuotes = true;
-
-		for ($i=0; $i<=$strLen; $i++) {
-
-			// Grab the next character in the string.
-			$char = substr($json, $i, 1);
-
-			// Are we inside a quoted string?
-			if ($char == '"' && $prevChar != '\\') {
-				$outOfQuotes = !$outOfQuotes;
-
-				// If this character is the end of an element,
-				// output a new line and indent the next line.
-			} else if(($char == '}' || $char == ']') && $outOfQuotes) {
-				$result .= $newLine;
-				$pos --;
-				for ($j=0; $j<$pos; $j++) {
-					$result .= $indentStr;
-				}
-			}
-
-			// Add the character to the result string.
-			$result .= $char;
-
-			// If the last character was the beginning of an element,
-			// output a new line and indent the next line.
-			if (($char == ',' || $char == '{' || $char == '[') && $outOfQuotes) {
-				$result .= $newLine;
-				if ($char == '{' || $char == '[') {
-					$pos ++;
-				}
-
-				for ($j = 0; $j < $pos; $j++) {
-					$result .= $indentStr;
-				}
-			}
-
-			$prevChar = $char;
-		}
-
-		return $result;
+		if(is_string($json))
+			$json = json_decode($json, true);
+		
+		if(is_array($json))
+			return json_encode($json, JSON_PRETTY_PRINT);
+		
+		return false;
 	}
 
 	/**
@@ -1776,9 +1820,9 @@ class DevblocksPlatform extends DevblocksEngine {
 	 * @param string $point
 	 * @return DevblocksExtensionManifest[]
 	 */
-	static function getExtensions($point,$as_instances=false, $ignore_acl=false) {
+	static function getExtensions($point, $as_instances=false) {
 		$results = array();
-		$extensions = DevblocksPlatform::getExtensionRegistry($ignore_acl);
+		$extensions = DevblocksPlatform::getExtensionRegistry();
 
 		if(is_array($extensions))
 		foreach($extensions as $extension) { /* @var $extension DevblocksExtensionManifest */
@@ -1797,23 +1841,18 @@ class DevblocksPlatform extends DevblocksEngine {
 	 * @param boolean $as_instance
 	 * @return DevblocksExtensionManifest
 	 */
-	static function getExtension($extension_id, $as_instance=false, $ignore_acl=false) {
-		$result = null;
-		$extensions = DevblocksPlatform::getExtensionRegistry($ignore_acl);
-
-		if(is_array($extensions))
-		foreach($extensions as $extension) { /* @var $extension DevblocksExtensionManifest */
-			if($extension->id == $extension_id) {
-				$result = $extension;
-				break;
-			}
-		}
-
-		if($as_instance && !is_null($result)) {
-			return $result->createInstance();
-		}
+	static function getExtension($extension_id, $as_instance=false) {
+		$extensions = DevblocksPlatform::getExtensionRegistry();
 		
-		return $result;
+		if(!isset($extensions[$extension_id]))
+			return null;
+		
+		$extension = $extensions[$extension_id];
+		
+		if($as_instance)
+			return $extension->createInstance();
+		
+		return $extension;
 	}
 
 	/**
@@ -1822,9 +1861,8 @@ class DevblocksPlatform extends DevblocksEngine {
 	 * @static
 	 * @return DevblocksExtensionManifest[]
 	 */
-	static function getExtensionRegistry($ignore_acl=false, $nocache=false, $with_disabled=false) {
+	static function getExtensionRegistry($nocache=false, $with_disabled=false) {
 		$cache = self::getCacheService();
-		static $acl_extensions = null;
 		
 		// Forced
 		if($with_disabled)
@@ -1837,9 +1875,9 @@ class DevblocksPlatform extends DevblocksEngine {
 				return;
 			
 			$extensions = array();
-	
+			
 			$prefix = (APP_DB_PREFIX != '') ? APP_DB_PREFIX.'_' : ''; // [TODO] Cleanup
-	
+			
 			$sql = sprintf("SELECT e.id , e.plugin_id, e.point, e.pos, e.name , e.file , e.class, e.params ".
 				"FROM %sextension e ".
 				"INNER JOIN %splugin p ON (e.plugin_id=p.id) ".
@@ -1863,7 +1901,7 @@ class DevblocksPlatform extends DevblocksEngine {
 				$extension->file = $row['file'];
 				$extension->class = $row['class'];
 				$extension->params = @unserialize($row['params']);
-		
+				
 				if(empty($extension->params))
 					$extension->params = array();
 				$extensions[$extension->id] = $extension;
@@ -1871,27 +1909,6 @@ class DevblocksPlatform extends DevblocksEngine {
 
 			if(!$nocache)
 				$cache->save($extensions, self::CACHE_EXTENSIONS);
-			
-			$acl_extensions = null;
-		}
-		
-		if(!$ignore_acl) {
-			// If we don't have a cache in this request
-			if(null == $acl_extensions) {
-				// Check with an extension delegate if we have one
-				if(class_exists(self::$extensionDelegate) && method_exists('DevblocksExtensionDelegate','shouldLoadExtension')) {
-					if(is_array($extensions))
-					foreach($extensions as $id => $extension) {
-						// Ask the delegate if we should load the extension
-						if(!call_user_func(array(self::$extensionDelegate,'shouldLoadExtension'), $extension))
-							unset($extensions[$id]);
-					}
-				}
-				// Cache for duration of request
-				$acl_extensions = $extensions;
-			} else {
-				$extensions = $acl_extensions;
-			}
 		}
 		
 		return $extensions;
@@ -1991,7 +2008,7 @@ class DevblocksPlatform extends DevblocksEngine {
 		if(null !== ($events = $cache->load(self::CACHE_EVENTS)))
 			return $events;
 		
-		$extensions = self::getExtensions('devblocks.listener.event',false,true);
+		$extensions = self::getExtensions('devblocks.listener.event',false);
 		$events = array('*');
 		 
 		// [JAS]: Event point hashing/caching
@@ -2222,14 +2239,14 @@ class DevblocksPlatform extends DevblocksEngine {
 		return _DevblocksPluginSettingsManager::getInstance();
 	}
 	
-	static function getPluginSetting($plugin_id, $key, $default=null, $json_decode=false) {
+	static function getPluginSetting($plugin_id, $key, $default=null, $json_decode=false, $encrypted=false) {
 		$settings = self::getPluginSettingsService();
-		return $settings->get($plugin_id, $key, $default, $json_decode);
+		return $settings->get($plugin_id, $key, $default, $json_decode, $encrypted);
 	}
 	
-	static function setPluginSetting($plugin_id, $key, $value, $json_encode=false) {
+	static function setPluginSetting($plugin_id, $key, $value, $json_encode=false, $encrypted=false) {
 		$settings = self::getPluginSettingsService();
-		return $settings->set($plugin_id, $key, $value, $json_encode);
+		return $settings->set($plugin_id, $key, $value, $json_encode, $encrypted);
 	}
 
 	/**
@@ -2263,6 +2280,13 @@ class DevblocksPlatform extends DevblocksEngine {
 	}
 	
 	/**
+	 * @return _DevblocksBayesClassifierService
+	 */
+	static function getBayesClassifierService() {
+		return _DevblocksBayesClassifierService::getInstance();
+	}
+	
+	/**
 	 * @return DevblocksNeuralNetwork
 	 */
 	static function getNeuralNetwork($inputs, $hiddens, $outputs, $learning_rate) {
@@ -2281,6 +2305,13 @@ class DevblocksPlatform extends DevblocksEngine {
 	 */
 	static function getMailService() {
 		return _DevblocksEmailManager::getInstance();
+	}
+	
+	/**
+	 * @return _DevblocksEncryptionService
+	 */
+	static function getEncryptionService() {
+		return _DevblocksEncryptionService::getInstance();
 	}
 
 	/**
@@ -2780,11 +2811,6 @@ class DevblocksPlatform extends DevblocksEngine {
 		$registry->save();
 	}
 
-	static function setExtensionDelegate($class) {
-		if(!empty($class) && class_exists($class, true))
-			self::$extensionDelegate = $class;
-	}
-	
 	static function setHandlerSession($class) {
 		if(!empty($class) && class_exists($class, true))
 			self::$handlerSession = $class;

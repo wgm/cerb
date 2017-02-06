@@ -4,14 +4,14 @@
 	<name>Time Tracking</name>
 	<description>Track time spent on various helpdesk activities (replying to tickets, etc).  This adds a Track Time button to Display Ticket and Organizations, and a Time Tracking tab to the Activity page.</description>
 	<author>Webgroup Media, LLC.</author>
-	<version>7.2.4</version>
+	<version>7.3.0</version>
 	<link>http://wiki.cerbweb.com/Features:Time_Tracking</link>
 	<image>plugin.png</image>
 	
 	<!-- Requirements -->
 
 	<requires>
-		<app_version min="7.2" max="7.2.99" />
+		<app_version min="7.3" max="7.3.99" />
 	</requires>
 	
 	<!-- Plugin Dependencies -->
@@ -81,14 +81,27 @@
 				<name>Context_TimeTracking</name>
 			</class>
 			<params>
+				<param key="names">
+					<value>
+						<data key="time tracking entry" value="singular" />
+						<data key="time tracking entries" value="plural" />
+						<data key="time entry" value="singular short" />
+						<data key="time entries" value="plural short" />
+						<data key="time tracking" value="singular" />
+						<data key="time slip" value="singular" />
+						<data key="time slips" value="plural" />
+					</value>
+				</param>
 				<param key="alias" value="time_entry" />
 				<param key="dao_class" value="DAO_TimeTrackingEntry" />
 				<param key="view_class" value="View_TimeTracking" />
 				<param key="options">
 					<value>
+						<data key="cards" />
 						<data key="create" />
 						<data key="custom_fields" />
-						<data key="find" />
+						<data key="links" />
+						<data key="search" />
 						<data key="snippets" />
 						<data key="va_variable" />
 						<data key="workspace" />
@@ -201,7 +214,7 @@
 		
 		<extension point="cerberusweb.ui.page.menu.item">
 			<id>timetracking.setup.menu.plugins.timetracking</id>
-			<name>Setup Page Time Tracking Menu Item</name>
+			<name>Time Tracking</name>
 			<class>
 				<file>api/App.php</file>
 				<name>ChTimeTracking_SetupPluginsMenuItem</name>

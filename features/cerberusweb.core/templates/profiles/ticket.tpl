@@ -85,8 +85,8 @@
 		{'common.keyboard'|devblocks_translate|lower}:
 		(<b>e</b>) {'common.edit'|devblocks_translate|lower} 
 		(<b>i</b>) {'common.participants'|devblocks_translate|lower} 
-		(<b>w</b>) {'common.watch'|devblocks_translate|lower}  
-		{if $active_worker->hasPriv('core.display.actions.comment')}(<b>o</b>) {'common.comment'|devblocks_translate} {/if}
+		(<b>w</b>) {'common.watch'|devblocks_translate|lower} 
+		(<b>o</b>) {'common.comment'|devblocks_translate} 
 		{if !empty($macros)}(<b>m</b>) {'common.macros'|devblocks_translate|lower} {/if}
 		{if $ticket->status_id != Model_Ticket::STATUS_CLOSED && $active_worker->hasPriv('core.ticket.actions.close')}(<b>c</b>) {'common.close'|devblocks_translate|lower} {/if}
 		{if !$ticket->spam_trained && $active_worker->hasPriv('core.ticket.actions.spam')}(<b>s</b>) {'common.spam'|devblocks_translate|lower} {/if}
@@ -160,6 +160,13 @@
 		</span>
 	</div>
 	
+	<div style="margin-top:5px;">
+		<button type="button" class="cerb-search-trigger" data-context="{CerberusContexts::CONTEXT_MESSAGE}" data-query="ticket.id:{$ticket->id}"><div class="badge-count">{$profile_counts.messages|default:0}</div> {'common.messages'|devblocks_translate|capitalize}</button>
+		<button type="button" class="cerb-search-trigger" data-context="{CerberusContexts::CONTEXT_COMMENT}" data-query="on.ticket:(id:{$ticket->id})"><div class="badge-count">{$profile_counts.comments|default:0}</div> {'common.comments'|devblocks_translate|capitalize}</button>
+		<button type="button" class="cerb-search-trigger" data-context="{CerberusContexts::CONTEXT_ATTACHMENT}" data-query="(on.msgs:(ticket.id:{$ticket->id}) OR on.comments:(on.ticket:(id:{$ticket->id})))"><div class="badge-count">{$profile_counts.attachments|default:0}</div> {'common.attachments'|devblocks_translate|capitalize}</button>
+		{*<button type="button" class="cerb-search-trigger" data-context="{CerberusContexts::CONTEXT_ADDRESS}" data-query="ticket.id:{$ticket->id}"><div class="badge-count">{$profile_counts.participants|default:0}</div> {'common.participants'|devblocks_translate|capitalize}</button>*}
+	</div>
+	
 	</div>
 </fieldset>
 
@@ -181,13 +188,10 @@
 
 		{$tabs[] = 'conversation'}
 		<li data-alias="conversation"><a href="{devblocks_url}ajax.php?c=display&a=showConversation&point={$point}&ticket_id={$ticket->id}{if $convo_focus_ctx && $convo_focus_ctx_id}&focus_ctx={$convo_focus_ctx}&focus_ctx_id={$convo_focus_ctx_id}{/if}{if $expand_all}&expand_all=1{/if}{/devblocks_url}">{'display.tab.timeline'|devblocks_translate|capitalize}</a></li>
-				
-		{$tabs[] = 'links'}
-		<li data-alias="links"><a href="{devblocks_url}ajax.php?c=internal&a=showTabContextLinks&point={$point}&context=cerberusweb.contexts.ticket&id={$ticket->id}{/devblocks_url}">{'common.links'|devblocks_translate} <div class="tab-badge">{DAO_ContextLink::count($page_context, $page_context_id)|default:0}</div></a></li>
-		
+
 		{$tabs[] = 'activity'}
-		<li data-alias="activity"><a href="{devblocks_url}ajax.php?c=internal&a=showTabActivityLog&scope=target&point={$point}&context={$page_context}&context_id={$page_context_id}{/devblocks_url}">{'common.activity_log'|devblocks_translate|capitalize}</a></li>
-		
+		<li data-alias="activity"><a href="{devblocks_url}ajax.php?c=internal&a=showTabActivityLog&scope=target&point={$point}&context={$page_context}&context_id={$page_context_id}{/devblocks_url}">{'common.log'|devblocks_translate|capitalize}</a></li>
+
 		{$tabs[] = 'history'}
 		<li data-alias="history"><a href="{devblocks_url}ajax.php?c=display&a=showContactHistory&point={$point}&ticket_id={$ticket->id}{/devblocks_url}">{'display.tab.history'|devblocks_translate} <div class="tab-badge">{DAO_Ticket::getViewCountForRequesterHistory('contact_history', $ticket, $visit->get('display.history.scope', ''))|default:0}</div></a></li>
 

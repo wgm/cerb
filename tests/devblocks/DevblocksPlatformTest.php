@@ -19,6 +19,10 @@ class DevblocksPlatformTest extends PHPUnit_Framework_TestCase {
 	}
 	
 	public function testRequirements() {
+		// Version
+		$actual = version_compare(PHP_VERSION, "5.5", ">=");
+		$this->assertEquals(true, $actual, sprintf('Cerb requires a PHP version of 5.5+, currently %s', PHP_VERSION));
+
 		// File Uploads
 		$ini_file_uploads = ini_get("file_uploads");
 		$actual = ($ini_file_uploads == 1 || strcasecmp($ini_file_uploads,"on")==0);
@@ -534,23 +538,28 @@ class DevblocksPlatformTest extends PHPUnit_Framework_TestCase {
 		$this->assertEquals(256, $actual);
 		
 		// [TODO] This could test 'bytes', 'MB', 'GB', etc.
-		// [TODO] Also 1000^n vs 1024^n (MB vs MiB)
+		// [TODO] Handle commas and decimals?
+		// [TODO] Test KB/MB/GB/TB vs KiB/...
 		
 		// B
 		$actual = DevblocksPlatform::parseBytesString('512B');
 		$this->assertEquals(512, $actual);
 		
-		// K
-		$actual = DevblocksPlatform::parseBytesString('256K');
+		// KiB
+		$actual = DevblocksPlatform::parseBytesString('256KiB');
 		$this->assertEquals(262144, $actual);
 		
-		// M
-		$actual = DevblocksPlatform::parseBytesString('100M');
+		// MiB
+		$actual = DevblocksPlatform::parseBytesString('100MiB');
 		$this->assertEquals(104857600, $actual);
 		
-		// G
-		$actual = DevblocksPlatform::parseBytesString('8G');
+		// GiB
+		$actual = DevblocksPlatform::parseBytesString('8GiB');
 		$this->assertEquals(8589934592, $actual);
+		
+		// TiB
+		$actual = DevblocksPlatform::parseBytesString('2TiB');
+		$this->assertEquals(2 * pow(1024,4), $actual);
 	}
 	
 	public function testParseCrlfString() {
@@ -581,6 +590,11 @@ class DevblocksPlatformTest extends PHPUnit_Framework_TestCase {
 		$actual = DevblocksPlatform::parseCsvString($str, false, null);
 		$this->assertEquals(array('1','2','3'), $actual);
 		
+		// CSV, no blanks, no cast, limit 2
+		$str = "1,2,3,";
+		$actual = DevblocksPlatform::parseCsvString($str, false, null, 2);
+		$this->assertEquals(array('1','2,3'), $actual);
+		
 		// CSV, with blanks, no cast
 		$str = "1,2,3,";
 		$actual = DevblocksPlatform::parseCsvString($str, true, null);
@@ -595,6 +609,12 @@ class DevblocksPlatformTest extends PHPUnit_Framework_TestCase {
 		$str = "red,green,blue";
 		$actual = DevblocksPlatform::parseCsvString($str, false, 'string');
 		$this->assertEquals(array('red','green','blue'), $actual);
+		
+		// CSV, with blanks, no cast, and limit
+		$str = "1,2,3,";
+		$actual = DevblocksPlatform::parseCsvString($str, true, null, 2);
+		$this->assertEquals(array('1','2,3,'), $actual);
+		
 	}
 	
 	public function testParseMarkdown() {
@@ -862,19 +882,28 @@ class DevblocksPlatformTest extends PHPUnit_Framework_TestCase {
 	}
 	
 	public function testStrFormatJson() {
+		
 		$expected = <<< END
 [
-  {
-    "name":"Jeff",
-    "title":"Software Architect",
-    "org":"Webgroup Media LLC"
-  }
+    {
+        "name": "Jeff",
+        "title": "Software Architect",
+        "org": "Webgroup Media LLC"
+    }
 ]
 END;
 		
-		$actual = DevblocksPlatform::strFormatJson(json_encode(array(
+		// Test array input
+		
+		$actual = DevblocksPlatform::strFormatJson(array(
 			array('name'=>'Jeff','title'=>'Software Architect','org'=>'Webgroup Media LLC'),
-		)));
+		));
+		
+		$this->assertEquals($expected, $actual);
+		
+		// Test string input
+		
+		$actual = DevblocksPlatform::strFormatJson('[{"name":"Jeff","title":"Software Architect","org":"Webgroup Media LLC"}]');
 		
 		$this->assertEquals($expected, $actual);
 	}

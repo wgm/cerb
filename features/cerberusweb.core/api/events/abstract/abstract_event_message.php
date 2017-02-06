@@ -2,17 +2,17 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2017, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
 | The latest version of this license can be found here:
-| http://cerb.io/license
+| http://cerb.ai/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://cerb.io	    http://webgroup.media
+|	http://cerb.ai	    http://webgroup.media
 ***********************************************************************/
 
 abstract class AbstractEvent_Message extends Extension_DevblocksEvent {
@@ -84,8 +84,8 @@ abstract class AbstractEvent_Message extends Extension_DevblocksEvent {
 		CerberusContexts::getContext(CerberusContexts::CONTEXT_TICKET, $ticket_id, $ticket_labels, $ticket_values, 'Message:Ticket:', true);
 
 			// Fill some custom values
-			if(!is_null($event_model)) {
-				$values['is_first'] = ($values['id'] == $ticket_values['initial_message_id']) ? 1 : 0;
+			if(!is_null($event_model) && isset($values['id']) && isset($ticket_values['initial_message_id'])) {
+				$values['is_first'] = (isset($ticket_values['initial_message_id']) && $values['id'] == $ticket_values['initial_message_id']) ? 1 : 0;
 			}
 		
 			if(isset($ticket_values['group_id']))
@@ -665,7 +665,7 @@ abstract class AbstractEvent_Message extends Extension_DevblocksEvent {
 				break;
 				
 			case 'relay_email':
-				if(false == ($va = $trigger->getVirtualAttendant()))
+				if(false == ($va = $trigger->getBot()))
 					break;
 				
 				switch($va->owner_context) {

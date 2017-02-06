@@ -304,12 +304,8 @@ class DAO_CustomFieldset extends Cerb_ORMHelper {
 				SearchFields_CustomFieldset::OWNER_CONTEXT_ID
 			);
 			
-		$join_sql = "FROM custom_fieldset ".
-			(isset($tables['context_link']) ? "INNER JOIN context_link ON (context_link.to_context = 'cerberusweb.contexts.custom_fieldset' AND context_link.to_context_id = custom_fieldset.id) " : " ")
-			;
+		$join_sql = "FROM custom_fieldset ";
 		
-		$has_multiple_values = false; // [TODO] Temporary when custom fields disabled
-				
 		$where_sql = "".
 			(!empty($wheres) ? sprintf("WHERE %s ",implode(' AND ',$wheres)) : "WHERE 1 ");
 			
@@ -321,71 +317,15 @@ class DAO_CustomFieldset extends Cerb_ORMHelper {
 			'join_sql' => &$join_sql,
 			'where_sql' => &$where_sql,
 			'tables' => &$tables,
-			'has_multiple_values' => &$has_multiple_values
 		);
 	
-		array_walk_recursive(
-			$params,
-			array('DAO_CustomFieldset', '_translateVirtualParameters'),
-			$args
-		);
-		
 		return array(
 			'primary_table' => 'custom_fieldset',
 			'select' => $select_sql,
 			'join' => $join_sql,
 			'where' => $where_sql,
-			'has_multiple_values' => $has_multiple_values,
 			'sort' => $sort_sql,
 		);
-	}
-	
-	private static function _translateVirtualParameters($param, $key, &$args) {
-		if(!is_a($param, 'DevblocksSearchCriteria'))
-			return;
-			
-		$from_context = CerberusContexts::CONTEXT_CUSTOM_FIELDSET;
-		$from_index = 'custom_fieldset.id';
-		
-		$param_key = $param->field;
-		settype($param_key, 'string');
-		
-		switch($param_key) {
-			case SearchFields_CustomFieldset::VIRTUAL_CONTEXT_LINK:
-				self::_searchComponentsVirtualContextLinks($param, $from_context, $from_index, $args['join_sql'], $args['where_sql']);
-				break;
-			
-			case SearchFields_CustomFieldset::VIRTUAL_OWNER:
-				if(!is_array($param->value))
-					break;
-				
-				$wheres = array();
-				$args['has_multiple_values'] = true;
-					
-				foreach($param->value as $owner_context) {
-					@list($context, $context_id) = explode(':', $owner_context);
-					
-					if(empty($context))
-						continue;
-					
-					if(!empty($context_id)) {
-						$wheres[] = sprintf("(custom_fieldset.owner_context = %s AND custom_fieldset.owner_context_id = %d)",
-							Cerb_ORMHelper::qstr($context),
-							$context_id
-						);
-						
-					} else {
-						$wheres[] = sprintf("(custom_fieldset.owner_context = %s)",
-							Cerb_ORMHelper::qstr($context)
-						);
-					}
-				}
-				
-				if(!empty($wheres))
-					$args['where_sql'] .= 'AND ' . implode(' OR ', $wheres);
-				
-				break;
-		}
 	}
 	
 	/**
@@ -409,14 +349,12 @@ class DAO_CustomFieldset extends Cerb_ORMHelper {
 		$select_sql = $query_parts['select'];
 		$join_sql = $query_parts['join'];
 		$where_sql = $query_parts['where'];
-		$has_multiple_values = $query_parts['has_multiple_values'];
 		$sort_sql = $query_parts['sort'];
 		
 		$sql =
 			$select_sql.
 			$join_sql.
 			$where_sql.
-			($has_multiple_values ? 'GROUP BY custom_fieldset.id ' : '').
 			$sort_sql;
 			
 		if($limit > 0) {
@@ -444,7 +382,7 @@ class DAO_CustomFieldset extends Cerb_ORMHelper {
 			// We can skip counting if we have a less-than-full single page
 			if(!(0 == $page && $total < $limit)) {
 				$count_sql =
-					($has_multiple_values ? "SELECT COUNT(DISTINCT custom_fieldset.id) " : "SELECT COUNT(custom_fieldset.id) ").
+					"SELECT COUNT(custom_fieldset.id) ".
 					$join_sql.
 					$where_sql;
 				$total = $db->GetOneSlave($count_sql);
@@ -471,9 +409,6 @@ class SearchFields_CustomFieldset extends DevblocksSearchFields {
 	const OWNER_CONTEXT = 'c_owner_context';
 	const OWNER_CONTEXT_ID = 'c_owner_context_id';
 	
-	const CONTEXT_LINK = 'cl_context_from';
-	const CONTEXT_LINK_ID = 'cl_context_from_id';
-	
 	const VIRTUAL_CONTEXT_LINK = '*_context_link';
 	const VIRTUAL_OWNER = '*_owner';
 	
@@ -490,10 +425,22 @@ class SearchFields_CustomFieldset extends DevblocksSearchFields {
 	}
 	
 	static function getWhereSQL(DevblocksSearchCriteria $param) {
-		if('cf_' == substr($param->field, 0, 3)) {
-			return self::_getWhereSQLFromCustomFields($param);
-		} else {
-			return $param->getWhereSQL(self::getFields(), self::getPrimaryKey());
+		switch($param->field) {
+			case self::VIRTUAL_CONTEXT_LINK:
+				return self::_getWhereSQLFromContextLinksField($param, CerberusContexts::CONTEXT_CUSTOM_FIELDSET, self::getPrimaryKey());
+				break;
+				
+			case self::VIRTUAL_OWNER:
+				return self::_getWhereSQLFromContextAndID($param, 'custom_fieldset.owner_context', 'custom_fieldset.owner_context_id');
+				break;
+			
+			default:
+				if('cf_' == substr($param->field, 0, 3)) {
+					return self::_getWhereSQLFromCustomFields($param);
+				} else {
+					return $param->getWhereSQL(self::getFields(), self::getPrimaryKey());
+				}
+				break;
 		}
 	}
 	
@@ -519,9 +466,6 @@ class SearchFields_CustomFieldset extends DevblocksSearchFields {
 			self::CONTEXT => new DevblocksSearchField(self::CONTEXT, 'custom_fieldset', 'context', $translate->_('common.context'), null, true),
 			self::OWNER_CONTEXT => new DevblocksSearchField(self::OWNER_CONTEXT, 'custom_fieldset', 'owner_context', $translate->_('common.owner_context'), null, true),
 			self::OWNER_CONTEXT_ID => new DevblocksSearchField(self::OWNER_CONTEXT_ID, 'custom_fieldset', 'owner_context_id', $translate->_('common.owner_context_id'), null, true),
-			
-			self::CONTEXT_LINK => new DevblocksSearchField(self::CONTEXT_LINK, 'context_link', 'from_context', null, null, false),
-			self::CONTEXT_LINK_ID => new DevblocksSearchField(self::CONTEXT_LINK_ID, 'context_link', 'from_context_id', null, null, false),
 			
 			self::VIRTUAL_CONTEXT_LINK => new DevblocksSearchField(self::VIRTUAL_CONTEXT_LINK, '*', 'context_link', $translate->_('common.links'), null, false),
 			self::VIRTUAL_OWNER => new DevblocksSearchField(self::VIRTUAL_OWNER, '*', 'owner', $translate->_('common.owner'), null, false),
@@ -557,91 +501,6 @@ class Model_CustomFieldset {
 		return $results;
 	}
 	
-	function isReadableByWorker($worker) {
-		if(is_a($worker, 'Model_Worker')) {
-			// This is what we want
-		} elseif (is_numeric($worker)) {
-			if(null == ($worker = DAO_Worker::get($worker)))
-				return false;
-		} else {
-			return false;
-		}
-		
-		// Superusers can do anything
-		if($worker->is_superuser)
-			return true;
-		
-		switch($this->owner_context) {
-			case CerberusContexts::CONTEXT_GROUP:
-				if(in_array($this->owner_context_id, array_keys($worker->getMemberships())))
-					return true;
-				break;
-				
-			case CerberusContexts::CONTEXT_ROLE:
-				if(in_array($this->owner_context_id, array_keys($worker->getRoles())))
-					return true;
-				break;
-				
-			case CerberusContexts::CONTEXT_WORKER:
-				if($worker->id == $this->owner_context_id)
-					return true;
-				break;
-				
-			case CerberusContexts::CONTEXT_VIRTUAL_ATTENDANT:
-				return false;
-				break;
-				
-			case CerberusContexts::CONTEXT_APPLICATION:
-				return true;
-				break;
-		}
-		
-		return false;
-	}
-	
-	function isWriteableByWorker($worker) {
-		if(is_a($worker, 'Model_Worker')) {
-			// This is what we want
-		} elseif (is_numeric($worker)) {
-			if(null == ($worker = DAO_Worker::get($worker)))
-				return false;
-		} else {
-			return false;
-		}
-		
-		// Superusers can do anything
-		if($worker->is_superuser)
-			return true;
-		
-		switch($this->owner_context) {
-			case CerberusContexts::CONTEXT_GROUP:
-				if(in_array($this->owner_context_id, array_keys($worker->getMemberships())))
-					if($worker->isGroupManager($this->owner_context_id))
-						return true;
-				break;
-				
-			case CerberusContexts::CONTEXT_ROLE:
-				if($worker->is_superuser)
-					return true;
-				break;
-				
-			case CerberusContexts::CONTEXT_WORKER:
-				if($worker->id == $this->owner_context_id)
-					return true;
-				break;
-				
-			case CerberusContexts::CONTEXT_VIRTUAL_ATTENDANT:
-				return false;
-				break;
-				
-			case CerberusContexts::CONTEXT_APPLICATION:
-				return false;
-				break;
-		}
-		
-		return false;
-	}
-	
 	function getOwnerDictionary() {
 		CerberusContexts::getContext($this->owner_context, $this->owner_context_id, $labels, $values);
 		return new DevblocksDictionaryDelegate($values);
@@ -674,8 +533,6 @@ class View_CustomFieldset extends C4_AbstractView implements IAbstractView_Subto
 		));
 		
 		$this->addParamsHidden(array(
-			SearchFields_CustomFieldset::CONTEXT_LINK,
-			SearchFields_CustomFieldset::CONTEXT_LINK_ID,
 			SearchFields_CustomFieldset::ID,
 			SearchFields_CustomFieldset::OWNER_CONTEXT,
 			SearchFields_CustomFieldset::OWNER_CONTEXT_ID,
@@ -781,6 +638,8 @@ class View_CustomFieldset extends C4_AbstractView implements IAbstractView_Subto
 	function getQuickSearchFields() {
 		$search_fields = SearchFields_CustomFieldset::getFields();
 		
+		$contexts = array_column(DevblocksPlatform::objectsToArrays(Extension_DevblocksContext::getAll(false)), 'name', 'id');
+		
 		$fields = array(
 			'text' => 
 				array(
@@ -790,12 +649,18 @@ class View_CustomFieldset extends C4_AbstractView implements IAbstractView_Subto
 			'context' => 
 				array(
 					'type' => DevblocksSearchCriteria::TYPE_TEXT,
-					'options' => array('param_key' => SearchFields_CustomFieldset::CONTEXT, 'match' => DevblocksSearchCriteria::OPTION_TEXT_PARTIAL),
+					'options' => array('param_key' => SearchFields_CustomFieldset::CONTEXT),
+					'examples' => [
+						['type' => 'list', 'values' => $contexts],
+					]
 				),
 			'id' => 
 				array(
 					'type' => DevblocksSearchCriteria::TYPE_NUMBER,
 					'options' => array('param_key' => SearchFields_CustomFieldset::ID),
+					'examples' => [
+						['type' => 'chooser', 'context' => CerberusContexts::CONTEXT_CUSTOM_FIELDSET, 'q' => ''],
+					]
 				),
 			'name' => 
 				array(
@@ -803,6 +668,14 @@ class View_CustomFieldset extends C4_AbstractView implements IAbstractView_Subto
 					'options' => array('param_key' => SearchFields_CustomFieldset::NAME, 'match' => DevblocksSearchCriteria::OPTION_TEXT_PARTIAL),
 				),
 		);
+		
+		// Add dynamic owner.* fields
+		
+		$fields = self::_appendVirtualFiltersFromQuickSearchContexts('owner', $fields, 'owner');
+		
+		// Add quick search links
+		
+		$fields = self::_appendVirtualFiltersFromQuickSearchContexts('links', $fields, 'links');
 		
 		// Add is_sortable
 		
@@ -818,6 +691,12 @@ class View_CustomFieldset extends C4_AbstractView implements IAbstractView_Subto
 	function getParamFromQuickSearchFieldTokens($field, $tokens) {
 		switch($field) {
 			default:
+				if($field == 'owner' || substr($field, 0, strlen('owner.')) == 'owner.')
+					return DevblocksSearchCriteria::getVirtualContextParamFromTokens($field, $tokens, 'owner', SearchFields_CustomFieldset::VIRTUAL_OWNER);
+					
+				if($field == 'links' || substr($field, 0, 6) == 'links.')
+					return DevblocksSearchCriteria::getContextLinksParamFromTokens($field, $tokens);
+				
 				$search_fields = $this->getQuickSearchFields();
 				return DevblocksSearchCriteria::getParamFromQueryFieldTokens($field, $tokens, $search_fields);
 				break;
@@ -901,7 +780,7 @@ class View_CustomFieldset extends C4_AbstractView implements IAbstractView_Subto
 				$contexts = Extension_DevblocksContext::getAll(false);
 				$strings = array();
 				
-				foreach($param->value as $context_id) {
+				foreach($values as $context_id) {
 					if(isset($contexts[$context_id])) {
 						$strings[] = sprintf('<b>%s</b>',DevblocksPlatform::strEscapeHtml($contexts[$context_id]->name));
 					}
@@ -927,7 +806,7 @@ class View_CustomFieldset extends C4_AbstractView implements IAbstractView_Subto
 				break;
 			
 			case SearchFields_CustomFieldset::VIRTUAL_OWNER:
-				$this->_renderVirtualContextLinks($param, 'Owner', 'Owners');
+				$this->_renderVirtualContextLinks($param, 'Owner', 'Owners', 'Owner matches');
 				break;
 		}
 	}
@@ -983,6 +862,14 @@ class View_CustomFieldset extends C4_AbstractView implements IAbstractView_Subto
 };
 
 class Context_CustomFieldset extends Extension_DevblocksContext {
+	static function isReadableByActor($models, $actor) {
+		return CerberusContexts::isReadableByDelegateOwner($actor, CerberusContexts::CONTEXT_CUSTOM_FIELDSET, $models);
+	}
+	
+	static function isWriteableByActor($models, $actor) {
+		return CerberusContexts::isWriteableByDelegateOwner($actor, CerberusContexts::CONTEXT_CUSTOM_FIELDSET, $models);
+	}
+	
 	function getRandom() {
 		return DAO_CustomFieldset::random();
 	}
@@ -1098,7 +985,7 @@ class Context_CustomFieldset extends Extension_DevblocksContext {
 		
 		if(!$is_loaded) {
 			$labels = array();
-			CerberusContexts::getContext($context, $context_id, $labels, $values, null, true);
+			CerberusContexts::getContext($context, $context_id, $labels, $values, null, true, true);
 		}
 		
 		switch($token) {
@@ -1116,12 +1003,16 @@ class Context_CustomFieldset extends Extension_DevblocksContext {
 				
 				if(!empty($cfield_values['custom_fields']))
 					$values = array_merge($values, $cfield_values);
+				break;
 				
+			case 'links':
+				$links = $this->_lazyLoadLinks($context, $context_id);
+				$values = array_merge($values, $fields);
 				break;
 				
 			default:
 				/*
-				if(substr($token,0,7) == 'custom_') {
+				if(DevblocksPlatform::strStartsWith($token, 'custom_')) {
 					$fields = $this->_lazyLoadCustomFields($token, $context, $context_id);
 					$values = array_merge($values, $fields);
 				}
@@ -1179,8 +1070,7 @@ class Context_CustomFieldset extends Extension_DevblocksContext {
 		
 		if(!empty($context) && !empty($context_id)) {
 			$params_req = array(
-				new DevblocksSearchCriteria(SearchFields_CustomFieldset::CONTEXT_LINK,'=',$context),
-				new DevblocksSearchCriteria(SearchFields_CustomFieldset::CONTEXT_LINK_ID,'=',$context_id),
+				new DevblocksSearchCriteria(SearchFields_CustomFieldset::VIRTUAL_CONTEXT_LINK,'in',array($context.':'.$context_id)),
 			);
 		}
 		

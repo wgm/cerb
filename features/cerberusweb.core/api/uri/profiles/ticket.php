@@ -2,17 +2,17 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2017, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
 | The latest version of this license can be found here:
-| http://cerb.io/license
+| http://cerb.ai/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://cerb.io	    http://webgroup.media
+|	http://cerb.ai	    http://webgroup.media
 ***********************************************************************/
 
 class PageSection_ProfilesTicket extends Extension_PageSection {
@@ -51,8 +51,8 @@ class PageSection_ProfilesTicket extends Extension_PageSection {
 			return;
 		
 		// Check group membership ACL
-		if(!$group->isReadableByWorker($active_worker)) {
-			DevblocksPlatform::redirect(new DevblocksHttpRequest());
+		if(!Context_Ticket::isReadableByActor($ticket, $active_worker)) {
+			echo DevblocksPlatform::translateCapitalized('common.access_denied');
 			exit;
 		}
 		
@@ -129,7 +129,7 @@ class PageSection_ProfilesTicket extends Extension_PageSection {
 				'value' => $ticket->created_date,
 			),
 			'updated' => array(
-				'label' => mb_ucfirst($translate->_('common.updated')),
+				'label' => DevblocksPlatform::translateCapitalized('common.updated'),
 				'type' => Model_CustomField::TYPE_DATE,
 				'value' => $ticket->updated_date,
 			),
@@ -175,7 +175,6 @@ class PageSection_ProfilesTicket extends Extension_PageSection {
 		if(!empty($properties_cfields))
 			$properties = array_merge($properties, $properties_cfields);
 		
-
 		// Custom Fieldsets
 
 		$properties_custom_fieldsets = Page_Profiles::getProfilePropertiesCustomFieldsets(CerberusContexts::CONTEXT_TICKET, $ticket->id, $values);
@@ -185,6 +184,15 @@ class PageSection_ProfilesTicket extends Extension_PageSection {
 		
 		$tpl->assign('properties', $properties);
 		
+		// Profile counts
+		$profile_counts = array(
+			'attachments' => DAO_Attachment::count(CerberusContexts::CONTEXT_TICKET, $ticket->id),
+			'comments' => DAO_Comment::count(CerberusContexts::CONTEXT_TICKET, $ticket->id),
+			//'participants' => DAO_Address::countByTicketId($ticket->id),
+			'messages' => DAO_Message::countByTicketId($ticket->id),
+		);
+		$tpl->assign('profile_counts', $profile_counts);
+		
 		// Link counts
 		
 		$properties_links = array(
@@ -193,7 +201,7 @@ class PageSection_ProfilesTicket extends Extension_PageSection {
 					DAO_ContextLink::getContextLinkCounts(
 						CerberusContexts::CONTEXT_TICKET,
 						$ticket->id,
-						array(CerberusContexts::CONTEXT_WORKER, CerberusContexts::CONTEXT_CUSTOM_FIELDSET)
+						array(CerberusContexts::CONTEXT_CUSTOM_FIELDSET)
 					),
 			),
 		);
@@ -204,7 +212,7 @@ class PageSection_ProfilesTicket extends Extension_PageSection {
 					DAO_ContextLink::getContextLinkCounts(
 						CerberusContexts::CONTEXT_ORG,
 						$ticket->org_id,
-						array(CerberusContexts::CONTEXT_WORKER, CerberusContexts::CONTEXT_CUSTOM_FIELDSET)
+						array(CerberusContexts::CONTEXT_CUSTOM_FIELDSET)
 					),
 			);
 		}
@@ -225,7 +233,7 @@ class PageSection_ProfilesTicket extends Extension_PageSection {
 		// Filter macros to only those owned by the ticket's group
 		
 		$macros = array_filter($macros, function($macro) use ($ticket) { /* @var $macro Model_TriggerEvent */
-			$va = $macro->getVirtualAttendant(); /* @var $va Model_VirtualAttendant */
+			$va = $macro->getBot(); /* @var $va Model_Bot */
 			
 			if($va->owner_context == CerberusContexts::CONTEXT_GROUP && $va->owner_context_id != $ticket->group_id)
 				return false;

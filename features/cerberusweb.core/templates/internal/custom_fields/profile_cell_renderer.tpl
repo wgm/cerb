@@ -32,29 +32,36 @@
 	{$v.value|implode:', '}
 {elseif $v.type == Model_CustomField::TYPE_LINK}
 	{$link_context_ext = Extension_DevblocksContext::get($v.params.context)}
-	
-	{if $link_context_ext && $v.value}
+	{if $link_context_ext}
 		{$link_meta = $link_context_ext->getMeta($v.value)}
-		
-		{if $link_meta}
+		{if $link_meta && ($link_context_ext->id == CerberusContexts::CONTEXT_APPLICATION || $v.value)}
 			<ul class="bubbles">
 			<li class="bubble-gray">
-			{if $link_meta.permalink}
-				{if $link_context_ext->id == CerberusContexts::CONTEXT_WORKER}
-				<img src="{devblocks_url}c=avatars&context=worker&context_id={$v.value}{/devblocks_url}?v={$link_meta.updated}" style="height:16px;width:16px;vertical-align:middle;border-radius:16px;">
-				{elseif $link_context_ext->id == CerberusContexts::CONTEXT_CONTACT}
-				<img src="{devblocks_url}c=avatars&context=contact&context_id={$v.value}{/devblocks_url}?v={$link_meta.updated}" style="height:16px;width:16px;vertical-align:middle;border-radius:16px;">
-				{elseif $link_context_ext->id == CerberusContexts::CONTEXT_ORG}
-				<img src="{devblocks_url}c=avatars&context=org&context_id={$v.value}{/devblocks_url}?v={$link_meta.updated}" style="height:16px;width:16px;vertical-align:middle;border-radius:16px;">
-				{elseif $link_context_ext->id == CerberusContexts::CONTEXT_ADDRESS}
-				<img src="{devblocks_url}c=avatars&context=address&context_id={$v.value}{/devblocks_url}?v={$link_meta.updated}" style="height:16px;width:16px;vertical-align:middle;border-radius:16px;">
-				{elseif $link_context_ext->id == CerberusContexts::CONTEXT_GROUP}
-				<img src="{devblocks_url}c=avatars&context=group&context_id={$v.value}{/devblocks_url}?v={$link_meta.updated}" style="height:16px;width:16px;vertical-align:middle;border-radius:16px;">
+				{if $link_context_ext->id == CerberusContexts::CONTEXT_APPLICATION}
+				<img src="{devblocks_url}c=avatars&context=app&context_id={$v.value}{/devblocks_url}?v={$link_meta.updated}" style="height:16px;width:16px;vertical-align:middle;border-radius:16px;">
+				{else}
+					{if $v.value}
+						{if $link_context_ext->id == CerberusContexts::CONTEXT_BOT}
+						<img src="{devblocks_url}c=avatars&context=bot&context_id={$v.value}{/devblocks_url}?v={$link_meta.updated}" style="height:16px;width:16px;vertical-align:middle;border-radius:16px;">
+						{elseif $link_context_ext->id == CerberusContexts::CONTEXT_WORKER}
+						<img src="{devblocks_url}c=avatars&context=worker&context_id={$v.value}{/devblocks_url}?v={$link_meta.updated}" style="height:16px;width:16px;vertical-align:middle;border-radius:16px;">
+						{elseif $link_context_ext->id == CerberusContexts::CONTEXT_CONTACT}
+						<img src="{devblocks_url}c=avatars&context=contact&context_id={$v.value}{/devblocks_url}?v={$link_meta.updated}" style="height:16px;width:16px;vertical-align:middle;border-radius:16px;">
+						{elseif $link_context_ext->id == CerberusContexts::CONTEXT_ORG}
+						<img src="{devblocks_url}c=avatars&context=org&context_id={$v.value}{/devblocks_url}?v={$link_meta.updated}" style="height:16px;width:16px;vertical-align:middle;border-radius:16px;">
+						{elseif $link_context_ext->id == CerberusContexts::CONTEXT_ADDRESS}
+						<img src="{devblocks_url}c=avatars&context=address&context_id={$v.value}{/devblocks_url}?v={$link_meta.updated}" style="height:16px;width:16px;vertical-align:middle;border-radius:16px;">
+						{elseif $link_context_ext->id == CerberusContexts::CONTEXT_GROUP}
+						<img src="{devblocks_url}c=avatars&context=group&context_id={$v.value}{/devblocks_url}?v={$link_meta.updated}" style="height:16px;width:16px;vertical-align:middle;border-radius:16px;">
+						{/if}
+					{/if}
 				{/if}
-				<a href="javascript:;" class="cerb-peek-trigger" data-context="{$v.params.context}" data-context-id="{$v.value}">{$link_meta.name}</a>
-			{else}
-				{$link_meta.name}
-			{/if}
+				
+				{if $link_meta.permalink}
+					<a href="javascript:;" class="cerb-peek-trigger" data-context="{$v.params.context}" data-context-id="{$v.value}">{$link_meta.name|truncate:64}</a>
+				{else}
+					{$link_meta.name|truncate:64}
+				{/if}
 			</li>
 			</ul>
 		{/if}
@@ -62,11 +69,11 @@
 {elseif $v.type == Model_CustomField::TYPE_FILE}
 	{$file_id = $v.value}
 	{$file = DAO_Attachment::get($file_id)}
-	<a href="{devblocks_url}c=files&guid={$file->storage_sha1hash}&file={$file->display_name|escape:'url'}{/devblocks_url}" target="_blank">{$file->display_name}</a> ({$file->storage_size|devblocks_prettybytes})
+	<a href="{devblocks_url}c=files&id={$file->id}&file={$file->name|escape:'url'}{/devblocks_url}" target="_blank">{$file->name}</a> ({$file->storage_size|devblocks_prettybytes})
 {elseif $v.type == Model_CustomField::TYPE_FILES}
 	{foreach from=$v.value item=file_id name=files}
 		{$file = DAO_Attachment::get($file_id)}
-		<a href="{devblocks_url}c=files&guid={$file->storage_sha1hash}&file={$file->display_name|escape:'url'}{/devblocks_url}" target="_blank">{$file->display_name}</a> ({$file->storage_size|devblocks_prettybytes}){if !$smarty.foreach.files.last}, {/if}
+		<a href="{devblocks_url}c=files&id={$file->id}&file={$file->name|escape:'url'}{/devblocks_url}" target="_blank">{$file->name}</a> ({$file->storage_size|devblocks_prettybytes}){if !$smarty.foreach.files.last}, {/if}
 	{/foreach}
 {else}
 	{$v.value}

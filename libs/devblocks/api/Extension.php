@@ -40,6 +40,18 @@ class DevblocksExtension {
 	function getParam($key,$default=null) {
 		return $this->manifest->getParam($key, $default);
 	}
+	
+	/**
+	 * 
+	 * @param string $key
+	 * @return boolean
+	 */
+	function hasOption($key) {
+		if(!$this->manifest)
+			return false;
+		
+		return $this->manifest->hasOption($key);
+	}
 };
 
 class Exception_Devblocks extends Exception {};
@@ -89,7 +101,7 @@ interface IDevblocksContextProfile {
 }
 
 interface IDevblocksContextAutocomplete {
-	function autocomplete($term);
+	function autocomplete($term, $query=null);
 }
 
 class DevblocksMenuItemPlaceholder {
@@ -99,7 +111,12 @@ class DevblocksMenuItemPlaceholder {
 	var $children = array();
 }
 
-abstract class Extension_DevblocksContext extends DevblocksExtension {
+interface IDevblocksContextExtension {
+	static function isReadableByActor($actor, $models);
+	static function isWriteableByActor($actor, $models);
+}
+
+abstract class Extension_DevblocksContext extends DevblocksExtension implements IDevblocksContextExtension {
 	static $_changed_contexts = array();
 
 	static function markContextChanged($context, $context_ids) {
@@ -132,8 +149,8 @@ abstract class Extension_DevblocksContext extends DevblocksExtension {
 	}
 
 	/**
-	 * @param unknown_type $as_instances
-	 * @param unknown_type $with_options
+	 * @param boolean $as_instances
+	 * @param boolean $with_options
 	 * @return Extension_DevblocksContext[]
 	 */
 	public static function getAll($as_instances=false, $with_options=null) {
@@ -178,6 +195,7 @@ abstract class Extension_DevblocksContext extends DevblocksExtension {
 			$ctx_aliases = self::getAliasesForContext($ctx);
 			
 			@$uri = $ctx_aliases['uri'];
+			$results[$uri] = $ctx_id;
 			
 			if(isset($ctx_aliases['aliases']) && is_array($ctx_aliases['aliases']))
 			foreach($ctx_aliases['aliases'] as $alias => $meta) {
@@ -273,7 +291,7 @@ abstract class Extension_DevblocksContext extends DevblocksExtension {
 
 	/**
 	 * Lazy loader + cache
-	 * @param unknown_type $context
+	 * @param string $context
 	 * @return Extension_DevblocksContext
 	 */
 	public static function get($context) {
@@ -295,14 +313,109 @@ abstract class Extension_DevblocksContext extends DevblocksExtension {
 		}
 	}
 	
-	static function getPlaceholderTree($labels) {
+	static function getOwnerTree(array $contexts=['app','bot','group','role','worker']) {
+		$active_worker = CerberusApplication::getActiveWorker();
+		$bots = DAO_Bot::getAll();
+		$groups = DAO_Group::getAll();
+		$roles = DAO_WorkerRole::getAll();
+		$workers = DAO_Worker::getAllActive();
+
+		$owners = [];
+
+		if(in_array('worker', $contexts)) {
+			$item = new DevblocksMenuItemPlaceholder();
+			$item->label = 'Me';
+			$item->l = 'Me';
+			$item->key = CerberusContexts::CONTEXT_WORKER . ':' . $active_worker->id;
+			
+			$owners['Me'] = $item;
+		}
+		
+		// Apps
+		
+		if(in_array('app', $contexts)) {
+			$item = new DevblocksMenuItemPlaceholder();
+			$item->label = 'Cerb';
+			$item->l = 'Cerb';
+			$item->key = CerberusContexts::CONTEXT_APPLICATION . ':' . 0;
+			$owners['App'] = $item;
+		}
+		
+		// Bots
+		
+		if(in_array('bot', $contexts)) {
+			$bots_menu = new DevblocksMenuItemPlaceholder();
+			
+			foreach($bots as $bot) {
+				$item = new DevblocksMenuItemPlaceholder();
+				$item->label = $bot->name;
+				$item->l = $bot->name;
+				$item->key = CerberusContexts::CONTEXT_BOT . ':' . $bot->id;
+				$bots_menu->children[$item->l] = $item;
+			}
+			
+			$owners['Bot'] = $bots_menu;
+		}
+		
+		// Groups
+		
+		if(in_array('group', $contexts)) {
+			$groups_menu = new DevblocksMenuItemPlaceholder();
+			
+			foreach($groups as $group) {
+				$item = new DevblocksMenuItemPlaceholder();
+				$item->label = $group->name;
+				$item->l = $item->label;
+				$item->key = CerberusContexts::CONTEXT_GROUP . ':' . $group->id;
+				$groups_menu->children[$item->l] = $item;
+			}
+			
+			$owners['Group'] = $groups_menu;
+		}
+		
+		// Roles
+		
+		if(in_array('role', $contexts)) {
+			$roles_menu = new DevblocksMenuItemPlaceholder();
+			
+			foreach($roles as $role) {
+				$item = new DevblocksMenuItemPlaceholder();
+				$item->label = $role->name;
+				$item->l = $item->label;
+				$item->key = CerberusContexts::CONTEXT_ROLE . ':' . $role->id;
+				$roles_menu->children[$item->l] = $item;
+			}
+			
+			$owners['Role'] = $roles_menu;
+		}
+		
+		// Workers
+		
+		if(in_array('worker', $contexts)) {
+			$workers_menu = new DevblocksMenuItemPlaceholder();
+			
+			foreach($workers as $worker) {
+				$item = new DevblocksMenuItemPlaceholder();
+				$item->label = $worker->getName();
+				$item->l = $item->label;
+				$item->key = CerberusContexts::CONTEXT_WORKER . ':' . $worker->id;
+				$workers_menu->children[$item->l] = $item;
+			}
+			
+			$owners['Worker'] = $workers_menu;
+		}
+		
+		return $owners;
+	}
+	
+	static function getPlaceholderTree($labels, $label_separator=' ', $key_separator=' ') {
 		$keys = new DevblocksMenuItemPlaceholder();
 		
 		// Tokenize the placeholders
 		foreach($labels as $k => &$label) {
 			$label = trim($label);
 			
-			$parts = explode(' ', $label);
+			$parts = explode($label_separator, $label);
 			
 			$ptr =& $keys->children;
 			
@@ -316,14 +429,14 @@ abstract class Extension_DevblocksContext extends DevblocksExtension {
 		}
 		
 		// Convert the flat tokens into a tree
-		$forward_recurse = function(&$node, $node_key, &$stack=null) use (&$keys, &$forward_recurse, &$labels) {
+		$forward_recurse = function(&$node, $node_key, &$stack=null) use (&$keys, &$forward_recurse, &$labels, $label_separator) {
 			if(is_null($stack))
 				$stack = array();
 			
 			if(!empty($node_key))
 				array_push($stack, ''.$node_key);
 
-			$label = implode(' ', $stack);
+			$label = implode($label_separator, $stack);
 			
 			if(false != ($key = array_search($label, $labels))) {
 				$node->label = $label;
@@ -341,7 +454,7 @@ abstract class Extension_DevblocksContext extends DevblocksExtension {
 		
 		$forward_recurse($keys, '');
 		
-		$condense = function(&$node, $key=null, &$parent=null) use (&$condense) {
+		$condense = function(&$node, $key=null, &$parent=null) use (&$condense, $label_separator, $key_separator) {
 			// If this node has exactly one child
 			if(is_array($node->children) && 1 == count($node->children) && $parent && is_null($node->label)) {
 				reset($node->children);
@@ -350,7 +463,7 @@ abstract class Extension_DevblocksContext extends DevblocksExtension {
 				$k = key($node->children);
 				$n = array_pop($node->children);
 				if(is_object($n))
-					$n->l = $key . ' ' . $n->l;
+					$n->l = $key . $label_separator . $n->l;
 				
 				// Deconstruct our parent
 				$keys = array_keys($parent->children);
@@ -358,7 +471,7 @@ abstract class Extension_DevblocksContext extends DevblocksExtension {
 				
 				// Replace this node's key and value in the parent
 				$idx = array_search($key, $keys);
-				$keys[$idx] = $key.' '.$k;
+				$keys[$idx] = $key.$key_separator.$k;
 				$vals[$idx] = $n;
 				
 				// Reconstruct the parent
@@ -373,10 +486,6 @@ abstract class Extension_DevblocksContext extends DevblocksExtension {
 		$condense($keys);
 		
 		return $keys->children;
-	}
-
-	function authorize($context_id, Model_Worker $worker) {
-		return true;
 	}
 
 	abstract function getRandom();
@@ -400,6 +509,9 @@ abstract class Extension_DevblocksContext extends DevblocksExtension {
 		return $properties;
 	}
 
+	/*
+	 * @return Cerb_ORMHelper
+	 */
 	function getDaoClass() {
 		$class = str_replace('Context_','DAO_', get_called_class());
 		
@@ -409,6 +521,9 @@ abstract class Extension_DevblocksContext extends DevblocksExtension {
 		return $class;
 	}
 	
+	/*
+	 * @return DevblocksSearchFields
+	 */
 	function getSearchClass() {
 		$class = str_replace('Context_','SearchFields_', get_called_class());
 		
@@ -539,7 +654,8 @@ abstract class Extension_DevblocksContext extends DevblocksExtension {
 		}
 
 		if(null == ($view = C4_AbstractViewLoader::getView($view_id))) {
-			$view = $this->getChooserView($view_id); /* @var $view C4_AbstractViewModel */
+			if(null == ($view = $this->getChooserView($view_id))) /* @var $view C4_AbstractViewModel */
+				return;
 		}
 
 		$view->name = 'Search Results';
@@ -567,6 +683,24 @@ abstract class Extension_DevblocksContext extends DevblocksExtension {
 			$token_values = array_merge($token_values, $custom_values);
 		}
 
+		return $token_values;
+	}
+	
+	protected function _lazyLoadLinks($context, $context_id) {
+		$results = DAO_ContextLink::getAllContextLinks($context, $context_id);
+		$links = array();
+		$token_values['links'] = array();
+		
+		foreach($results as $result) {
+			if($result->context == CerberusContexts::CONTEXT_CUSTOM_FIELDSET)
+				continue;
+			
+			if(!isset($token_values['links'][$result->context]))
+				$token_values['links'][$result->context] = array();
+			
+			$token_values['links'][$result->context][] = intval($result->context_id);
+		}
+		
 		return $token_values;
 	}
 
@@ -958,9 +1092,6 @@ abstract class Extension_DevblocksEvent extends DevblocksExtension {
 			}
 		}
 
-		// Virtual Attendant
-
-
 		// Behavior Vars
 		$vars = DevblocksEventHelper::getVarValueToContextMap($trigger);
 
@@ -976,10 +1107,10 @@ abstract class Extension_DevblocksEvent extends DevblocksExtension {
 		
 		$conditions = array(
 			'_calendar_availability' => array('label' => 'Calendar availability', 'type' => ''),
-			'_month_of_year' => array('label' => 'Calendar month of year', 'type' => ''),
-			'_day_of_week' => array('label' => 'Calendar day of week', 'type' => ''),
-			'_time_of_day' => array('label' => 'Calendar time of day', 'type' => ''),
 			'_custom_script' => array('label' => 'Custom script', 'type' => ''),
+			'_day_of_week' => array('label' => 'Calendar day of week', 'type' => ''),
+			'_month_of_year' => array('label' => 'Calendar month of year', 'type' => ''),
+			'_time_of_day' => array('label' => 'Calendar time of day', 'type' => ''),
 		);
 		$custom = $this->getConditionExtensions($trigger);
 
@@ -1028,7 +1159,7 @@ abstract class Extension_DevblocksEvent extends DevblocksExtension {
 		switch($token) {
 			case '_calendar_availability':
 				// Get readable by VA
-				$calendars = DAO_Calendar::getReadableByActor(array(CerberusContexts::CONTEXT_VIRTUAL_ATTENDANT, $trigger->virtual_attendant_id));
+				$calendars = DAO_Calendar::getReadableByActor(array(CerberusContexts::CONTEXT_BOT, $trigger->bot_id));
 				$tpl->assign('calendars', $calendars);
 
 				return $tpl->display('devblocks:cerberusweb.core::internal/decisions/conditions/_calendar_availability.tpl');
@@ -1045,7 +1176,7 @@ abstract class Extension_DevblocksEvent extends DevblocksExtension {
 			case '_day_of_week':
 				return $tpl->display('devblocks:cerberusweb.core::internal/decisions/conditions/_day_of_week.tpl');
 				break;
-
+				
 			case '_time_of_day':
 				return $tpl->display('devblocks:cerberusweb.core::internal/decisions/conditions/_time_of_day.tpl');
 				break;
@@ -1109,7 +1240,7 @@ abstract class Extension_DevblocksEvent extends DevblocksExtension {
 	}
 
 	function runCondition($token, $trigger, $params, DevblocksDictionaryDelegate $dict) {
-		$logger = DevblocksPlatform::getConsoleLog('Attendant');
+		$logger = DevblocksPlatform::getConsoleLog('Bot');
 		$conditions = $this->getConditions($trigger);
 		
 		// Cache the extensions
@@ -1130,7 +1261,7 @@ abstract class Extension_DevblocksEvent extends DevblocksExtension {
 		}
 
 		$logger->info('');
-		$logger->info(sprintf("Checking condition '%s'...", $token));
+		$logger->info(sprintf("Checking condition `%s`...", $token));
 
 		// Built-in conditions
 		switch($token) {
@@ -1500,8 +1631,10 @@ abstract class Extension_DevblocksEvent extends DevblocksExtension {
 	function getActions($trigger) { /* @var $trigger Model_TriggerEvent */
 		$actions = array(
 			'_create_calendar_event' => array('label' => 'Create calendar event'),
+			'_exit' => array('label' => 'Behavior exit'),
 			'_get_links' => array('label' => 'Get links'),
 			'_run_behavior' => array('label' => 'Behavior run'),
+			'_run_subroutine' => array('label' => 'Behavior call subroutine'),
 			'_schedule_behavior' => array('label' => 'Behavior schedule'),
 			'_set_custom_var' => array('label' => 'Set custom placeholder'),
 			'_set_custom_var_snippet' => array('label' => 'Set custom placeholder using a snippet'),
@@ -1519,7 +1652,7 @@ abstract class Extension_DevblocksEvent extends DevblocksExtension {
 			$actions[$key] = array('label' => 'Set (variable) ' . $var['label']);
 		}
 
-		$va = $trigger->getVirtualAttendant();
+		$va = $trigger->getBot();
 
 		// Add plugin extensions
 
@@ -1567,6 +1700,13 @@ abstract class Extension_DevblocksEvent extends DevblocksExtension {
 				case '_create_calendar_event':
 					DevblocksEventHelper::renderActionCreateCalendarEvent($trigger);
 					break;
+					
+				case '_exit':
+					if($this->hasOption('resumable'))
+						$tpl->assign('is_resumable', true);
+					
+					return $tpl->display('devblocks:cerberusweb.core::internal/decisions/actions/_action_exit.tpl');
+					break;
 
 				case '_get_links':
 					DevblocksEventHelper::renderActionGetLinks($trigger);
@@ -1595,7 +1735,14 @@ abstract class Extension_DevblocksEvent extends DevblocksExtension {
 
 					DevblocksEventHelper::renderActionScheduleBehavior($trigger);
 					break;
-
+					
+				case '_run_subroutine':
+					$subroutines = $trigger->getNodes('subroutine');
+					$tpl->assign('subroutines', $subroutines);
+					
+					$tpl->display('devblocks:cerberusweb.core::internal/decisions/actions/_action_run_subroutine.tpl');
+					break;
+					
 				case '_unschedule_behavior':
 					DevblocksEventHelper::renderActionUnscheduleBehavior($trigger);
 					break;
@@ -1611,7 +1758,7 @@ abstract class Extension_DevblocksEvent extends DevblocksExtension {
 								break;
 							case Model_CustomField::TYPE_DATE:
 								// Restricted to VA-readable calendars
-								$calendars = DAO_Calendar::getReadableByActor(array(CerberusContexts::CONTEXT_VIRTUAL_ATTENDANT, $trigger->virtual_attendant_id));
+								$calendars = DAO_Calendar::getReadableByActor(array(CerberusContexts::CONTEXT_BOT, $trigger->bot_id));
 								$tpl->assign('calendars', $calendars);
 								return $tpl->display('devblocks:cerberusweb.core::internal/decisions/actions/_set_date.tpl');
 								break;
@@ -1663,6 +1810,14 @@ abstract class Extension_DevblocksEvent extends DevblocksExtension {
 					return DevblocksEventHelper::simulateActionCreateCalendarEvent($params, $dict);
 					break;
 
+				case '_exit':
+					@$mode = (isset($params['mode']) && $params['mode'] == 'suspend') ? 'suspend' : 'stop';
+					
+					return sprintf(">>> %s the behavior\n",
+						($mode == 'suspend' ? 'Suspending' : 'Exiting')
+					);
+					break;
+				
 				case '_get_links':
 					return DevblocksEventHelper::simulateActionGetLinks($params, $dict);
 					break;
@@ -1672,7 +1827,7 @@ abstract class Extension_DevblocksEvent extends DevblocksExtension {
 					@$format = $params['format'];
 
 					$value = ($format == 'json') ? @DevblocksPlatform::strFormatJson(json_encode($dict->$var, true)) : $dict->$var;
-
+					
 					return sprintf(">>> Setting custom placeholder {{%s}}:\n%s\n\n",
 						$var,
 						$value
@@ -1698,6 +1853,25 @@ abstract class Extension_DevblocksEvent extends DevblocksExtension {
 					return DevblocksEventHelper::simulateActionScheduleBehavior($params, $dict);
 					break;
 
+				case '_run_subroutine':
+					$subroutine_node = null;
+					
+					foreach($trigger->getNodes('subroutine') as $node) {
+						if($node->title == $params['subroutine']) {
+							$subroutine_node = $node;
+							break;
+						}
+					}
+					
+					if(false == $subroutine_node)
+						return;
+					
+					return sprintf(">>> Running subroutine: %s (#%d)\n",
+						$subroutine_node->title,
+						$subroutine_node->id
+					);
+					break;
+					
 				case '_unschedule_behavior':
 					return DevblocksEventHelper::simulateActionUnscheduleBehavior($params, $dict);
 					break;
@@ -1740,6 +1914,14 @@ abstract class Extension_DevblocksEvent extends DevblocksExtension {
 					else
 						DevblocksEventHelper::runActionCreateCalendarEvent($params, $dict);
 
+					break;
+					
+				case '_exit':
+					@$mode = (isset($params['mode']) && $params['mode'] == 'suspend') ? 'suspend' : 'stop';
+					$dict->__exit = $mode;
+
+					if($dry_run)
+						$out = $this->simulateAction($token, $trigger, $params, $dict);
 					break;
 
 				case '_get_links':
@@ -1844,6 +2026,25 @@ abstract class Extension_DevblocksEvent extends DevblocksExtension {
 						DevblocksEventHelper::runActionRunBehavior($params, $dict);
 					break;
 
+				case '_run_subroutine':
+					$subroutine_node = null;
+					
+					foreach($trigger->getNodes('subroutine') as $node) {
+						if($node->title == $params['subroutine']) {
+							$subroutine_node = $node;
+							break;
+						}
+					}
+					
+					if(false == $subroutine_node)
+						break;
+					
+					$dict->__goto = $subroutine_node->id;
+					
+					if($dry_run)
+						$out = $this->simulateAction($token, $trigger, $params, $dict);
+					break;
+					
 				case '_schedule_behavior':
 					if($dry_run)
 						$out = $this->simulateAction($token, $trigger, $params, $dict);
@@ -1892,8 +2093,8 @@ abstract class Extension_DevblocksEvent extends DevblocksExtension {
 			$all_actions = $this->getActions($trigger);
 			$log = EventListener_Triggers::getNodeLog();
 
-			if(!isset($dict->_simulator_output) || !is_array($dict->_simulator_output))
-				$dict->_simulator_output = array();
+			if(!isset($dict->__simulator_output) || !is_array($dict->__simulator_output))
+				$dict->__simulator_output = array();
 
 			$node_id = array_pop($log);
 
@@ -1903,10 +2104,10 @@ abstract class Extension_DevblocksEvent extends DevblocksExtension {
 					'title' => $all_actions[$token]['label'],
 					'content' => $out,
 				);
-
-				$previous_output = $dict->_simulator_output;
+				
+				$previous_output = $dict->__simulator_output;
 				$previous_output[] = $output;
-				$dict->_simulator_output = $previous_output;
+				$dict->__simulator_output = $previous_output;
 				unset($out);
 			}
 		}
@@ -2195,13 +2396,8 @@ abstract class Extension_DevblocksSearchSchema extends DevblocksExtension {
 	 * @return Extension_DevblocksSearchEngine
 	 */
 	public function getEngine() {
-		static $_engine = null; // Static cache
-
-		if(!is_null($_engine))
-			return $_engine;
-
 		$engine_params = $this->getEngineParams();
-
+		
 		if(false == ($_engine = Extension_DevblocksSearchEngine::get($engine_params['engine_extension_id'], true)))
 			return false;
 
@@ -2242,7 +2438,7 @@ abstract class Extension_DevblocksSearchSchema extends DevblocksExtension {
 	abstract function getNamespace();
 	abstract function getAttributes();
 	//abstract function getFields();
-	abstract function query($query, $attributes=array(), $limit=250);
+	abstract function query($query, $attributes=array(), $limit=1000);
 	abstract function index($stop_time=null);
 	abstract function reindex();
 	abstract function delete($ids);

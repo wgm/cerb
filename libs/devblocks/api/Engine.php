@@ -3,10 +3,6 @@ include_once(DEVBLOCKS_PATH . "api/Model.php");
 include_once(DEVBLOCKS_PATH . "api/DAO.php");
 include_once(DEVBLOCKS_PATH . "api/Extension.php");
 
-interface DevblocksExtensionDelegate {
-	static function shouldLoadExtension(DevblocksExtensionManifest $extension_manifest);
-};
-
 if(!function_exists('mb_ucfirst')) {
 	function mb_ucfirst($string) {
 		if(!is_string($string))
@@ -31,7 +27,6 @@ abstract class DevblocksEngine {
 	const CACHE_TABLES = 'devblocks_tables';
 	const CACHE_TAG_TRANSLATIONS = 'devblocks_translations';
 
-	static protected $extensionDelegate = null;
 	static protected $handlerSession = null;
 
 	static protected $start_time = 0;
@@ -555,6 +550,7 @@ abstract class DevblocksEngine {
 					case 'png':
 					case 'ttf':
 					case 'woff':
+					case 'woff2':
 						header('Cache-control: max-age=604800', true); // 1 wk // , must-revalidate
 						header('Expires: ' . gmdate('D, d M Y H:i:s',time()+604800) . ' GMT'); // 1 wk
 						break;
@@ -585,6 +581,9 @@ abstract class DevblocksEngine {
 						break;
 					case 'woff':
 						header('Content-type: application/font-woff');
+						break;
+					case 'woff2':
+						header('Content-type: font/woff2');
 						break;
 					case 'xml':
 						header('Content-type: text/xml');
@@ -632,7 +631,7 @@ abstract class DevblocksEngine {
 		// Security: CSRF
 		
 		// If we are running a controller action with an active session...
-		if(!in_array($controller_uri, array('portal')) && (isset($_REQUEST['c']) || isset($_REQUEST['a']))) {
+		if(!in_array($controller_uri, array('oauth', 'portal')) && (isset($_REQUEST['c']) || isset($_REQUEST['a']))) {
 			
 			// ...and we're not in DEVELOPMENT_MODE
 			if(!DEVELOPMENT_MODE_ALLOW_CSRF) {

@@ -5,10 +5,6 @@
 <input type="hidden" name="section" value="address">
 <input type="hidden" name="action" value="savePeekJson">
 <input type="hidden" name="id" value="{$address->id}">
-{if !empty($link_context)}
-<input type="hidden" name="link_context" value="{$link_context}">
-<input type="hidden" name="link_context_id" value="{$link_context_id}">
-{/if}
 <input type="hidden" name="view_id" value="{$view_id}">
 <input type="hidden" name="_csrf_token" value="{$session.csrf_token}">
 
@@ -46,7 +42,7 @@
 		<tr>
 			<td width="1%" nowrap="nowrap" valign="middle" align="right"><b>{'common.organization'|devblocks_translate|capitalize}:</b> </td>
 			<td width="99%" valign="top">
-					<button type="button" class="chooser-abstract" data-field-name="org_id" data-context="{CerberusContexts::CONTEXT_ORG}" data-single="true" data-autocomplete="if-null" data-create="if-null"><span class="glyphicons glyphicons-search"></span></button>
+					<button type="button" class="chooser-abstract" data-field-name="org_id" data-context="{CerberusContexts::CONTEXT_ORG}" data-single="true" data-autocomplete="" data-autocomplete-if-empty="true" data-create="if-null"><span class="glyphicons glyphicons-search"></span></button>
 					
 					<ul class="bubbles chooser-container">
 						{if $org}
@@ -59,7 +55,7 @@
 		<tr>
 			<td width="1%" nowrap="nowrap" valign="middle" align="right"><b>{'common.contact'|devblocks_translate|capitalize}:</b> </td>
 			<td width="99%" valign="top">
-					<button type="button" class="chooser-abstract" data-field-name="contact_id" data-context="{CerberusContexts::CONTEXT_CONTACT}" data-single="true" {if $org}data-query="org.id:{$org->id}"{/if} data-autocomplete="if-null" data-create="if-null" data-create-defaults="email:{if $address}{$address->id}{elseif $email}{$email}{/if} {if $org}org:{$org->id}{/if}"><span class="glyphicons glyphicons-search"></span></button>
+					<button type="button" class="chooser-abstract" data-field-name="contact_id" data-context="{CerberusContexts::CONTEXT_CONTACT}" data-single="true" {if $org}data-query="org.id:{$org->id}"{/if} data-autocomplete="" data-autocomplete-if-empty="true" data-create="if-null" data-create-defaults="email:{if $address}{$address->id}{elseif $email}{$email}{/if} {if $org}org:{$org->id}{/if}"><span class="glyphicons glyphicons-search"></span></button>
 					
 					<ul class="bubbles chooser-container">
 						{if $contact}
@@ -69,16 +65,6 @@
 					
 			</td>
 		</tr>
-		
-		{if empty($id)}
-		<tr>
-			<td width="0%" nowrap="nowrap" valign="top" align="right"><b>{'common.watchers'|devblocks_translate|capitalize}:</b></td>
-			<td width="100%">
-				<button type="button" class="chooser-abstract" data-field-name="add_watcher_ids" data-context="{CerberusContexts::CONTEXT_WORKER}" data-query="isDisabled:n"><span class="glyphicons glyphicons-search"></span></button>
-				<ul class="chooser-container bubbles" style="display:block;"></ul>
-			</td>
-		</tr>
-		{/if}
 		
 		<tr>
 			<td width="0%" nowrap="nowrap" valign="top" align="right"><b>{'common.options'|devblocks_translate|capitalize}:</b> </td>

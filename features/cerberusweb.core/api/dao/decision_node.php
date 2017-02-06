@@ -2,17 +2,17 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2017, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
 | The latest version of this license can be found here:
-| http://cerb.io/license
+| http://cerb.ai/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://cerb.io	    http://webgroup.media
+|	http://cerb.ai	    http://webgroup.media
 ***********************************************************************/
 
 class DAO_DecisionNode extends Cerb_ORMHelper {
@@ -25,6 +25,7 @@ class DAO_DecisionNode extends Cerb_ORMHelper {
 	const TITLE = 'title';
 	const PARAMS_JSON = 'params_json';
 	const POS = 'pos';
+	const STATUS_ID = 'status_id';
 
 	static function create($fields) {
 		$db = DevblocksPlatform::getDatabaseService();
@@ -46,6 +47,21 @@ class DAO_DecisionNode extends Cerb_ORMHelper {
 		$id = $db->LastInsertId();
 		
 		self::update($id, $fields);
+		
+		return $id;
+	}
+	
+	static function duplicate($id, $new_parent_id) {
+		$db = DevblocksPlatform::getDatabaseService();
+		
+		$sql = sprintf("INSERT INTO decision_node (parent_id, trigger_id, node_type, title, pos, status_id, params_json) ".
+			"SELECT %d, trigger_id, node_type, title, pos, status_id, params_json FROM decision_node WHERE id = %d",
+			$new_parent_id,
+			$id
+		);
+		
+		$db->ExecuteMaster($sql);
+		$id = $db->LastInsertId();
 		
 		return $id;
 	}
@@ -136,7 +152,7 @@ class DAO_DecisionNode extends Cerb_ORMHelper {
 		list($where_sql, $sort_sql, $limit_sql) = self::_getWhereSQL($where, $sortBy, $sortAsc, $limit);
 		
 		// SQL
-		$sql = "SELECT id, parent_id, trigger_id, node_type, title, params_json, pos ".
+		$sql = "SELECT id, parent_id, trigger_id, node_type, title, status_id, params_json, pos ".
 			"FROM decision_node ".
 			$where_sql.
 			$sort_sql.
@@ -169,6 +185,7 @@ class DAO_DecisionNode extends Cerb_ORMHelper {
 			$object->trigger_id = intval($row['trigger_id']);
 			$object->node_type = $row['node_type'];
 			$object->title = $row['title'];
+			$object->status_id = intval($row['status_id']);
 			$object->pos = intval($row['pos']);
 			
 			$object->params_json = $row['params_json'];
@@ -253,6 +270,7 @@ class DAO_DecisionNode extends Cerb_ORMHelper {
 			"decision_node.trigger_id as %s, ".
 			"decision_node.node_type as %s, ".
 			"decision_node.title as %s, ".
+			"decision_node.status_id as %s, ".
 			"decision_node.pos as %s, ".
 			"decision_node.params_json as %s ",
 				SearchFields_DecisionNode::ID,
@@ -260,14 +278,13 @@ class DAO_DecisionNode extends Cerb_ORMHelper {
 				SearchFields_DecisionNode::TRIGGER_ID,
 				SearchFields_DecisionNode::NODE_TYPE,
 				SearchFields_DecisionNode::TITLE,
+				SearchFields_DecisionNode::STATUS_ID,
 				SearchFields_DecisionNode::POS,
 				SearchFields_DecisionNode::PARAMS_JSON
 			);
 			
 		$join_sql = "FROM decision_node ";
 		
-		$has_multiple_values = false; // [TODO] Temporary when custom fields disabled
-				
 		$where_sql = "".
 			(!empty($wheres) ? sprintf("WHERE %s ",implode(' AND ',$wheres)) : "WHERE 1 ");
 			
@@ -278,7 +295,6 @@ class DAO_DecisionNode extends Cerb_ORMHelper {
 			'select' => $select_sql,
 			'join' => $join_sql,
 			'where' => $where_sql,
-			'has_multiple_values' => $has_multiple_values,
 			'sort' => $sort_sql,
 		);
 	}
@@ -304,14 +320,12 @@ class DAO_DecisionNode extends Cerb_ORMHelper {
 		$select_sql = $query_parts['select'];
 		$join_sql = $query_parts['join'];
 		$where_sql = $query_parts['where'];
-		$has_multiple_values = $query_parts['has_multiple_values'];
 		$sort_sql = $query_parts['sort'];
 		
 		$sql =
 			$select_sql.
 			$join_sql.
 			$where_sql.
-			($has_multiple_values ? 'GROUP BY decision_node.id ' : '').
 			$sort_sql;
 			
 		if($limit > 0) {
@@ -339,7 +353,7 @@ class DAO_DecisionNode extends Cerb_ORMHelper {
 			// We can skip counting if we have a less-than-full single page
 			if(!(0 == $page && $total < $limit)) {
 				$count_sql =
-					($has_multiple_values ? "SELECT COUNT(DISTINCT decision_node.id) " : "SELECT COUNT(decision_node.id) ").
+					"SELECT COUNT(decision_node.id) ".
 					$join_sql.
 					$where_sql;
 				$total = $db->GetOneSlave($count_sql);
@@ -363,6 +377,7 @@ class SearchFields_DecisionNode extends DevblocksSearchFields {
 	const TRIGGER_ID = 'd_trigger_id';
 	const NODE_TYPE = 'd_node_type';
 	const TITLE = 'd_title';
+	const STATUS_ID = 'd_status_id';
 	const POS = 'd_pos';
 	const PARAMS_JSON = 'd_params_json';
 	
@@ -408,8 +423,9 @@ class SearchFields_DecisionNode extends DevblocksSearchFields {
 			self::TRIGGER_ID => new DevblocksSearchField(self::TRIGGER_ID, 'decision_node', 'trigger_id', $translate->_('dao.decision_node.trigger_id'), null, true),
 			self::NODE_TYPE => new DevblocksSearchField(self::NODE_TYPE, 'decision_node', 'node_type', $translate->_('dao.decision_node.node_type'), null, true),
 			self::TITLE => new DevblocksSearchField(self::TITLE, 'decision_node', 'title', $translate->_('common.title'), null, true),
+			self::STATUS_ID => new DevblocksSearchField(self::STATUS_ID, 'decision_node', 'status_id', $translate->_('common.status'), null, true),
 			self::POS => new DevblocksSearchField(self::POS, 'decision_node', 'pos', $translate->_('common.order'), null, true),
-			self::PARAMS_JSON => new DevblocksSearchField(self::PARAMS_JSON, 'decision_node', 'params_json', $translate->_('dao.decision_node.params'), null, false),
+			self::PARAMS_JSON => new DevblocksSearchField(self::PARAMS_JSON, 'decision_node', 'params_json', $translate->_('common.params'), null, false),
 		);
 		
 		// Sort by label (translation-conscious)
@@ -425,6 +441,7 @@ class Model_DecisionNode {
 	public $trigger_id;
 	public $node_type;
 	public $title;
+	public $status_id;
 	public $pos;
 	public $params_json;
 	public $params;
@@ -444,6 +461,7 @@ class View_DecisionNode extends C4_AbstractView {
 
 		$this->view_columns = array(
 			SearchFields_DecisionNode::TITLE,
+			SearchFields_DecisionNode::STATUS_ID,
 		);
 		
 		$this->addColumnsHidden(array(
@@ -513,6 +531,7 @@ class View_DecisionNode extends C4_AbstractView {
 			case SearchFields_DecisionNode::TRIGGER_ID:
 			case SearchFields_DecisionNode::NODE_TYPE:
 			case SearchFields_DecisionNode::TITLE:
+			case SearchFields_DecisionNode::STATUS_ID:
 			case SearchFields_DecisionNode::POS:
 			case SearchFields_DecisionNode::PARAMS_JSON:
 			case 'placeholder_string':
@@ -565,6 +584,7 @@ class View_DecisionNode extends C4_AbstractView {
 			case SearchFields_DecisionNode::TRIGGER_ID:
 			case SearchFields_DecisionNode::NODE_TYPE:
 			case SearchFields_DecisionNode::TITLE:
+			case SearchFields_DecisionNode::STATUS_ID:
 			case SearchFields_DecisionNode::POS:
 			case SearchFields_DecisionNode::PARAMS_JSON:
 			case 'placeholder_string':

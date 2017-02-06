@@ -2,17 +2,17 @@
 /***********************************************************************
  | Cerb(tm) developed by Webgroup Media, LLC.
  |-----------------------------------------------------------------------
- | All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
+ | All source code & content (c) Copyright 2002-2017, Webgroup Media LLC
  |   unless specifically noted otherwise.
  |
  | This source code is released under the Devblocks Public License.
  | The latest version of this license can be found here:
- | http://cerb.io/license
+ | http://cerb.ai/license
  |
  | By using this software, you acknowledge having read this license
  | and agree to be bound thereby.
  | ______________________________________________________________________
- |	http://cerb.io	    http://webgroup.media
+ |	http://cerb.ai	    http://webgroup.media
  ***********************************************************************/
 
 class ChReportWorkerHistory extends Extension_Report {
@@ -31,11 +31,6 @@ class ChReportWorkerHistory extends Extension_Report {
 		
 		@$filter_group_ids = DevblocksPlatform::importGPC($_REQUEST['group_id'],'array',array());
 		$tpl->assign('filter_group_ids', $filter_group_ids);
-		
-		@$filter_statuses = DevblocksPlatform::importGPC($_REQUEST['filter_statuses'],'array',array());
-		if(empty($filter_statuses))
-			$filter_statuses = array('open', 'waiting', 'closed');
-		$tpl->assign('filter_statuses', $filter_statuses);
 		
 		$workers = DAO_Worker::getAll();
 		$tpl->assign('workers', $workers);
@@ -169,10 +164,6 @@ class ChReportWorkerHistory extends Extension_Report {
 			
 			if(!empty($filter_group_ids)) {
 				$params[] = new DevblocksSearchCriteria(SearchFields_Message::TICKET_GROUP_ID,DevblocksSearchCriteria::OPER_IN, $filter_group_ids);
-			}
-			
-			if(!empty($filter_statuses)) {
-				$params[] = new DevblocksSearchCriteria(SearchFields_Message::VIRTUAL_TICKET_STATUS,DevblocksSearchCriteria::OPER_IN, $filter_statuses);
 			}
 			
 			$view->addParamsRequired($params, true);

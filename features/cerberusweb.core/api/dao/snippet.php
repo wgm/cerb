@@ -2,17 +2,17 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2017, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
 | The latest version of this license can be found here:
-| http://cerb.io/license
+| http://cerb.ai/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://cerb.io	    http://webgroup.media
+|	http://cerb.ai	    http://webgroup.media
 ***********************************************************************/
 
 class DAO_Snippet extends Cerb_ORMHelper {
@@ -344,9 +344,7 @@ class DAO_Snippet extends Cerb_ORMHelper {
 			$select_sql .= sprintf(", (SELECT SUM(uses) FROM snippet_use_history WHERE worker_id=%d AND snippet_id=snippet.id) AS %s ", $active_worker->id, SearchFields_Snippet::USE_HISTORY_MINE);
 		}
 		
-		$join_sql = " FROM snippet ".
-			(isset($tables['context_link']) ? "INNER JOIN context_link ON (context_link.to_context = 'cerberusweb.contexts.snippet' AND context_link.to_context_id = snippet.id) " : " ")
-		;
+		$join_sql = " FROM snippet ";
 		
 		$where_sql = ''.
 			(!empty($wheres) ? sprintf("WHERE %s ",implode(' AND ',$wheres)) : "WHERE 1 ");
@@ -357,7 +355,6 @@ class DAO_Snippet extends Cerb_ORMHelper {
 			'join_sql' => &$join_sql,
 			'where_sql' => &$where_sql,
 			'tables' => &$tables,
-			'has_multiple_values' => &$has_multiple_values,
 		);
 		
 		// Virtuals
@@ -372,7 +369,6 @@ class DAO_Snippet extends Cerb_ORMHelper {
 			'select' => $select_sql,
 			'join' => $join_sql,
 			'where' => $where_sql,
-			'has_multiple_values' => false,
 			'sort' => $sort_sql,
 		);
 		
@@ -390,47 +386,9 @@ class DAO_Snippet extends Cerb_ORMHelper {
 		settype($param_key, 'string');
 		
 		switch($param_key) {
-			case SearchFields_Snippet::VIRTUAL_CONTEXT_LINK:
-				$args['has_multiple_values'] = true;
-				if(is_array($args) && isset($args['join_sql']) && isset($args['where_sql']))
-					self::_searchComponentsVirtualContextLinks($param, $from_context, $from_index, $args['join_sql'], $args['where_sql']);
-				break;
-				
 			case SearchFields_Snippet::VIRTUAL_HAS_FIELDSET:
 				if(is_array($args) && isset($args['join_sql']) && isset($args['where_sql']))
 					self::_searchComponentsVirtualHasFieldset($param, $from_context, $from_index, $args['join_sql'], $args['where_sql']);
-				break;
-			
-			case SearchFields_Snippet::VIRTUAL_OWNER:
-				if(!is_array($param->value))
-					break;
-				
-				$wheres = array();
-				$args['has_multiple_values'] = true;
-					
-				foreach($param->value as $owner_context) {
-					@list($context, $context_id) = explode(':', $owner_context);
-					
-					if(empty($context))
-						continue;
-					
-					if(!empty($context_id)) {
-						$wheres[] = sprintf("(snippet.owner_context = %s AND snippet.owner_context_id = %d)",
-							Cerb_ORMHelper::qstr($context),
-							$context_id
-						);
-						
-					} else {
-						$wheres[] = sprintf("(snippet.owner_context = %s)",
-							Cerb_ORMHelper::qstr($context)
-						);
-					}
-					
-				}
-				
-				if(!empty($wheres))
-					$args['where_sql'] .= 'AND ' . implode(' OR ', $wheres);
-				
 				break;
 		}
 	}
@@ -456,14 +414,12 @@ class DAO_Snippet extends Cerb_ORMHelper {
 		$select_sql = $query_parts['select'];
 		$join_sql = $query_parts['join'];
 		$where_sql = $query_parts['where'];
-		$has_multiple_values = $query_parts['has_multiple_values'];
 		$sort_sql = $query_parts['sort'];
 		
 		$sql =
 			$select_sql.
 			$join_sql.
 			$where_sql.
-			($has_multiple_values ? 'GROUP BY snippet.id ' : '').
 			$sort_sql;
 		
 		// [TODO] Could push the select logic down a level too
@@ -492,7 +448,7 @@ class DAO_Snippet extends Cerb_ORMHelper {
 			// We can skip counting if we have a less-than-full single page
 			if(!(0 == $page && $total < $limit)) {
 				$count_sql =
-					($has_multiple_values ? "SELECT COUNT(DISTINCT snippet.id) " : "SELECT COUNT(snippet.id) ").
+					"SELECT COUNT(snippet.id) ".
 					$join_sql.
 					$where_sql;
 				$total = $db->GetOneSlave($count_sql);
@@ -519,9 +475,6 @@ class SearchFields_Snippet extends DevblocksSearchFields {
 	
 	const USE_HISTORY_MINE = 'suh_my_uses';
 	
-	const CONTEXT_LINK = 'cl_context_from';
-	const CONTEXT_LINK_ID = 'cl_context_from_id';
-	
 	// Fulltexts
 	const FULLTEXT_SNIPPET = 'ft_snippet';
 	
@@ -544,6 +497,14 @@ class SearchFields_Snippet extends DevblocksSearchFields {
 	
 	static function getWhereSQL(DevblocksSearchCriteria $param) {
 		switch($param->field) {
+			case self::VIRTUAL_CONTEXT_LINK:
+				return self::_getWhereSQLFromContextLinksField($param, CerberusContexts::CONTEXT_SNIPPET, self::getPrimaryKey());
+				break;
+				
+			case self::VIRTUAL_OWNER:
+				return self::_getWhereSQLFromContextAndID($param, 'snippet.owner_context', 'snippet.owner_context_id');
+				break;
+				
 			case SearchFields_Snippet::FULLTEXT_SNIPPET:
 				return self::_getWhereSQLFromFulltextField($param, Search_Snippet::ID, self::getPrimaryKey());
 				break;
@@ -586,9 +547,6 @@ class SearchFields_Snippet extends DevblocksSearchFields {
 			self::UPDATED_AT => new DevblocksSearchField(self::UPDATED_AT, 'snippet', 'updated_at', $translate->_('common.updated'), Model_CustomField::TYPE_DATE, true),
 			
 			self::USE_HISTORY_MINE => new DevblocksSearchField(self::USE_HISTORY_MINE, 'snippet_use_history', 'uses', $translate->_('dao.snippet_use_history.uses.mine'), Model_CustomField::TYPE_NUMBER, true),
-			
-			self::CONTEXT_LINK => new DevblocksSearchField(self::CONTEXT_LINK, 'context_link', 'from_context', null, null, false),
-			self::CONTEXT_LINK_ID => new DevblocksSearchField(self::CONTEXT_LINK_ID, 'context_link', 'from_context_id', null, null, false),
 			
 			self::FULLTEXT_SNIPPET => new DevblocksSearchField(self::FULLTEXT_SNIPPET, 'ft', 'snippet', $translate->_('common.search.fulltext'), 'FT', false),
 				
@@ -752,82 +710,6 @@ class Model_Snippet {
 	public function incrementUse($worker_id) {
 		return DAO_Snippet::incrementUse($this->id, $worker_id);
 	}
-
-	function isReadableByWorker($worker) {
-		if(is_a($worker, 'Model_Worker')) {
-			// This is what we want
-		} elseif (is_numeric($worker)) {
-			if(null == ($worker = DAO_Worker::get($worker)))
-				return false;
-		} else {
-			return false;
-		}
-		
-		// Superusers can do anything
-		if($worker->is_superuser)
-			return true;
-		
-		switch($this->owner_context) {
-			case CerberusContexts::CONTEXT_APPLICATION:
-				if($worker->is_superuser)
-					return true;
-				break;
-				
-			case CerberusContexts::CONTEXT_GROUP:
-				if(in_array($this->owner_context_id, array_keys($worker->getMemberships())))
-					return true;
-				break;
-				
-			case CerberusContexts::CONTEXT_ROLE:
-				if(in_array($this->owner_context_id, array_keys($worker->getRoles())))
-					return true;
-				break;
-				
-			case CerberusContexts::CONTEXT_WORKER:
-				if($worker->id == $this->owner_context_id)
-					return true;
-				break;
-		}
-		
-		return false;
-	}
-	
-	function isWriteableByWorker($worker) {
-		if(is_a($worker, 'Model_Worker')) {
-			// This is what we want
-		} elseif (is_numeric($worker)) {
-			if(null == ($worker = DAO_Worker::get($worker)))
-				return false;
-		} else {
-			return false;
-		}
-		
-		// Superusers can do anything
-		if($worker->is_superuser)
-			return true;
-		
-		switch($this->owner_context) {
-			case CerberusContexts::CONTEXT_APPLICATION:
-			case CerberusContexts::CONTEXT_ROLE:
-				if($worker->is_superuser)
-					return true;
-				break;
-				
-			case CerberusContexts::CONTEXT_GROUP:
-				if(in_array($this->owner_context_id, array_keys($worker->getMemberships())))
-					if($worker->isGroupManager($this->owner_context_id))
-						return true;
-				break;
-				
-			case CerberusContexts::CONTEXT_WORKER:
-				if($worker->id == $this->owner_context_id)
-					return true;
-				break;
-		}
-		
-		return false;
-	}
-	
 };
 
 class View_Snippet extends C4_AbstractView implements IAbstractView_Subtotals, IAbstractView_QuickSearch {
@@ -852,8 +734,6 @@ class View_Snippet extends C4_AbstractView implements IAbstractView_Subtotals, I
 		);
 		
 		$this->addColumnsHidden(array(
-			SearchFields_Snippet::CONTEXT_LINK,
-			SearchFields_Snippet::CONTEXT_LINK_ID,
 			SearchFields_Snippet::ID,
 			SearchFields_Snippet::CONTENT,
 			SearchFields_Snippet::OWNER_CONTEXT,
@@ -864,8 +744,6 @@ class View_Snippet extends C4_AbstractView implements IAbstractView_Subtotals, I
 		));
 		
 		$this->addParamsHidden(array(
-			SearchFields_Snippet::CONTEXT_LINK,
-			SearchFields_Snippet::CONTEXT_LINK_ID,
 			SearchFields_Snippet::ID,
 			SearchFields_Snippet::OWNER_CONTEXT,
 			SearchFields_Snippet::OWNER_CONTEXT_ID,
@@ -975,8 +853,6 @@ class View_Snippet extends C4_AbstractView implements IAbstractView_Subtotals, I
 		return $counts;
 	}
 	
-	// [TODO] My uses? owner?
-	
 	function getQuickSearchFields() {
 		$search_fields = SearchFields_Snippet::getFields();
 		
@@ -995,6 +871,9 @@ class View_Snippet extends C4_AbstractView implements IAbstractView_Subtotals, I
 				array(
 					'type' => DevblocksSearchCriteria::TYPE_NUMBER,
 					'options' => array('param_key' => SearchFields_Snippet::ID),
+					'examples' => [
+						['type' => 'chooser', 'context' => CerberusContexts::CONTEXT_SNIPPET, 'q' => ''],
+					]
 				),
 			'title' => 
 				array(
@@ -1023,6 +902,14 @@ class View_Snippet extends C4_AbstractView implements IAbstractView_Subtotals, I
 					'options' => array('param_key' => SearchFields_Snippet::UPDATED_AT),
 				),
 		);
+		
+		// Add dynamic owner.* fields
+		
+		$fields = self::_appendVirtualFiltersFromQuickSearchContexts('owner', $fields, 'owner');
+		
+		// Add quick search links
+		
+		$fields = self::_appendVirtualFiltersFromQuickSearchContexts('links', $fields, 'links');
 		
 		// Add searchable custom fields
 		
@@ -1085,6 +972,12 @@ class View_Snippet extends C4_AbstractView implements IAbstractView_Subtotals, I
 				break;
 				
 			default:
+				if($field == 'owner' || substr($field, 0, strlen('owner.')) == 'owner.')
+					return DevblocksSearchCriteria::getVirtualContextParamFromTokens($field, $tokens, 'owner', SearchFields_Snippet::VIRTUAL_OWNER);
+				
+				if($field == 'links' || substr($field, 0, 6) == 'links.')
+					return DevblocksSearchCriteria::getContextLinksParamFromTokens($field, $tokens);
+				
 				$search_fields = $this->getQuickSearchFields();
 				return DevblocksSearchCriteria::getParamFromQueryFieldTokens($field, $tokens, $search_fields);
 				break;
@@ -1210,7 +1103,7 @@ class View_Snippet extends C4_AbstractView implements IAbstractView_Subtotals, I
 				break;
 			
 			case SearchFields_Snippet::VIRTUAL_OWNER:
-				$this->_renderVirtualContextLinks($param, 'Owner', 'Owners');
+				$this->_renderVirtualContextLinks($param, 'Owner', 'Owners', 'Owner is');
 				break;
 		}
 	}
@@ -1304,7 +1197,24 @@ class View_Snippet extends C4_AbstractView implements IAbstractView_Subtotals, I
 	}
 };
 
-class Context_Snippet extends Extension_DevblocksContext implements IDevblocksContextAutocomplete {
+class Context_Snippet extends Extension_DevblocksContext implements IDevblocksContextAutocomplete, IDevblocksContextProfile, IDevblocksContextPeek {
+	static function isReadableByActor($models, $actor) {
+		return CerberusContexts::isReadableByDelegateOwner($actor, CerberusContexts::CONTEXT_SNIPPET, $models);
+	}
+	
+	static function isWriteableByActor($models, $actor) {
+		return CerberusContexts::isWriteableByDelegateOwner($actor, CerberusContexts::CONTEXT_SNIPPET, $models);
+	}
+	
+	function profileGetUrl($context_id) {
+		if(empty($context_id))
+			return '';
+	
+		$url_writer = DevblocksPlatform::getUrlService();
+		$url = $url_writer->writeNoProxy('c=profiles&type=snippet&id='.$context_id, true);
+		return $url;
+	}
+	
 	function getRandom() {
 		return DAO_Snippet::random();
 	}
@@ -1352,7 +1262,7 @@ class Context_Snippet extends Extension_DevblocksContext implements IDevblocksCo
 		);
 	}
 	
-	function autocomplete($term) {
+	function autocomplete($term, $query=null) {
 		$as_worker = CerberusApplication::getActiveWorker();
 		
 		$list = array();
@@ -1517,12 +1427,17 @@ class Context_Snippet extends Extension_DevblocksContext implements IDevblocksCo
 		
 		if(!$is_loaded) {
 			$labels = array();
-			CerberusContexts::getContext($context, $context_id, $labels, $values, null, true);
+			CerberusContexts::getContext($context, $context_id, $labels, $values, null, true, true);
 		}
 		
 		switch($token) {
+			case 'links':
+				$links = $this->_lazyLoadLinks($context, $context_id);
+				$values = array_merge($values, $fields);
+				break;
+			
 			default:
-				if(substr($token,0,7) == 'custom_') {
+				if(DevblocksPlatform::strStartsWith($token, 'custom_')) {
 					$fields = $this->_lazyLoadCustomFields($token, $context, $context_id);
 					$values = array_merge($values, $fields);
 				}
@@ -1596,8 +1511,7 @@ class Context_Snippet extends Extension_DevblocksContext implements IDevblocksCo
 		
 		if(!empty($context) && !empty($context_id)) {
 			$params_req = array(
-				new DevblocksSearchCriteria(SearchFields_Snippet::CONTEXT_LINK,'=',$context),
-				new DevblocksSearchCriteria(SearchFields_Snippet::CONTEXT_LINK_ID,'=',$context_id),
+				new DevblocksSearchCriteria(SearchFields_Snippet::VIRTUAL_CONTEXT_LINK,'in',array($context.':'.$context_id)),
 			);
 		}
 		
@@ -1605,5 +1519,92 @@ class Context_Snippet extends Extension_DevblocksContext implements IDevblocksCo
 		
 		$view->renderTemplate = 'context';
 		return $view;
+	}
+	
+	function renderPeekPopup($context_id=0, $view_id='', $edit=false) {
+		$tpl = DevblocksPlatform::getTemplateService();
+		$tpl->assign('view_id', $view_id);
+		
+		$active_worker = CerberusApplication::getActiveWorker();
+		$context = CerberusContexts::CONTEXT_SNIPPET;
+
+		if(empty($context_id) || null == ($model = DAO_Snippet::get($context_id))) {
+			@$text = DevblocksPlatform::importGPC($_REQUEST['text'], 'string', '');
+			
+			$model = new Model_Snippet();
+			$model->id = 0;
+			$model->content = $text;
+		}
+		
+		if(empty($context_id) || $edit) {
+			if(isset($model))
+				$tpl->assign('model', $model);
+			
+			// Owner
+			$owners_menu = Extension_DevblocksContext::getOwnerTree();
+			$tpl->assign('owners_menu', $owners_menu);
+
+			// Contexts
+			$contexts = Extension_DevblocksContext::getAll(false);
+			$tpl->assign('contexts', $contexts);
+			
+			// Custom fields
+			$custom_fields = DAO_CustomField::getByContext($context, false);
+			$tpl->assign('custom_fields', $custom_fields);
+	
+			$custom_field_values = DAO_CustomFieldValue::getValuesByContextIds($context, $context_id);
+			if(isset($custom_field_values[$context_id]))
+				$tpl->assign('custom_field_values', $custom_field_values[$context_id]);
+			
+			$types = Model_CustomField::getTypes();
+			$tpl->assign('types', $types);
+			
+			// View
+			$tpl->assign('id', $context_id);
+			$tpl->assign('view_id', $view_id);
+			$tpl->display('devblocks:cerberusweb.core::internal/snippets/peek_edit.tpl');
+			
+		} else {
+			// Counts
+			$activity_counts = array(
+				'comments' => DAO_Comment::count($context, $context_id),
+			);
+			$tpl->assign('activity_counts', $activity_counts);
+			
+			// Links
+			$links = array(
+				$context => array(
+					$context_id => 
+						DAO_ContextLink::getContextLinkCounts(
+							$context,
+							$context_id,
+							array(CerberusContexts::CONTEXT_CUSTOM_FIELDSET)
+						),
+				),
+			);
+			$tpl->assign('links', $links);
+			
+			// Timeline
+			if($context_id) {
+				$timeline_json = Page_Profiles::getTimelineJson(Extension_DevblocksContext::getTimelineComments($context, $context_id));
+				$tpl->assign('timeline_json', $timeline_json);
+			}
+
+			// Context
+			if(false == ($context_ext = Extension_DevblocksContext::get($context)))
+				return;
+			
+			// Dictionary
+			$labels = array();
+			$values = array();
+			CerberusContexts::getContext($context, $model, $labels, $values, '', true, false);
+			$dict = DevblocksDictionaryDelegate::instance($values);
+			$tpl->assign('dict', $dict);
+			
+			$properties = $context_ext->getCardProperties();
+			$tpl->assign('properties', $properties);
+			
+			$tpl->display('devblocks:cerberusweb.core::internal/snippets/peek.tpl');
+		}
 	}
 };

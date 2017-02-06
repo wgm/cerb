@@ -2,17 +2,17 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2017, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
 | The latest version of this license can be found here:
-| http://cerb.io/license
+| http://cerb.ai/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://cerb.io	    http://webgroup.media
+|	http://cerb.ai	    http://webgroup.media
 ***********************************************************************/
 
 class ChContactsPage extends CerberusPageExtension {
@@ -21,7 +21,7 @@ class ChContactsPage extends CerberusPageExtension {
 		if(null == ($worker = CerberusApplication::getActiveWorker()))
 			return false;
 		
-		return $worker->hasPriv('core.addybook');
+		return true;
 	}
 	
 	function render() {
@@ -235,7 +235,7 @@ class ChContactsPage extends CerberusPageExtension {
 			$view = new View_Ticket();
 			$view->id = $view_id;
 			$view->view_columns = array(
-				SearchFields_Ticket::TICKET_LAST_WROTE,
+				SearchFields_Ticket::TICKET_LAST_WROTE_ID,
 				SearchFields_Ticket::TICKET_CREATED_DATE,
 				SearchFields_Ticket::TICKET_GROUP_ID,
 				SearchFields_Ticket::TICKET_BUCKET_ID,
@@ -252,7 +252,7 @@ class ChContactsPage extends CerberusPageExtension {
 		
 		if(empty($ids)) {
 			@$view->name = $translate->_('common.participants') . ": " . $translate->_('common.organization');
-			$params_required[SearchFields_Ticket::VIRTUAL_ORG_ID] = new DevblocksSearchCriteria(SearchFields_Ticket::VIRTUAL_ORG_ID,'=',$org_id);
+			$params_required[SearchFields_Ticket::TICKET_ORG_ID] = new DevblocksSearchCriteria(SearchFields_Ticket::TICKET_ORG_ID,'=',$org_id);
 			
 		} else {
 			@$view->name = $translate->_('common.participants') . ": " . intval(count($ids)) . ' contact(s)';

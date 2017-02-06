@@ -1,4 +1,11 @@
 function DevblocksClass() {
+	this.audio = new Audio();
+	
+	this.playAudioUrl = function(url) {
+		this.audio.src = url;
+		this.audio.play();
+	}
+	
 	// Source: http://stackoverflow.com/a/16693578
 	this.uniqueId = function() {
 		return (Math.random().toString(16)+"000000000").substr(2,8);
@@ -132,7 +139,12 @@ function DevblocksClass() {
 					selectedTabs = JSON.parse(localStorage.selectedTabs);
 				
 				selectedTabs[tabsId] = $activeTab.index(); //$tabs.index($activeTab);
-				localStorage.selectedTabs = JSON.stringify(selectedTabs);
+				
+				try {
+					localStorage.selectedTabs = JSON.stringify(selectedTabs);
+				} catch(e) {
+					
+				}
 				
 				return $activeTab.index();
 			}
@@ -157,7 +169,12 @@ function DevblocksClass() {
 		var $popup = genericAjaxPopupFind($button);
 		var $frm = $popup.find('form').first();
 		var $status = $popup.find('div.status');
-		var is_delete = (e.data && e.data.mode == 'delete');
+		var options = e.data;
+		var is_delete = (options && options.mode == 'delete');
+		
+		if(options && options.before && typeof options.before == 'function') {
+			options.before(e, $frm);
+		}
 		
 		if(!($popup instanceof jQuery))
 			return false;
@@ -180,6 +197,10 @@ function DevblocksClass() {
 			if(!(typeof e == 'object'))
 				return;
 			
+			if(options && options.after && typeof options.after == 'function') {
+				options.after(e);
+			}
+			
 			if(e.status) {
 				var event;
 				
@@ -190,10 +211,9 @@ function DevblocksClass() {
 				}
 				
 				// Meta fields
-				if(e.id)
-					event.context_id = e.id;
-				if(e.label)
-					event.context_label = e.label;
+				for(k in e) {
+					event[k] = e[k];
+				}
 				
 				// Reload the associated view (underlying helper)
 				if(e.view_id)

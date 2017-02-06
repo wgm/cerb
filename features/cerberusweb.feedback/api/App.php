@@ -2,17 +2,17 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2017, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
 | The latest version of this license can be found here:
-| http://cerb.io/license
+| http://cerb.ai/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://cerb.io	    http://webgroup.media
+|	http://cerb.ai	    http://webgroup.media
 ***********************************************************************/
 /*
  * IMPORTANT LICENSING NOTE from your friends at Cerb
@@ -262,13 +262,11 @@ class DAO_FeedbackEntry extends Cerb_ORMHelper {
 				SearchFields_FeedbackEntry::ADDRESS_EMAIL
 			 );
 		
+		// [TODO] Get rid of this left join
 		$join_sql =
 			"FROM feedback_entry f ".
 			"LEFT JOIN address a ON (f.quote_address_id=a.id) ".
-		
-			// [JAS]: Dynamic table joins
-			(isset($tables['context_link']) ? "INNER JOIN context_link ON (context_link.to_context = 'cerberusweb.contexts.feedback' AND context_link.to_context_id = f.id) " : " ")
-		;
+			'';
 
 		$where_sql = "".
 			(!empty($wheres) ? sprintf("WHERE %s ",implode(' AND ',$wheres)) : "WHERE 1 ");
@@ -281,7 +279,6 @@ class DAO_FeedbackEntry extends Cerb_ORMHelper {
 			'join_sql' => &$join_sql,
 			'where_sql' => &$where_sql,
 			'tables' => &$tables,
-			'has_multiple_values' => &$has_multiple_values
 		);
 		
 		array_walk_recursive(
@@ -295,7 +292,6 @@ class DAO_FeedbackEntry extends Cerb_ORMHelper {
 			'select' => $select_sql,
 			'join' => $join_sql,
 			'where' => $where_sql,
-			'has_multiple_values' => $has_multiple_values,
 			'sort' => $sort_sql,
 		);
 		
@@ -339,14 +335,12 @@ class DAO_FeedbackEntry extends Cerb_ORMHelper {
 		$select_sql = $query_parts['select'];
 		$join_sql = $query_parts['join'];
 		$where_sql = $query_parts['where'];
-		$has_multiple_values = $query_parts['has_multiple_values'];
 		$sort_sql = $query_parts['sort'];
 		
 		$sql =
 			$select_sql.
 			$join_sql.
 			$where_sql.
-			($has_multiple_values ? 'GROUP BY f.id ' : '').
 			$sort_sql;
 		
 		if(false == ($rs = $db->SelectLimit($sql,$limit,$page*$limit)))
@@ -368,7 +362,7 @@ class DAO_FeedbackEntry extends Cerb_ORMHelper {
 			// We can skip counting if we have a less-than-full single page
 			if(!(0 == $page && $total < $limit)) {
 				$count_sql =
-					($has_multiple_values ? "SELECT COUNT(DISTINCT f.id) " : "SELECT COUNT(f.id) ").
+					"SELECT COUNT(f.id) ".
 					$join_sql.
 					$where_sql;
 				$total = $db->GetOneSlave($count_sql);
@@ -407,11 +401,11 @@ class SearchFields_FeedbackEntry extends DevblocksSearchFields {
 	
 	const ADDRESS_EMAIL = 'a_email';
 	
+	const VIRTUAL_CONTEXT_LINK = '*_context_link';
+	const VIRTUAL_EMAIL_SEARCH = '*_email_search';
 	const VIRTUAL_HAS_FIELDSET = '*_has_fieldset';
 	const VIRTUAL_WATCHERS = '*_workers';
-	
-	const CONTEXT_LINK = 'cl_context_from';
-	const CONTEXT_LINK_ID = 'cl_context_from_id';
+	const VIRTUAL_WORKER_SEARCH = '*_worker_search';
 	
 	static private $_fields = null;
 	
@@ -429,7 +423,19 @@ class SearchFields_FeedbackEntry extends DevblocksSearchFields {
 	
 	static function getWhereSQL(DevblocksSearchCriteria $param) {
 		switch($param->field) {
-			case SearchFields_FeedbackEntry::VIRTUAL_WATCHERS:
+			case self::VIRTUAL_CONTEXT_LINK:
+				return self::_getWhereSQLFromContextLinksField($param, CerberusContexts::CONTEXT_FEEDBACK, self::getPrimaryKey());
+				break;
+				
+			case self::VIRTUAL_EMAIL_SEARCH:
+				return self::_getWhereSQLFromVirtualSearchField($param, CerberusContexts::CONTEXT_ADDRESS, 'f.quote_address_id');
+				break;
+			
+			case self::VIRTUAL_WORKER_SEARCH:
+				return self::_getWhereSQLFromVirtualSearchField($param, CerberusContexts::CONTEXT_WORKER, 'f.worker_id');
+				break;
+				
+			case self::VIRTUAL_WATCHERS:
 				return self::_getWhereSQLFromWatchersField($param, CerberusContexts::CONTEXT_FEEDBACK, self::getPrimaryKey());
 				break;
 				
@@ -471,11 +477,11 @@ class SearchFields_FeedbackEntry extends DevblocksSearchFields {
 			
 			self::ADDRESS_EMAIL => new DevblocksSearchField(self::ADDRESS_EMAIL, 'a', 'email', $translate->_('feedback_entry.quote_address'), Model_CustomField::TYPE_SINGLE_LINE, true),
 
+			self::VIRTUAL_CONTEXT_LINK => new DevblocksSearchField(self::VIRTUAL_CONTEXT_LINK, '*', 'context_link', $translate->_('common.links'), null, false),
+			self::VIRTUAL_EMAIL_SEARCH => new DevblocksSearchField(self::VIRTUAL_EMAIL_SEARCH, '*', 'email_search', null, null, false),
 			self::VIRTUAL_HAS_FIELDSET => new DevblocksSearchField(self::VIRTUAL_HAS_FIELDSET, '*', 'has_fieldset', $translate->_('common.fieldset'), null, false),
 			self::VIRTUAL_WATCHERS => new DevblocksSearchField(self::VIRTUAL_WATCHERS, '*', 'workers', mb_convert_case($translate->_('common.watchers'), MB_CASE_TITLE), 'WS', false),
-			
-			self::CONTEXT_LINK => new DevblocksSearchField(self::CONTEXT_LINK, 'context_link', 'from_context', null, null, false),
-			self::CONTEXT_LINK_ID => new DevblocksSearchField(self::CONTEXT_LINK_ID, 'context_link', 'from_context_id', null, null, false),
+			self::VIRTUAL_WORKER_SEARCH => new DevblocksSearchField(self::VIRTUAL_WORKER_SEARCH, '*', 'worker_search', null, null, false),
 		);
 		
 		// Custom fields with fieldsets
@@ -514,13 +520,18 @@ class View_FeedbackEntry extends C4_AbstractView implements IAbstractView_Subtot
 		$this->addColumnsHidden(array(
 			SearchFields_FeedbackEntry::ID,
 			SearchFields_FeedbackEntry::QUOTE_ADDRESS_ID,
+			SearchFields_FeedbackEntry::VIRTUAL_CONTEXT_LINK,
+			SearchFields_FeedbackEntry::VIRTUAL_EMAIL_SEARCH,
 			SearchFields_FeedbackEntry::VIRTUAL_HAS_FIELDSET,
 			SearchFields_FeedbackEntry::VIRTUAL_WATCHERS,
+			SearchFields_FeedbackEntry::VIRTUAL_WORKER_SEARCH,
 		));
 		
 		$this->addParamsHidden(array(
 			SearchFields_FeedbackEntry::ID,
 			SearchFields_FeedbackEntry::QUOTE_ADDRESS_ID,
+			SearchFields_FeedbackEntry::VIRTUAL_EMAIL_SEARCH,
+			SearchFields_FeedbackEntry::VIRTUAL_WORKER_SEARCH,
 		));
 		$this->addParamsDefault(array(
 			SearchFields_FeedbackEntry::LOG_DATE => new DevblocksSearchCriteria(SearchFields_FeedbackEntry::LOG_DATE,DevblocksSearchCriteria::OPER_BETWEEN,array('-1 month','now')),
@@ -650,13 +661,27 @@ class View_FeedbackEntry extends C4_AbstractView implements IAbstractView_Subtot
 				),
 			'email' => 
 				array(
-					'type' => DevblocksSearchCriteria::TYPE_TEXT,
-					'options' => array('param_key' => SearchFields_FeedbackEntry::ADDRESS_EMAIL, 'match' => DevblocksSearchCriteria::OPTION_TEXT_PREFIX),
+					'type' => DevblocksSearchCriteria::TYPE_VIRTUAL,
+					'options' => array('param_key' => SearchFields_FeedbackEntry::VIRTUAL_EMAIL_SEARCH),
+					'examples' => [
+						['type' => 'search', 'context' => CerberusContexts::CONTEXT_ADDRESS, 'q' => ''],
+					]
+				),
+			'email.id' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_NUMBER,
+					'options' => array('param_key' => SearchFields_FeedbackEntry::QUOTE_ADDRESS_ID),
+					'examples' => [
+						['type' => 'chooser', 'context' => CerberusContexts::CONTEXT_ADDRESS, 'q' => ''],
+					]
 				),
 			'id' => 
 				array(
 					'type' => DevblocksSearchCriteria::TYPE_NUMBER,
 					'options' => array('param_key' => SearchFields_FeedbackEntry::ID),
+					'examples' => [
+						['type' => 'chooser', 'context' => CerberusContexts::CONTEXT_FEEDBACK, 'q' => ''],
+					]
 				),
 			'mood' => 
 				array(
@@ -677,8 +702,11 @@ class View_FeedbackEntry extends C4_AbstractView implements IAbstractView_Subtot
 				),
 			'worker' => 
 				array(
-					'type' => DevblocksSearchCriteria::TYPE_WORKER,
-					'options' => array('param_key' => SearchFields_FeedbackEntry::WORKER_ID),
+					'type' => DevblocksSearchCriteria::TYPE_VIRTUAL,
+					'options' => array('param_key' => SearchFields_FeedbackEntry::VIRTUAL_WORKER_SEARCH),
+					'examples' => [
+						['type' => 'search', 'context' => CerberusContexts::CONTEXT_WORKER, 'q' => ''],
+					]
 				),
 			'watchers' => 
 				array(
@@ -686,6 +714,10 @@ class View_FeedbackEntry extends C4_AbstractView implements IAbstractView_Subtot
 					'options' => array('param_key' => SearchFields_FeedbackEntry::VIRTUAL_WATCHERS),
 				),
 		);
+		
+		// Add quick search links
+		
+		$fields = self::_appendVirtualFiltersFromQuickSearchContexts('links', $fields, 'links');
 		
 		// Add searchable custom fields
 		
@@ -704,6 +736,10 @@ class View_FeedbackEntry extends C4_AbstractView implements IAbstractView_Subtot
 	
 	function getParamFromQuickSearchFieldTokens($field, $tokens) {
 		switch($field) {
+			case 'email':
+				return DevblocksSearchCriteria::getVirtualQuickSearchParamFromTokens($field, $tokens, SearchFields_FeedbackEntry::VIRTUAL_EMAIL_SEARCH);
+				break;
+				
 			case 'mood':
 				$field_key = SearchFields_FeedbackEntry::QUOTE_MOOD;
 				$oper = null;
@@ -740,7 +776,14 @@ class View_FeedbackEntry extends C4_AbstractView implements IAbstractView_Subtot
 				return DevblocksSearchCriteria::getWatcherParamFromTokens(SearchFields_FeedbackEntry::VIRTUAL_WATCHERS, $tokens);
 				break;
 				
+			case 'worker':
+				return DevblocksSearchCriteria::getVirtualQuickSearchParamFromTokens($field, $tokens, SearchFields_FeedbackEntry::VIRTUAL_WORKER_SEARCH);
+				break;
+			
 			default:
+				if($field == 'links' || substr($field, 0, 6) == 'links.')
+					return DevblocksSearchCriteria::getContextLinksParamFromTokens($field, $tokens);
+				
 				$search_fields = $this->getQuickSearchFields();
 				return DevblocksSearchCriteria::getParamFromQueryFieldTokens($field, $tokens, $search_fields);
 				break;
@@ -804,6 +847,12 @@ class View_FeedbackEntry extends C4_AbstractView implements IAbstractView_Subtot
 				$tpl->display('devblocks:cerberusweb.core::internal/views/criteria/__list.tpl');
 				break;
 
+			case SearchFields_FeedbackEntry::VIRTUAL_CONTEXT_LINK:
+				$contexts = Extension_DevblocksContext::getAll(false);
+				$tpl->assign('contexts', $contexts);
+				$tpl->display('devblocks:cerberusweb.core::internal/views/criteria/__context_link.tpl');
+				break;
+				
 			case SearchFields_FeedbackEntry::VIRTUAL_HAS_FIELDSET:
 				$this->_renderCriteriaHasFieldset($tpl, CerberusContexts::CONTEXT_FEEDBACK);
 				break;
@@ -827,12 +876,24 @@ class View_FeedbackEntry extends C4_AbstractView implements IAbstractView_Subtot
 		$key = $param->field;
 		
 		switch($key) {
+			case SearchFields_FeedbackEntry::VIRTUAL_CONTEXT_LINK:
+				$this->_renderVirtualContextLinks($param);
+				break;
+			
+			case SearchFields_FeedbackEntry::VIRTUAL_EMAIL_SEARCH:
+				echo sprintf("Email matches <b>%s</b>", DevblocksPlatform::strEscapeHtml($param->value));
+				break;
+			
 			case SearchFields_FeedbackEntry::VIRTUAL_HAS_FIELDSET:
 				$this->_renderVirtualHasFieldset($param);
 				break;
 			
 			case SearchFields_FeedbackEntry::VIRTUAL_WATCHERS:
 				$this->_renderVirtualWatchers($param);
+				break;
+			
+			case SearchFields_FeedbackEntry::VIRTUAL_WORKER_SEARCH:
+				echo sprintf("Worker matches <b>%s</b>", DevblocksPlatform::strEscapeHtml($param->value));
 				break;
 		}
 	}
@@ -899,6 +960,11 @@ class View_FeedbackEntry extends C4_AbstractView implements IAbstractView_Subtot
 			case SearchFields_FeedbackEntry::QUOTE_MOOD:
 				@$options = DevblocksPlatform::importGPC($_REQUEST['options'],'array',array());
 				$criteria = new DevblocksSearchCriteria($field,$oper,$options);
+				break;
+				
+			case SearchFields_FeedbackEntry::VIRTUAL_CONTEXT_LINK:
+				@$context_links = DevblocksPlatform::importGPC($_REQUEST['context_link'],'array',array());
+				$criteria = new DevblocksSearchCriteria($field,DevblocksSearchCriteria::OPER_IN,$context_links);
 				break;
 				
 			case SearchFields_FeedbackEntry::VIRTUAL_HAS_FIELDSET:
@@ -1044,13 +1110,6 @@ class ChFeedbackController extends DevblocksControllerExtension {
 		// Custom field saves
 		@$field_ids = DevblocksPlatform::importGPC($_POST['field_ids'], 'array', array());
 		DAO_CustomFieldValue::handleFormPost(CerberusContexts::CONTEXT_FEEDBACK, $id, $field_ids);
-		
-		// Context Link (if given)
-		@$link_context = DevblocksPlatform::importGPC($_REQUEST['link_context'],'string','');
-		@$link_context_id = DevblocksPlatform::importGPC($_REQUEST['link_context_id'],'integer','');
-		if(!empty($id) && !empty($link_context) && !empty($link_context_id)) {
-			DAO_ContextLink::setLink(CerberusContexts::CONTEXT_FEEDBACK, $id, $link_context, $link_context_id);
-		}
 	}
 	
 	function showBulkPanelAction() {
@@ -1136,6 +1195,16 @@ endif;
 
 // [TODO] Move to a DAO class
 class Context_Feedback extends Extension_DevblocksContext implements IDevblocksContextPeek {
+	static function isReadableByActor($models, $actor) {
+		// Everyone can view
+		return CerberusContexts::allowEverything($models);
+	}
+	
+	static function isWriteableByActor($models, $actor) {
+		// Everyone can modify
+		return CerberusContexts::allowEverything($models);
+	}
+	
 	function getDaoClass() {
 		return 'DAO_FeedbackEntry';
 	}
@@ -1154,8 +1223,7 @@ class Context_Feedback extends Extension_DevblocksContext implements IDevblocksC
 				SearchFields_FeedbackEntry::ID,
 			),
 			array(
-				new DevblocksSearchCriteria(SearchFields_FeedbackEntry::CONTEXT_LINK,'=',$from_context),
-				new DevblocksSearchCriteria(SearchFields_FeedbackEntry::CONTEXT_LINK_ID,'=',$from_context_id),
+				new DevblocksSearchCriteria(SearchFields_FeedbackEntry::VIRTUAL_CONTEXT_LINK,'in',array($context.':'.$context_id)),
 			),
 			-1,
 			0,
@@ -1333,10 +1401,15 @@ class Context_Feedback extends Extension_DevblocksContext implements IDevblocksC
 		
 		if(!$is_loaded) {
 			$labels = array();
-			CerberusContexts::getContext($context, $context_id, $labels, $values, null, true);
+			CerberusContexts::getContext($context, $context_id, $labels, $values, null, true, true);
 		}
 		
 		switch($token) {
+			case 'links':
+				$links = $this->_lazyLoadLinks($context, $context_id);
+				$values = array_merge($values, $fields);
+				break;
+			
 			case 'watchers':
 				$watchers = array(
 					$token => CerberusContexts::getWatchers($context, $context_id, true),
@@ -1345,7 +1418,7 @@ class Context_Feedback extends Extension_DevblocksContext implements IDevblocksC
 				break;
 				
 			default:
-				if(substr($token,0,7) == 'custom_') {
+				if(DevblocksPlatform::strStartsWith($token, 'custom_')) {
 					$fields = $this->_lazyLoadCustomFields($token, $context, $context_id);
 					$values = array_merge($values, $fields);
 				}
@@ -1393,8 +1466,7 @@ class Context_Feedback extends Extension_DevblocksContext implements IDevblocksC
 		
 		if(!empty($context) && !empty($context_id)) {
 			$params_req = array(
-				new DevblocksSearchCriteria(SearchFields_FeedbackEntry::CONTEXT_LINK,'=',$context),
-				new DevblocksSearchCriteria(SearchFields_FeedbackEntry::CONTEXT_LINK_ID,'=',$context_id),
+				new DevblocksSearchCriteria(SearchFields_FeedbackEntry::VIRTUAL_CONTEXT_LINK,'in',array($context.':'.$context_id)),
 			);
 		}
 		

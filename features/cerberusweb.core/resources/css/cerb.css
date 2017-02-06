@@ -129,6 +129,26 @@ BUTTON SPAN {
   vertical-align: middle;
 }
 
+DIV.cerb-form {
+  margin: 0px 0px 10px 0px;
+}
+DIV.cerb-form > DIV {
+  margin: 0px 0px 5px 10px;
+}
+DIV.cerb-form > DIV LABEL {
+  display: block;
+  font-weight: bold;
+  margin-left: -10px;
+  padding-bottom: 5px;
+}
+DIV.cerb-form > DIV INPUT[type=text] {
+  width: 100%;
+}
+DIV.cerb-form > DIV TEXTAREA {
+  width: 100%;
+  height: 50px;
+}
+
 FIELDSET.delete {
   color: #960000;
 }
@@ -709,6 +729,12 @@ TABLE.worklistBody TR.selected {
 TABLE.worklistBody TR.selected.hover {
   background-color: #ffffc8 !important;
 }
+TABLE.worklistBody tbody.disabled {
+  color: #a7a7a7;
+}
+TABLE.worklistBody tbody.disabled A {
+  color: #a7a7a7;
+}
 
 TABLE.calendar {
   width: 98%;
@@ -1049,16 +1075,6 @@ UL.bubbles.chooser-container LI {
 UL.bubbles.chooser-container LI A {
   color: black;
 }
-UL.bubbles.chooser-container LI IMG.cerb-avatar {
-  height: 16px;
-  width: 16px;
-  margin-right: 3px;
-  -webkit-border-radius: 16px;
-  -moz-border-radius: 16px;
-  -ms-border-radius: 16px;
-  border-radius: 16px;
-  vertical-align: middle;
-}
 UL.bubbles.chooser-container LI .glyphicons-circle-remove {
   cursor: pointer;
   position: absolute;
@@ -1068,6 +1084,17 @@ UL.bubbles.chooser-container LI .glyphicons-circle-remove {
 }
 UL.bubbles.chooser-container LI:hover .glyphicons-circle-remove {
   visibility: visible;
+}
+
+IMG.cerb-avatar {
+  height: 16px;
+  width: 16px;
+  margin-right: 3px;
+  -webkit-border-radius: 16px;
+  -moz-border-radius: 16px;
+  -ms-border-radius: 16px;
+  border-radius: 16px;
+  vertical-align: middle;
 }
 
 DIV.badge-count {
@@ -1106,7 +1133,9 @@ DIV.badge A {
   color: white;
 }
 DIV.badge.selected {
-  border: 2px dashed;
+  border: 1px dashed;
+  background: none;
+  background-color: #fffaa0;
 }
 
 DIV.badge-lightgray {
@@ -1194,6 +1223,9 @@ FIELDSET.properties {
 FIELDSET.properties LEGEND {
   color: #323232;
 }
+FIELDSET.properties LEGEND A {
+  color: inherit;
+}
 FIELDSET.properties DIV.property {
   width: 32%;
   padding-right: 1%;
@@ -1236,6 +1268,14 @@ FIELDSET.peek {
 }
 FIELDSET.peek LEGEND {
   color: #007800;
+}
+FIELDSET.peek LEGEND A {
+  color: inherit;
+}
+
+FIELDSET.no-legend {
+  background: none;
+  border: 0;
 }
 
 FIELDSET.peek-noborder {
@@ -1294,12 +1334,6 @@ DIV.cerb-popupmenu {
   -webkit-box-shadow: 0px 0px 15px 0px #afafaf;
   box-shadow: 0px 0px 15px 0px #afafaf;
 }
-DIV.cerb-popupmenu.cerb-float {
-  position: absolute;
-  z-index: 2500;
-  float: left;
-  border: 0;
-}
 DIV.cerb-popupmenu > div.cerb-popupmenu-item {
   padding: 2px;
   font-weight: normal;
@@ -1337,12 +1371,6 @@ UL.cerb-popupmenu {
   -webkit-box-shadow: 0px 0px 15px 0px #afafaf;
   box-shadow: 0px 0px 15px 0px #afafaf;
 }
-UL.cerb-popupmenu.cerb-float {
-  position: absolute;
-  z-index: 2500;
-  float: left;
-  border: 0;
-}
 UL.cerb-popupmenu > LI {
   padding: 2px;
   font-weight: normal;
@@ -1366,6 +1394,13 @@ UL.cerb-popupmenu > LI:hover {
 }
 UL.cerb-popupmenu > LI:hover A {
   color: white;
+}
+
+.cerb-float {
+  position: absolute;
+  z-index: 2500;
+  float: left;
+  border: 0;
 }
 
 .cerb-subpage > H2 {
@@ -1521,6 +1556,114 @@ DIV.emailBodyHtml DIV.block H1, DIV.emailBodyHtml DIV.block H2, DIV.emailBodyHtm
   color: initial;
 }
 
+.cerb-expression-editor UL.expression-toolbar {
+  width: 100%;
+  border: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  max-height: 35em;
+}
+.cerb-expression-editor UL.expression-toolbar LI {
+  color: black;
+}
+.cerb-expression-editor UL.expression-toolbar LI.ui-state-focus {
+  color: inherit;
+  border-color: rgba(200, 200, 200, 0.5);
+  background-color: rgba(128, 128, 128, 0.1);
+}
+.cerb-expression-editor UL.expression-toolbar LI.ui-menu-item {
+  background-color: white;
+}
+.cerb-expression-editor UL.expression-toolbar LI.ui-menu-item:hover {
+  background-color: #f0f0f0;
+  border-color: #f0f0f0;
+}
+.cerb-expression-editor UL.expression-toolbar::-webkit-scrollbar {
+  width: 12px;
+}
+.cerb-expression-editor UL.expression-toolbar::-webkit-scrollbar-track {
+  background-color: whitesmoke;
+  border-radius: 10px;
+}
+.cerb-expression-editor UL.expression-toolbar::-webkit-scrollbar-thumb {
+  background-color: #c8c8c8;
+  border-radius: 10px;
+}
+.cerb-expression-editor .expression:focus {
+  outline: none;
+}
+.cerb-expression-editor .expression SPAN {
+  color: black;
+  font-weight: bold;
+  border-radius: 10px;
+  padding: 0px 6px;
+  background-color: gainsboro;
+}
+.cerb-expression-editor .expression SPAN.default {
+  font-weight: normal;
+  background-color: gainsboro;
+}
+.cerb-expression-editor .expression SPAN.alias {
+  background-color: gainsboro;
+}
+.cerb-expression-editor .expression SPAN.avail {
+  background-color: gainsboro;
+}
+.cerb-expression-editor .expression SPAN.contact {
+  color: #007800;
+  background-color: #ebffcd;
+}
+.cerb-expression-editor .expression SPAN.contact_method {
+  background-color: gainsboro;
+}
+.cerb-expression-editor .expression SPAN.context {
+  background-color: gainsboro;
+}
+.cerb-expression-editor .expression SPAN.date {
+  color: #4493e0;
+  background-color: #d9efff;
+}
+.cerb-expression-editor .expression SPAN.duration {
+  color: #bc7914;
+  background-color: #ffe410;
+}
+.cerb-expression-editor .expression SPAN.entity {
+  background-color: gainsboro;
+}
+.cerb-expression-editor .expression SPAN.event {
+  background-color: gainsboro;
+}
+.cerb-expression-editor .expression SPAN.number {
+  background-color: gainsboro;
+}
+.cerb-expression-editor .expression SPAN.org {
+  background-color: gainsboro;
+}
+.cerb-expression-editor .expression SPAN.phone {
+  background-color: gainsboro;
+}
+.cerb-expression-editor .expression SPAN.place {
+  background-color: gainsboro;
+}
+.cerb-expression-editor .expression SPAN.remind {
+  background-color: gainsboro;
+}
+.cerb-expression-editor .expression SPAN.status {
+  background-color: gainsboro;
+}
+.cerb-expression-editor .expression SPAN.temperature {
+  color: #d4041e;
+  background-color: #f5c8c8;
+}
+.cerb-expression-editor .expression SPAN.time {
+  color: #ff8000;
+  background-color: #fdeec1;
+}
+.cerb-expression-editor .expression SPAN.worker {
+  color: #a93fff;
+  background-color: #e9d9ff;
+}
+
 /* jQueryUI (Redmond theme) */
 .ui-widget,
 .ui-widget input,
@@ -1581,12 +1724,6 @@ UL.ui-menu {
 
 UL.ui-menu li.ui-menu-item {
   color: #4a6e9e;
-  font-weight: normal;
-}
-
-UL.ui-menu li.ui-menu-item.ui-state-focus {
-  background-color: #698cdd;
-  color: white;
   font-weight: normal;
 }
 
@@ -1850,6 +1987,7 @@ UL.ui-autocomplete.ui-menu li.ui-menu-item.ui-state-focus {
   display: inline-block;
   margin: 0px 2px;
   cursor: pointer;
+  border: 1px solid #c8c8c8;
 }
 
 .miniColors-colorPicker {

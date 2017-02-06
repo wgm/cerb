@@ -234,11 +234,7 @@ class DAO_ExampleObject extends Cerb_ORMHelper {
 				SearchFields_ExampleObject::CREATED
 			);
 			
-		$join_sql = "FROM example_object ".
-		
-		// [JAS]: Dynamic table joins
-			(isset($tables['context_link']) ? sprintf("INNER JOIN context_link ON (context_link.to_context = %s AND context_link.to_context_id = example_object.id) ", Cerb_ORMHelper::qstr(Context_ExampleObject::ID)) : " ")
-			;
+		$join_sql = "FROM example_object ";
 		
 		$where_sql = "".
 			(!empty($wheres) ? sprintf("WHERE %s ",implode(' AND ',$wheres)) : "WHERE 1 ");
@@ -250,7 +246,6 @@ class DAO_ExampleObject extends Cerb_ORMHelper {
 			'select' => $select_sql,
 			'join' => $join_sql,
 			'where' => $where_sql,
-			'has_multiple_values' => $has_multiple_values,
 			'sort' => $sort_sql,
 		);
 	}
@@ -276,14 +271,12 @@ class DAO_ExampleObject extends Cerb_ORMHelper {
 		$select_sql = $query_parts['select'];
 		$join_sql = $query_parts['join'];
 		$where_sql = $query_parts['where'];
-		$has_multiple_values = $query_parts['has_multiple_values'];
 		$sort_sql = $query_parts['sort'];
 		
 		$sql =
 			$select_sql.
 			$join_sql.
 			$where_sql.
-			($has_multiple_values ? 'GROUP BY example_object.id ' : '').
 			$sort_sql;
 			
 		if($limit > 0) {
@@ -311,7 +304,7 @@ class DAO_ExampleObject extends Cerb_ORMHelper {
 			// We can skip counting if we have a less-than-full single page
 			if(!(0 == $page && $total < $limit)) {
 				$count_sql =
-					($has_multiple_values ? "SELECT COUNT(DISTINCT example_object.id) " : "SELECT COUNT(example_object.id) ").
+					"SELECT COUNT(example_object.id) ".
 					$join_sql.
 					$where_sql;
 				$total = $db->GetOneSlave($count_sql);
@@ -329,9 +322,6 @@ class SearchFields_ExampleObject extends DevblocksSearchFields {
 	const ID = 'e_id';
 	const NAME = 'e_name';
 	const CREATED = 'e_created';
-	
-	const CONTEXT_LINK = 'cl_context_from';
-	const CONTEXT_LINK_ID = 'cl_context_from_id';
 	
 	const VIRTUAL_WATCHERS = '*_workers';
 	
@@ -384,9 +374,6 @@ class SearchFields_ExampleObject extends DevblocksSearchFields {
 			self::NAME => new DevblocksSearchField(self::NAME, 'example_object', 'name', $translate->_('common.name'), null, true),
 			self::CREATED => new DevblocksSearchField(self::CREATED, 'example_object', 'created', $translate->_('common.created'), null, true),
 			
-			self::CONTEXT_LINK => new DevblocksSearchField(self::CONTEXT_LINK, 'context_link', 'from_context', null, null, false),
-			self::CONTEXT_LINK_ID => new DevblocksSearchField(self::CONTEXT_LINK_ID, 'context_link', 'from_context_id', null, null, false),
-			
 			self::VIRTUAL_WATCHERS => new DevblocksSearchField(self::VIRTUAL_WATCHERS, '*', 'workers', $translate->_('common.watchers'), null, false),
 		);
 		
@@ -428,15 +415,11 @@ class View_ExampleObject extends C4_AbstractView implements IAbstractView_Subtot
 		
 		$this->addColumnsHidden(array(
 			SearchFields_ExampleObject::ID,
-			SearchFields_ExampleObject::CONTEXT_LINK,
-			SearchFields_ExampleObject::CONTEXT_LINK_ID,
 			SearchFields_ExampleObject::VIRTUAL_WATCHERS,
 		));
 		
 		$this->addParamsHidden(array(
 			SearchFields_ExampleObject::ID,
-			SearchFields_ExampleObject::CONTEXT_LINK,
-			SearchFields_ExampleObject::CONTEXT_LINK_ID,
 		));
 		
 		$this->doResetCriteria();
@@ -538,6 +521,14 @@ class View_ExampleObject extends C4_AbstractView implements IAbstractView_Subtot
 					'type' => DevblocksSearchCriteria::TYPE_DATE,
 					'options' => array('param_key' => SearchFields_ExampleObject::CREATED),
 				),
+			'id' => 
+				array(
+					'type' => DevblocksSearchCriteria::TYPE_NUMBER,
+					'options' => array('param_key' => SearchFields_ExampleObject::ID),
+					'examples' => [
+						['type' => 'chooser', 'context' => Context_ExampleObject::ID, 'q' => ''],
+					]
+				),
 			'name' => 
 				array(
 					'type' => DevblocksSearchCriteria::TYPE_TEXT,
@@ -550,6 +541,10 @@ class View_ExampleObject extends C4_AbstractView implements IAbstractView_Subtot
 				),
 		);
 
+		// Add quick search links
+		
+		$fields = self::_appendVirtualFiltersFromQuickSearchContexts('links', $fields, 'links');
+		
 		// Add searchable custom fields
 		
 		//$fields = self::_appendFieldsFromQuickSearchContext('cerberusweb.contexts.example_object', $fields, null);
@@ -568,6 +563,9 @@ class View_ExampleObject extends C4_AbstractView implements IAbstractView_Subtot
 	function getParamFromQuickSearchFieldTokens($field, $tokens) {
 		switch($field) {
 			default:
+				if($field == 'links' || substr($field, 0, 6) == 'links.')
+					return DevblocksSearchCriteria::getContextLinksParamFromTokens($field, $tokens);
+				
 				$search_fields = $this->getQuickSearchFields();
 				return DevblocksSearchCriteria::getParamFromQueryFieldTokens($field, $tokens, $search_fields);
 				break;
@@ -696,6 +694,16 @@ class View_ExampleObject extends C4_AbstractView implements IAbstractView_Subtot
 class Context_ExampleObject extends Extension_DevblocksContext {
 	const ID = 'cerberusweb.contexts.example_object';
 	
+	static function isReadableByActor($models, $actor) {
+		// Everyone can view
+		return CerberusContexts::allowEverything($models);
+	}
+	
+	static function isWriteableByActor($models, $actor) {
+		// Everyone can modify
+		return CerberusContexts::allowEverything($models);
+	}
+	
 	function getRandom() {
 		return DAO_ExampleObject::random();
 	}
@@ -800,10 +808,15 @@ class Context_ExampleObject extends Extension_DevblocksContext {
 		
 		if(!$is_loaded) {
 			$labels = array();
-			CerberusContexts::getContext($context, $context_id, $labels, $values, null, true);
+			CerberusContexts::getContext($context, $context_id, $labels, $values, null, true, true);
 		}
 		
 		switch($token) {
+			case 'links':
+				$links = $this->_lazyLoadLinks($context, $context_id);
+				$values = array_merge($values, $fields);
+				break;
+			
 			case 'watchers':
 				$watchers = array(
 					$token => CerberusContexts::getWatchers($context, $context_id, true),
@@ -812,7 +825,7 @@ class Context_ExampleObject extends Extension_DevblocksContext {
 				break;
 				
 			default:
-				if(substr($token,0,7) == 'custom_') {
+				if(DevblocksPlatform::strStartsWith($token, 'custom_')) {
 					$fields = $this->_lazyLoadCustomFields($token, $context, $context_id);
 					$values = array_merge($values, $fields);
 				}
@@ -859,8 +872,7 @@ class Context_ExampleObject extends Extension_DevblocksContext {
 		
 		if(!empty($context) && !empty($context_id)) {
 			$params_req = array(
-				new DevblocksSearchCriteria(SearchFields_ExampleObject::CONTEXT_LINK,'=',$context),
-				new DevblocksSearchCriteria(SearchFields_ExampleObject::CONTEXT_LINK_ID,'=',$context_id),
+				new DevblocksSearchCriteria(Context_ExampleObject::ID,'in',array($context.':'.$context_id)),
 			);
 		}
 		

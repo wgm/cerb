@@ -2,17 +2,17 @@
 /***********************************************************************
  | Cerb(tm) developed by Webgroup Media, LLC.
  |-----------------------------------------------------------------------
- | All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
+ | All source code & content (c) Copyright 2002-2017, Webgroup Media LLC
  |   unless specifically noted otherwise.
  |
  | This source code is released under the Devblocks Public License.
  | The latest version of this license can be found here:
- | http://cerb.io/license
+ | http://cerb.ai/license
  |
  | By using this software, you acknowledge having read this license
  | and agree to be bound thereby.
  | ______________________________________________________________________
- |	http://cerb.io	    http://webgroup.media
+ |	http://cerb.ai	    http://webgroup.media
  ***********************************************************************/
 
 /*
@@ -796,7 +796,7 @@ class ImportCron extends CerberusCronPageExtension {
 					
 					if(false == ($file_id = DAO_Attachment::getBySha1Hash($sha1_hash, $sFileName))) {
 						$fields = array(
-							DAO_Attachment::DISPLAY_NAME => $sFileName,
+							DAO_Attachment::NAME => $sFileName,
 							DAO_Attachment::MIME_TYPE => $sMimeType,
 							DAO_Attachment::STORAGE_SHA1HASH => $sha1_hash,
 						);
@@ -808,7 +808,7 @@ class ImportCron extends CerberusCronPageExtension {
 					}
 
 					if(!empty($file_id))
-						DAO_AttachmentLink::create($file_id, CerberusContexts::CONTEXT_MESSAGE, $email_id);
+						DAO_Attachment::setLinks(CerberusContexts::CONTEXT_MESSAGE, $email_id, $file_id);
 					
 					unset($sFileContent);
 				}
@@ -1499,9 +1499,9 @@ class MailQueueCron extends CerberusCronPageExtension {
 	}
 };
 
-class Cron_VirtualAttendantScheduledBehavior extends CerberusCronPageExtension {
+class Cron_BotScheduledBehavior extends CerberusCronPageExtension {
 	function run() {
-		$logger = DevblocksPlatform::getConsoleLog('Virtual Attendant Scheduler');
+		$logger = DevblocksPlatform::getConsoleLog('Bot Scheduler');
 		$runtime = microtime(true);
 
 		$stop_time = time() + 20; // [TODO] Make configurable
@@ -1582,7 +1582,7 @@ class SearchCron extends CerberusCronPageExtension {
 		
 		// Loop through search schemas and batch index by ID or timestamp
 		
-		$schemas = DevblocksPlatform::getExtensions('devblocks.search.schema', true, true);
+		$schemas = DevblocksPlatform::getExtensions('devblocks.search.schema', true);
 
 		$stop_time = time() + 30; // [TODO] Make configurable
 		

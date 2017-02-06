@@ -2,17 +2,17 @@
 /***********************************************************************
  | Cerb(tm) developed by Webgroup Media, LLC.
  |-----------------------------------------------------------------------
- | All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
+ | All source code & content (c) Copyright 2002-2017, Webgroup Media LLC
  |   unless specifically noted otherwise.
  |
  | This source code is released under the Devblocks Public License.
  | The latest version of this license can be found here:
- | http://cerb.io/license
+ | http://cerb.ai/license
  |
  | By using this software, you acknowledge having read this license
  | and agree to be bound thereby.
  | ______________________________________________________________________
- |	http://cerb.io	    http://webgroup.media
+ |	http://cerb.ai	    http://webgroup.media
  ***********************************************************************/
 
 abstract class C4_AbstractView {
@@ -149,14 +149,12 @@ abstract class C4_AbstractView {
 		);
 		$join_sql = $query_parts['join'];
 		$where_sql = $query_parts['where'];
-		$has_multiple_values = $query_parts['has_multiple_values'];
 		$sort_sql = sprintf("ORDER BY RAND() LIMIT %d ", $size);
 		
 		$sql =
 			$select_sql.
 			$join_sql.
 			$where_sql.
-			($has_multiple_values ? sprintf("GROUP BY %s.id ", $query_parts['primary_table']) : '').
 			$sort_sql;
 
 		$rs = $db->ExecuteSlave($sql);
@@ -359,7 +357,7 @@ abstract class C4_AbstractView {
 		}
 	}
 	
-	function addParamsWithQuickSearch($query, $replace=true) {
+	function getParamsFromQuickSearch($query) {
 		if(!($this instanceof IAbstractView_QuickSearch))
 			return false;
 		
@@ -397,28 +395,30 @@ abstract class C4_AbstractView {
 			}
 		}
 		
-		// [TODO] Remove this in PHP 5.4+
-		$view = $this;
-		
 		// Convert fields T_FIELD to DevblocksSearchCriteria
 		
-		array_walk_recursive($fields, function(&$v, $k) use ($view) {
+		array_walk_recursive($fields, function(&$v, $k) use (&$fields) {
 			if($v instanceof DevblocksSearchCriteria) {
-				$param = $view->getParamFromQuickSearchFieldTokens($v->key, $v->tokens);
+				$param = $this->getParamFromQuickSearchFieldTokens($v->key, $v->tokens);
 				
 				if($param instanceof DevblocksSearchCriteria) {
 					$v = $param;
 				} else {
-					$v = new DevblocksSearchCriteria('_unknown', DevblocksSearchCriteria::OPER_FALSE);
+					//$v = new DevblocksSearchCriteria('_unknown', DevblocksSearchCriteria::OPER_FALSE);
+					unset($fields[$k]);
 				}
 			}
 		});
 		
+		return $fields;
+	}
+	
+	function addParamsWithQuickSearch($query, $replace=true) {
+		$fields = $this->getParamsFromQuickSearch($query);
 		$this->addParams($fields, $replace);
 		$this->renderPage = 0;
 	}
 	
-	// [TODO] Test this
 	function _getSortFromQuickSearchQuery($sort_query) {
 		$sort_results = array(
 			'sort_by' => array(),
@@ -482,6 +482,10 @@ abstract class C4_AbstractView {
 		$this->_paramsEditable = array();
 	}
 	
+	function removeAllParamsRequired() {
+		$this->_paramsRequired = array();
+	}
+	
 	// Params Default
 	
 	function addParamsDefault($params, $replace=false) {
@@ -497,11 +501,22 @@ abstract class C4_AbstractView {
 	
 	// Params Required
 	
+	function addParamRequired($param, $key=null) {
+		if(!$key || is_numeric($key))
+			$key = uniqid();
+		
+		$this->_paramsRequired[$key] = $param;
+	}
+	
 	function addParamsRequired($params, $replace=false) {
 		if($replace)
-			$this->_paramsRequired = $params;
-		else
-			$this->_paramsRequired = array_merge($this->_paramsRequired, $params);
+			$this->removeAllParamsRequired();
+		
+		if(is_array($params))
+		foreach($params as $key => $param) {
+			$key = is_numeric($key) ? null : $key;
+			$this->addParamRequired($param, $key);
+		}
 	}
 	
 	function getParamsRequired() {
@@ -691,6 +706,42 @@ abstract class C4_AbstractView {
 		return $string;
 	}
 	
+	protected function _checkFulltextMarquee() {
+		// Add search meta output to the view marquee
+		$meta = DevblocksPlatform::getRegistryKey('fulltext_meta', DevblocksRegistryEntry::TYPE_JSON, '[]');
+		
+		if(!empty($meta)) {
+			$marquees = array();
+			
+			if(is_array($meta))
+			foreach($meta as $results) {
+				if(is_array($results)
+					&& isset($results['results'])
+					&& isset($results['took_ms'])
+					&& isset($results['engine'])
+					) {
+					
+					$marquees[] = sprintf("Found %s %s hit%s for <b>%s</b> [%s: %d ms%s, max %d]",
+						number_format($results['results']),
+						str_replace('_',' ', $results['ns']),
+						($results['results']==1) ? '' : 's',
+						DevblocksPlatform::strEscapeHtml($results['query']),
+						$results['engine'],
+						$results['took_ms'],
+						(isset($results['is_cached']) && $results['is_cached']) ? ', cached' : '',
+						$results['max']
+					);
+				}
+			}
+			
+			if(!empty($marquees)) {
+				C4_AbstractView::setMarquee($this->id, implode('<br>', $marquees));
+			}
+			
+			DevblocksPlatform::setRegistryKey('fulltext_meta', array(), DevblocksRegistryEntry::TYPE_JSON, false);
+		}
+	}
+	
 	// Render
 	
 	function render() {
@@ -743,13 +794,25 @@ abstract class C4_AbstractView {
 		
 		$values = is_array($param->value) ? $param->value : array($param->value);
 		
+		if(is_callable($label_map))
+			$label_map = $label_map($values);
+		
 		foreach($values as $v) {
 			$strings[] = sprintf("<b>%s</b>",
 				DevblocksPlatform::strEscapeHtml((isset($label_map[$v]) ? $label_map[$v] : $v))
 			);
 		}
 		
-		echo implode(' or ', $strings);
+		$list_of_strings = implode(' or ', $strings);
+		
+		if(count($strings) > 2) {
+			$list_of_strings = sprintf("any of <abbr style='font-weight:bold;' title='%s'>(%d values)</abbr>",
+				strip_tags($list_of_strings),
+				count($strings)
+			);
+		}
+		
+		echo $list_of_strings;
 	}
 	
 	protected function _renderCriteriaParamBoolean($param) {
@@ -816,9 +879,23 @@ abstract class C4_AbstractView {
 		$tpl->display('devblocks:cerberusweb.core::internal/views/criteria/__list.tpl');
 	}
 	
-	protected function _renderVirtualContextLinks($param, $label_singular='Link', $label_plural='Links') {
+	protected function _renderVirtualContextLinks($param, $label_singular='Link', $label_plural='Links', $label_verb='Linked to') {
 		$strings = array();
 		
+		if($param->operator == DevblocksSearchCriteria::OPER_CUSTOM) {
+			@list($alias, $query) = explode(':', $param->value, 2);
+			
+			if(empty($alias) || (false == ($mft = Extension_DevblocksContext::getByAlias($alias, false))))
+				return;
+			
+			$aliases = Extension_DevblocksContext::getAliasesForContext($mft);
+			$alias = !empty($aliases['plural_short']) ? $aliases['plural_short'] : $aliases['plural'];
+			
+			echo sprintf("%s %s <b>%s</b>", DevblocksPlatform::strEscapeHtml($label_verb), DevblocksPlatform::strEscapeHtml($alias), DevblocksPlatform::strEscapeHtml($query));
+			return;
+		}
+		
+		if(is_array($param->value))
 		foreach($param->value as $context_data) {
 			@list($context, $context_id) = explode(':',$context_data);
 			
@@ -1163,6 +1240,41 @@ abstract class C4_AbstractView {
 		return $criteria;
 	}
 	
+	protected function _appendVirtualFiltersFromQuickSearchContexts($prefix, $fields=array(), $option='search') {
+		$context_mfts = Extension_DevblocksContext::getAll(false, [$option]);
+		
+		$fields[$prefix] = array(
+			'type' => DevblocksSearchCriteria::TYPE_VIRTUAL,
+			'options' => array(),
+		);
+		
+		foreach($context_mfts as $context_mft) {
+			$aliases = Extension_DevblocksContext::getAliasesForContext($context_mft);
+			
+			$alias = $aliases['uri'];
+			
+			if(empty($alias))
+				continue;
+			
+			$field = array(
+				'type' => DevblocksSearchCriteria::TYPE_VIRTUAL,
+				'options' => array(),
+				'examples' => [
+					['type' => 'search', 'context' => $context_mft->id, 'q' => ''],
+				]
+			);
+			
+			if($context_mft->id == CerberusContexts::CONTEXT_APPLICATION)
+				$field['examples'] = [
+					['type' => 'list', 'values' => ['Cerb' => 'Cerb']],
+				];
+			
+			$fields[$prefix.'.'.str_replace(' ', '.', $alias)] = $field;
+		}
+		
+		return $fields;
+	}
+	
 	protected function _appendFieldsFromQuickSearchContext($context, $fields=array(), $prefix=null) {
 		$custom_fields = DAO_CustomField::getByContext($context, true, false);
 		$custom_fieldsets = DAO_CustomFieldset::getAll();
@@ -1473,6 +1585,167 @@ abstract class C4_AbstractView {
 		);
 	}
 	
+	// [TODO] Cache this?
+	function getQuickSearchMenu() {
+		if(!$this instanceof IAbstractView_QuickSearch)
+			return;
+		
+		$menu = array();
+		
+		// Operators
+		
+		$oper_menu = new DevblocksMenuItemPlaceholder();
+		
+		$item = new DevblocksMenuItemPlaceholder();
+		$item->label = 'AND';
+		$item->l = 'AND';
+		$item->key = 'AND';
+		$oper_menu->children['AND'] = $item;
+		
+		$item = new DevblocksMenuItemPlaceholder();
+		$item->label = 'OR';
+		$item->l = 'OR';
+		$item->key = 'OR';
+		$oper_menu->children['OR'] = $item;
+		
+		$menu['(operators)'] = $oper_menu;
+		
+		// Fields
+		
+		$fields_menu = new DevblocksMenuItemPlaceholder();
+		$search_fields = $this->getQuickSearchFields();
+		
+		if(!empty($search_fields)) {
+			$labels = array_keys($search_fields);
+			$keys = array_map(function($field) {
+				return $field.':';
+			}, $labels);
+			
+			$tree = Extension_DevblocksContext::getPlaceholderTree(array_combine($keys, $labels), '.', '.');
+			
+			$recurseAddOptions = function(DevblocksMenuItemPlaceholder &$node) use (&$recurseAddOptions, $search_fields) {
+				$key = substr($node->key, 0, -1);
+				
+				foreach($node->children as $child)
+					$recurseAddOptions($child);
+				
+				if(!isset($search_fields[$key]))
+					return;
+				
+				if(!isset($search_fields[$key]['examples'])) {
+					switch($search_fields[$key]['type']) {
+						case DevblocksSearchCriteria::TYPE_BOOL:
+							$search_fields[$key]['examples'] = [
+								'yes',
+								'no',
+							];
+							break;
+							
+						case DevblocksSearchCriteria::TYPE_DATE:
+							$search_fields[$key]['examples'] = [
+								'"-2 hours"',
+								sprintf('"%s-01-01 to %s"', date('Y'), date('Y-m-d')),
+								'"-1 month to now"',
+								'"big bang to -1 year"',
+							];
+							break;
+							
+						case DevblocksSearchCriteria::TYPE_NUMBER:
+							$search_fields[$key]['examples'] = [
+								'50',
+								'<10',
+								'>=25',
+								'1...100',
+								'!10',
+							];
+							break;
+					}
+				}
+				
+				if(isset($search_fields[$key]['examples'])) {
+					$examples_menu = new DevblocksMenuItemPlaceholder();
+					
+					foreach($search_fields[$key]['examples'] as $example) {
+						
+						// Literal example
+						if(is_string($example)) {
+							$item = new DevblocksMenuItemPlaceholder();
+							$item->label = $example;
+							$item->l = $example;
+							$item->key = $node->key . $example;
+							$examples_menu->children[$example] = $item;
+							
+						// Structured example
+						} else if(is_array($example)) {
+							switch($example['type']) {
+								case 'chooser':
+									$item = new DevblocksMenuItemPlaceholder();
+									$item->label = '(chooser)';
+									$item->l = '(chooser)';
+									$item->key = $node->key;
+									$item->type = $example['type'];
+									$item->params = $example;
+									$node->children[$example['label']] = $item;
+									break;
+								
+								case 'list':
+									$key_delimiter = @$example['key_delimiter'] ?: ' ';
+									$label_delimiter = @$example['label_delimiter'] ?: ' ';
+									
+									$values = array_combine(
+										array_map(function($k) use ($node) {
+											return $node->key . $k;
+										}, array_keys($example['values'])),
+										$example['values']
+									);
+									
+									$node->children = Extension_DevblocksContext::getPlaceholderTree($values, $label_delimiter, $key_delimiter);
+									break;
+									
+								case 'search':
+									$item = new DevblocksMenuItemPlaceholder();
+									$item->label = '(search)';
+									$item->l = '(search)';
+									$item->key = $node->key;
+									$item->type = $example['type'];
+									$item->params = $example;
+									$node->children[$example['label']] = $item;
+									break;
+							}
+						}
+					}
+					
+					if(!empty($examples_menu))
+						$node->children['(examples)'] = $examples_menu;
+				}
+			};
+
+			if(is_array($tree))
+			foreach($tree as $node)
+				$recurseAddOptions($node);
+			
+			foreach($tree as $k => $v)
+				$menu[$k] = $v;
+		}
+		
+		// Placeholders
+		
+		$placeholders_menu = new DevblocksMenuItemPlaceholder();
+		$labels = $this->getPlaceholderLabels();
+		
+		if(!empty($labels)) {
+			$keys = array_map(function($key) {
+				return '{{' . $key . '}}';
+			}, array_keys($labels));
+			
+			$labels = array_combine($keys, array_column($labels, 'label'));
+			$placeholders_menu->children = Extension_DevblocksContext::getPlaceholderTree($labels, ' ', '_');
+			$menu['(placeholders)'] = $placeholders_menu;
+		}
+		
+		return $menu;
+	}
+	
 	function renderSubtotals() {
 		if(!$this instanceof IAbstractView_Subtotals)
 			return;
@@ -1491,6 +1764,9 @@ abstract class C4_AbstractView {
 			$counts = array_slice($counts, 0, 20);
 		
 		$tpl->assign('subtotal_counts', $counts);
+		
+		// Reset any accumulated fulltext meta
+		DevblocksPlatform::setRegistryKey('fulltext_meta', array(), DevblocksRegistryEntry::TYPE_JSON, false);
 		
 		$tpl->display('devblocks:cerberusweb.core::internal/views/sidebar.tpl');
 	}
@@ -1579,12 +1855,16 @@ abstract class C4_AbstractView {
 		$counts = array();
 		$results = $this->_getSubtotalDataForColumn($context, $field_key);
 		
+		if(is_callable($label_map)) {
+			$label_map = $label_map(array_column($results, 'label'));
+		}
+		
 		foreach($results as $result) {
 			$label = $result['label'];
 			$key = $label;
 			$hits = $result['hits'];
 
-			if(isset($label_map[$result['label']]))
+			if(is_array($label_map) && isset($label_map[$result['label']]))
 				$label = $label_map[$result['label']];
 			
 			// Null strings
@@ -2649,12 +2929,18 @@ interface IAbstractView_Subtotals {
 };
 
 class CerbQuickSearchLexer {
-	private static function _recurse($token, $key, $callback) {
+	private static function _recurse($token, $key, $node_callback, $after_children_callback=null) {
+		if(!is_callable($node_callback))
+			return;
+		
 		if(empty($key) || $token->type == $key)
-			$callback($token);
+			$node_callback($token);
 		
 		foreach($token->children as $child)
-			self::_recurse($child, $key, $callback);
+			self::_recurse($child, $key, $node_callback, $after_children_callback);
+		
+		if(is_callable($after_children_callback))
+			$after_children_callback($token);
 	}
 	
 	static function buildParams($token, &$parent) {
@@ -3022,6 +3308,89 @@ class CerbQuickSearchLexer {
 		}
 		
 		return true;
+	}
+	
+	static function getTokensAsQuery($tokens) {
+		$string = null;
+		$group_stack = [];
+		
+		$node_callback = function($token) use (&$string, &$group_stack) {
+			switch($token->type) {
+				case 'T_NOT':
+					$string .= '!';
+					break;
+					
+				case 'T_GROUP':
+					$string .= '(';
+					$group_stack[] = $token->value;
+					break;
+					
+				case 'T_ARRAY':
+					$string .= '[' . implode(',', $token->value) . ']';
+					break;
+					
+				case 'T_QUOTED_TEXT':
+					$string .= '"' . $token->value;
+					break;
+					
+				case 'T_TEXT':
+					if($string && !DevblocksPlatform::strEndsWith($string, ['(',':']))
+						$string .= ' ';
+						
+					$string .= $token->value;
+					break;
+					
+				case 'T_FIELD':
+					// AND/OR separators
+					if($string && !DevblocksPlatform::strEndsWith($string, ['(',':']) && end($group_stack)) {
+						if(!DevblocksPlatform::strEndsWith($string, [' ']))
+							$string .= ' ';
+						
+						$string .= end($group_stack);
+					}
+					
+					if(!DevblocksPlatform::strEndsWith($string, [' ','(']))
+						$string .= ' ';
+					
+					switch($token->value) {
+						case 'text':
+							break;
+							
+						default:
+							$string .= $token->value . ':';
+							break;
+					}
+					break;
+			}
+		};
+		
+		$after_children_callback = function($token) use (&$string, &$group_stack) {
+			switch($token->type) {
+				case 'T_GROUP':
+					$string = rtrim($string) . ')';
+					array_pop($group_stack);
+					break;
+					
+				case 'T_ARRAY':
+					break;
+					
+				case 'T_QUOTED_TEXT':
+					$string .= '"';
+					break;
+					
+				case 'T_TEXT':
+					break;
+					
+				case 'T_FIELD':
+					$string .= ' ';
+					break;
+			}
+		};
+		
+		if(is_array($tokens) && isset($tokens[0]))
+			self::_recurse($tokens[0], null, $node_callback, $after_children_callback);
+		
+		return $string;
 	}
 	
 	static function getHumanTimeTokensAsNumbers($tokens, $interval=1) {

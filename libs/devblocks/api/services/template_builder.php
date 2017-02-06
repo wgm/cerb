@@ -91,6 +91,14 @@ class _DevblocksTemplateBuilder {
 		}
 	}
 	
+	function addFilter($name, $filter) {
+		return $this->_twig->addFilter($name, $function);
+	}
+	
+	function addFunction($name, $function) {
+		return $this->_twig->addFunction($name, $function);
+	}
+	
 	/**
 	 *
 	 * @param string $template
@@ -252,6 +260,9 @@ class DevblocksDictionaryDelegate {
 		if(!$with_meta) {
 			unset($dict['_labels']);
 			unset($dict['_types']);
+			unset($dict['__simulator_output']);
+			unset($dict['__trigger']);
+			unset($dict['__exit']);
 		}
 		
 		// Convert any nested dictionaries to arrays
@@ -278,9 +289,23 @@ class DevblocksDictionaryDelegate {
 	public function scrubKeys($prefix) {
 		if(is_array($this->_dictionary))
 		foreach(array_keys($this->_dictionary) as $key) {
-			if($prefix == substr($key, 0, strlen($prefix)))
+			if(DevblocksPlatform::strStartsWith($key, $prefix))
 				unset($this->_dictionary[$key]);
 		}
+	}
+	
+	public function extract($prefix) {
+		$values = [];
+		
+		if(is_array($this->_dictionary))
+		foreach(array_keys($this->_dictionary) as $key) {
+			if(DevblocksPlatform::strStartsWith($key, $prefix)) {
+				$new_key = substr($key, strlen($prefix));
+				$values[$new_key] = $this->_dictionary[$key];
+			}
+		}
+		
+		return DevblocksDictionaryDelegate::instance($values);
 	}
 	
 	public static function getDictionariesFromModels(array $models, $context, array $keys=array()) {
@@ -294,7 +319,9 @@ class DevblocksDictionaryDelegate {
 			$labels = array();
 			$values = array();
 			CerberusContexts::getContext($context, $model, $labels, $values, null, true, true);
-			$dicts[$model_id] = DevblocksDictionaryDelegate::instance($values);
+			
+			if(isset($values['id']))
+				$dicts[$model_id] = DevblocksDictionaryDelegate::instance($values);
 		}
 		
 		// Batch load extra keys
@@ -412,15 +439,16 @@ class _DevblocksTwigExtensions extends Twig_Extension {
 	
 	public function getFunctions() {
 		return array(
-			'array_diff' => new Twig_Function_Method($this, 'function_array_diff'),
-			'dict_set' => new Twig_Function_Method($this, 'function_dict_set'),
-			'json_decode' => new Twig_Function_Method($this, 'function_json_decode'),
-			'jsonpath_set' => new Twig_Function_Method($this, 'function_jsonpath_set'),
-			'regexp_match_all' => new Twig_Function_Method($this, 'function_regexp_match_all'),
-			'xml_decode' => new Twig_Function_Method($this, 'function_xml_decode'),
-			'xml_encode' => new Twig_Function_Method($this, 'function_xml_encode'),
-			'xml_xpath_ns' => new Twig_Function_Method($this, 'function_xml_xpath_ns'),
-			'xml_xpath' => new Twig_Function_Method($this, 'function_xml_xpath'),
+			new Twig_SimpleFunction('array_diff', [$this, 'function_array_diff']),
+			new Twig_SimpleFunction('cerb_file_url', [$this, 'function_cerb_file_url']),
+			new Twig_SimpleFunction('dict_set', [$this, 'function_dict_set']),
+			new Twig_SimpleFunction('json_decode', [$this, 'function_json_decode']),
+			new Twig_SimpleFunction('jsonpath_set', [$this, 'function_jsonpath_set']),
+			new Twig_SimpleFunction('regexp_match_all', [$this, 'function_regexp_match_all']),
+			new Twig_SimpleFunction('xml_decode', [$this, 'function_xml_decode']),
+			new Twig_SimpleFunction('xml_encode', [$this, 'function_xml_encode']),
+			new Twig_SimpleFunction('xml_xpath_ns', [$this, 'function_xml_xpath_ns']),
+			new Twig_SimpleFunction('xml_xpath', [$this, 'function_xml_xpath']),
 		);
 	}
 	
@@ -429,6 +457,15 @@ class _DevblocksTwigExtensions extends Twig_Extension {
 			return;
 		
 		return array_diff($arr1, $arr2);
+	}
+	
+	function function_cerb_file_url($id) {
+		$url_writer = DevblocksPlatform::getUrlService();
+		
+		if(false == ($file = DAO_Attachment::get($id)))
+			return null;
+		
+		return $url_writer->write(sprintf('c=files&id=%d&name=%s', $id, rawurlencode($file->name)), true, true);
 	}
 	
 	function function_json_decode($str) {
@@ -560,18 +597,34 @@ class _DevblocksTwigExtensions extends Twig_Extension {
 	
 	public function getFilters() {
 		return array(
-			'bytes_pretty' => new Twig_Filter_Method($this, 'filter_bytes_pretty'),
-			'date_pretty' => new Twig_Filter_Method($this, 'filter_date_pretty'),
-			'json_pretty' => new Twig_Filter_Method($this, 'filter_json_pretty'),
-			'md5' => new Twig_Filter_Method($this, 'filter_md5'),
-			'nlp_parse' => new Twig_Filter_Method($this, 'filter_nlp_parse'),
-			'parse_emails' => new Twig_Filter_Method($this, 'filter_parse_emails'),
-			'regexp' => new Twig_Filter_Method($this, 'filter_regexp'),
-			'secs_pretty' => new Twig_Filter_Method($this, 'filter_secs_pretty'),
-			'split_crlf' => new Twig_Filter_Method($this, 'filter_split_crlf'),
-			'split_csv' => new Twig_Filter_Method($this, 'filter_split_csv'),
-			'truncate' => new Twig_Filter_Method($this, 'filter_truncate'),
+			new Twig_SimpleFilter('base64_encode', [$this, 'filter_base64_encode']),
+			new Twig_SimpleFilter('base64_decode', [$this, 'filter_base64_decode']),
+			new Twig_SimpleFilter('bytes_pretty', [$this, 'filter_bytes_pretty']),
+			new Twig_SimpleFilter('date_pretty', [$this, 'filter_date_pretty']),
+			new Twig_SimpleFilter('json_pretty', [$this, 'filter_json_pretty']),
+			new Twig_SimpleFilter('md5', [$this, 'filter_md5']),
+			new Twig_SimpleFilter('parse_emails', [$this, 'filter_parse_emails']),
+			new Twig_SimpleFilter('regexp', [$this, 'filter_regexp']),
+			new Twig_SimpleFilter('secs_pretty', [$this, 'filter_secs_pretty']),
+			new Twig_SimpleFilter('split_crlf', [$this, 'filter_split_crlf']),
+			new Twig_SimpleFilter('split_csv', [$this, 'filter_split_csv']),
+			new Twig_SimpleFilter('truncate', [$this, 'filter_truncate']),
+			new Twig_SimpleFilter('url_decode', [$this, 'filter_url_decode']),
 		);
+	}
+	
+	function filter_base64_encode($string) {
+		if(!is_string($string))
+			return '';
+		
+		return base64_encode($string);
+	}
+	
+	function filter_base64_decode($string) {
+		if(!is_string($string))
+			return '';
+		
+		return base64_decode($string);
 	}
 	
 	function filter_bytes_pretty($string, $precision='0') {
@@ -602,27 +655,6 @@ class _DevblocksTwigExtensions extends Twig_Extension {
 		return md5($string);
 	}
 	
-	function filter_nlp_parse($string, $patterns) {
-		if(!is_string($string))
-			return '';
-		
-		if(!is_array($patterns))
-			$patterns = array($patterns);
-		
-		$nlp = DevblocksPlatform::getNaturalLanguageService();
-		
-		if(is_array($patterns))
-		foreach($patterns as $pattern) {
-			if(!is_string($pattern))
-				continue;
-
-			if(false !== ($json = $nlp->parseTextWithPattern($string, $pattern)))
-				return json_encode($json);
-		}
-		 
-		return null;
-	}
-	
 	function filter_parse_emails($string) {
 		if(!is_string($string))
 			return '';
@@ -630,7 +662,7 @@ class _DevblocksTwigExtensions extends Twig_Extension {
 		$results = CerberusMail::parseRfcAddresses($string);
 		return $results;
 	}
-	
+
 	function filter_regexp($string, $pattern, $group = 0) {
 		if(!is_string($string))
 			return '';
@@ -690,6 +722,33 @@ class _DevblocksTwigExtensions extends Twig_Extension {
 			return mb_substr($value, 0, $length, LANG_CHARSET_CODE) . $separator;
 		}
 		return $value;
+	}
+	
+	function filter_url_decode($string, $as='') {
+		if(!is_string($string))
+			return '';
+		
+		switch(strtolower($as)) {
+			case 'json':
+				$array = array();
+				@parse_str($string, $array);
+				return json_encode($array);
+				break;
+			
+			default:
+				return rawurldecode($string);
+				break;
+		}
+	}
+	
+	public function getTests() {
+		return array(
+			new Twig_SimpleTest('numeric', [$this, 'test_numeric']),
+		);
+	}
+	
+	function test_numeric($value) {
+		return is_numeric($value);
 	}
 };
 endif;

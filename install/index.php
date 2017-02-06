@@ -2,22 +2,22 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2017, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
 | The latest version of this license can be found here:
-| http://cerb.io/license
+| http://cerb.ai/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://cerb.io	    http://webgroup.media
+|	http://cerb.ai	    http://webgroup.media
 ***********************************************************************/
 
-if(version_compare(PHP_VERSION, "5.3", "<")) {
+if(version_compare(PHP_VERSION, "5.5", "<")) {
 	header('Status: 500');
-	die("Cerb requires PHP 5.3 or later.");
+	die("Cerb requires PHP 5.5 or later.");
 }
 
 if(!extension_loaded('mysqli')) {
@@ -130,7 +130,7 @@ switch($step) {
 		$fails = 0;
 		
 		// PHP Version
-		if(version_compare(PHP_VERSION,"5.3") >=0) {
+		if(version_compare(PHP_VERSION,"5.5") >=0) {
 			$results['php_version'] = PHP_VERSION;
 		} else {
 			$results['php_version'] = false;
@@ -277,6 +277,14 @@ switch($step) {
 			$results['ext_json'] = true;
 		} else {
 			$results['ext_json'] = false;
+			$fails++;
+		}
+		
+		// Extension: OpenSSL
+		if(extension_loaded("openssl")) {
+			$results['ext_openssl'] = true;
+		} else {
+			$results['ext_openssl'] = false;
 			$fails++;
 		}
 		
@@ -1005,7 +1013,7 @@ EOF;
 	case STEP_FINISHED:
 		
 		// Set up the default cron jobs
-		$crons = DevblocksPlatform::getExtensions('cerberusweb.cron', true, true);
+		$crons = DevblocksPlatform::getExtensions('cerberusweb.cron', true);
 		if(is_array($crons))
 		foreach($crons as $id => $cron) { /* @var $cron CerberusCronPageExtension */
 			switch($id) {
@@ -1042,7 +1050,5 @@ EOF;
 }
 
 // [TODO] Check apache rewrite (somehow)
-
-// [TODO] Check if safe_mode is disabled, and if so set our php.ini overrides in the framework.config.php rewrite
 
 $tpl->display('base.tpl');

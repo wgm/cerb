@@ -2,17 +2,17 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2017, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
 | The latest version of this license can be found here:
-| http://cerb.io/license
+| http://cerb.ai/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://cerb.io	    http://webgroup.media
+|	http://cerb.ai	    http://webgroup.media
 ***********************************************************************/
 
 class Controller_Avatars extends DevblocksControllerExtension {
@@ -47,10 +47,17 @@ class Controller_Avatars extends DevblocksControllerExtension {
 				break;
 		}
 		
-		// Look up the context extension
-		if(empty($alias) || false == ($avatar_context_mft = Extension_DevblocksContext::getByAlias($alias, false)))
-			$this->_renderDefaultAvatar();
+		$contexts = Extension_DevblocksContext::getAll(false);
+		$avatar_context_mft = null;
 
+		// Allow full context extension IDs
+		if(isset($contexts[$alias]))
+			$avatar_context_mft = $contexts[$alias];
+		
+		// Look up the context extension
+		if(empty($alias) || (empty($avatar_context_mft) && false == ($avatar_context_mft = Extension_DevblocksContext::getByAlias($alias, false))))
+			$this->_renderDefaultAvatar();
+		
 		// Look up the avatar record
 		if(false != ($avatar = DAO_ContextAvatar::getByContext($avatar_context_mft->id, $avatar_context_id))) {
 			$this->_renderAvatar($avatar);
@@ -243,7 +250,7 @@ class Controller_Avatars extends DevblocksControllerExtension {
 				$this->_renderFilePng(APP_PATH . sprintf('/features/cerberusweb.core/resources/images/avatars/person%d.png', $n));
 				break;
 				
-			case CerberusContexts::CONTEXT_VIRTUAL_ATTENDANT:
+			case CerberusContexts::CONTEXT_BOT:
 				$this->_renderFilePng(APP_PATH . '/features/cerberusweb.core/resources/images/avatars/va.png');
 				break;
 				

@@ -1,13 +1,27 @@
 {$node = $nodes[$node_id]}
 
-{if isset($path.$node_id)}
+{if in_array($node_id, $path)}
 
 {* Label *}
 <div class="node {$node->node_type}">
-	{if $node->node_type == 'switch'}
+	{if $node->node_type == 'subroutine'}
+		<div class="badge badge-lightgray" style="margin:2px;">
+			<a href="javascript:;" style="text-decoration:none;font-weight:bold;color:rgb(50,50,50);">
+				{$node->title}
+			</a>
+		</div>
+
+	{elseif $node->node_type == 'switch'}
 		<div class="badge badge-lightgray" style="margin:2px;">
 			<a href="javascript:;" style="text-decoration:none;font-weight:bold;color:rgb(68,154,220);">
 				{$node->title}
+			</a>
+		</div>
+		
+	{elseif $node->node_type == 'loop'}
+		<div class="badge badge-lightgray" style="margin:2px;">
+			<a href="javascript:;" style="text-decoration:none;font-weight:bold;color:rgb(100,100,100);">
+				<span style="font-weight:normal;">&#x27f3;</span> {$node->title}
 			</a>
 		</div>
 	

@@ -4,7 +4,7 @@
 	<name>Cerb Core</name>
 	<description>The core functionality of Cerb.</description>
 	<author>Webgroup Media, LLC.</author>
-	<version>7.2.4</version>
+	<version>7.3.0</version>
 	<link>http://www.cerbweb.com/</link>
 	
 	<!-- Plugin Dependencies -->
@@ -59,6 +59,7 @@
 		<patch version="7.0.0" revision="1127" file="patches/7.x/7.0.0.php" />
 		<patch version="7.1.0" revision="1141" file="patches/7.x/7.1.0.php" />
 		<patch version="7.2.0" revision="1167" file="patches/7.x/7.2.0.php" />
+		<patch version="7.3.0" revision="1190" file="patches/7.x/7.3.0.php" />
 	</patches>
 
 	<!-- Exported Classes -->
@@ -74,6 +75,9 @@
 			<class name="ChTaskSource_Ticket" />
 			<class name="CerbMailTransport_Null" />
 			<class name="CerbMailTransport_Smtp" />
+			<class name="IServiceProvider_HttpRequestSigner" />
+			<class name="IServiceProvider_OAuth" />
+			<class name="IServiceProvider_Popup" />
 		</file>
 		
 		<file path="api/dao/abstract_view.php">
@@ -108,21 +112,23 @@
 		
 		<file path="api/dao/attachment.php">
 			<class name="Context_Attachment" />
-			<class name="Context_AttachmentLink" />
 			<class name="DAO_Attachment" />
-			<class name="DAO_AttachmentLink" />
 			<class name="Model_Attachment" />
-			<class name="Model_AttachmentLink" />
 			<class name="SearchFields_Attachment" />
-			<class name="SearchFields_AttachmentLink" />
 			<class name="Storage_Attachments" />
-			<class name="View_AttachmentLink" />
+			<class name="View_Attachment" />
 		</file>
 		
 		<file path="api/dao/bayes.php">
 			<class name="CerberusBayes" />
 			<class name="DAO_Bayes" />
 			<class name="Model_BayesWord" />
+		</file>
+		
+		<file path="api/dao/bot_session.php">
+			<class name="DAO_BotSession" />
+			<class name="Model_BotSession" />
+			<class name="SearchFields_BotSession" />
 		</file>
 		
 		<file path="api/dao/bucket.php">
@@ -162,6 +168,38 @@
 			<class name="Model_CerbPlugin" />
 			<class name="SearchFields_CerbPlugin" />
 			<class name="View_CerbPlugin" />
+		</file>
+		
+		<file path="api/dao/classifier.php">
+			<class name="Context_Classifier" />
+			<class name="DAO_Classifier" />
+			<class name="Model_Classifier" />
+			<class name="SearchFields_Classifier" />
+			<class name="View_Classifier" />
+		</file>
+		
+		<file path="api/dao/classifier_class.php">
+			<class name="Context_ClassifierClass" />
+			<class name="DAO_ClassifierClass" />
+			<class name="Model_ClassifierClass" />
+			<class name="SearchFields_ClassifierClass" />
+			<class name="View_ClassifierClass" />
+		</file>
+		
+		<file path="api/dao/classifier_entity.php">
+			<class name="Context_ClassifierEntity" />
+			<class name="DAO_ClassifierEntity" />
+			<class name="Model_ClassifierEntity" />
+			<class name="SearchFields_ClassifierEntity" />
+			<class name="View_ClassifierEntity" />
+		</file>
+		
+		<file path="api/dao/classifier_example.php">
+			<class name="Context_ClassifierExample" />
+			<class name="DAO_ClassifierExample" />
+			<class name="Model_ClassifierExample" />
+			<class name="SearchFields_ClassifierExample" />
+			<class name="View_ClassifierExample" />
 		</file>
 		
 		<file path="api/dao/comment.php">
@@ -215,6 +253,10 @@
 			<class name="View_ContextActivityLog" />
 		</file>
 		
+		<file path="api/dao/context_alias.php">
+			<class name="DAO_ContextAlias" />
+		</file>
+		
 		<file path="api/dao/context_avatar.php">
 			<class name="DAO_ContextAvatar" />
 			<class name="Model_ContextAvatar" />
@@ -226,6 +268,14 @@
 			<class name="DAO_ContextBulkUpdate" />
 			<class name="Model_ContextBulkUpdate" />
 			<class name="SearchFields_ContextBulkUpdate" />
+		</file>
+		
+		<file path="api/dao/connected_account.php">
+			<class name="Context_ConnectedAccount" />
+			<class name="DAO_ConnectedAccount" />
+			<class name="Model_ConnectedAccount" />
+			<class name="SearchFields_ConnectedAccount" />
+			<class name="View_ConnectedAccount" />
 		</file>
 		
 		<file path="api/dao/context_link.php">
@@ -329,6 +379,7 @@
 		</file>
 
 		<file path="api/dao/message.php">
+			<class name="Context_Message" />
 			<class name="DAO_Message" />
 			<class name="Model_Message" />
 			<class name="Search_MessageContent" />
@@ -374,6 +425,7 @@
 		</file>
 		
 		<file path="api/dao/snippet.php">
+			<class name="Context_Snippet" />
 			<class name="DAO_Snippet" />
 			<class name="Model_Snippet" />
 			<class name="Search_Snippet" />
@@ -398,6 +450,7 @@
 		</file>
 		
 		<file path="api/dao/trigger_event.php">
+			<class name="Context_TriggerEvent" />
 			<class name="DAO_TriggerEvent" />
 			<class name="Model_TriggerEvent" />
 			<class name="SearchFields_TriggerEvent" />
@@ -410,12 +463,12 @@
 			<class name="SearchFields_ViewFiltersPreset" />
 		</file>
 		
-		<file path="api/dao/virtual_attendant.php">
-			<class name="Context_VirtualAttendant" />
-			<class name="DAO_VirtualAttendant" />
-			<class name="Model_VirtualAttendant" />
-			<class name="SearchFields_VirtualAttendant" />
-			<class name="View_VirtualAttendant" />
+		<file path="api/dao/bot.php">
+			<class name="Context_Bot" />
+			<class name="DAO_Bot" />
+			<class name="Model_Bot" />
+			<class name="SearchFields_Bot" />
+			<class name="View_Bot" />
 		</file>
 		
 		<file path="api/dao/worker.php">
@@ -432,6 +485,8 @@
 			<class name="Context_WorkerRole" />
 			<class name="DAO_WorkerRole" />
 			<class name="Model_WorkerRole" />
+			<class name="SearchFields_WorkerRole" />
+			<class name="View_WorkerRole" />
 		</file>
 		
 		<file path="api/dao/notification.php">
@@ -515,8 +570,8 @@
 			<class name="AbstractEvent_Ticket" />
 		</file>
 		
-		<file path="api/events/abstract/abstract_event_virtual_attendant.php">
-			<class name="AbstractEvent_VirtualAttendant" />
+		<file path="api/events/abstract/abstract_event_bot.php">
+			<class name="AbstractEvent_Bot" />
 		</file>
 		
 		<file path="api/events/abstract/abstract_event_worker.php">
@@ -623,12 +678,16 @@
 			<class name="Event_TicketMacro" />
 		</file>
 		
-		<file path="api/events/macro/virtual_attendant_macro.php">
-			<class name="Event_VirtualAttendantMacro" />
+		<file path="api/events/macro/bot_macro.php">
+			<class name="Event_BotMacro" />
 		</file>
 		
 		<file path="api/events/macro/worker_macro.php">
 			<class name="Event_WorkerMacro" />
+		</file>
+		
+		<file path="api/events/interaction/interaction_chat_worker.php">
+			<class name="Event_InteractionChatWorker" />
 		</file>
 		
 		<file path="api/events/ui/ui_before_reply_by_worker.php">
@@ -654,10 +713,6 @@
 		<file path="api/uri/config/mail_failed.php">
 			<class name="SearchFields_MailParseFail" />
 			<class name="View_MailParseFail" />
-		</file>
-		
-		<file path="api/uri/internal/virtual_attendants.php">
-			<class name="Subcontroller_Internal_VirtualAttendants" />
 		</file>
 		
 		<file path="api/uri/portal.php">
@@ -923,7 +978,6 @@
 		<priv id="context.worker.worklist.broadcast" label="acl.context.worker.worklist.broadcast" />
 	
 		<!-- Addy Book -->
-		<priv id="core.addybook" label="acl.core.addybook" />
 		<priv id="core.addybook.addy.actions.update" label="acl.core.addybook.addy.actions.update" />
 		<priv id="core.addybook.addy.view.actions.broadcast" label="acl.core.addybook.addy.view.actions.broadcast" />
 		<priv id="core.addybook.addy.view.actions.export" label="acl.core.addybook.addy.view.actions.export" />
@@ -936,7 +990,6 @@
 
 		<!-- Display Ticket -->
 		<priv id="core.display.actions.attachments.download" label="acl.core.display.actions.attachments.download" />
-		<priv id="core.display.actions.comment" label="acl.core.display.actions.comment" />
 		<priv id="core.display.actions.forward" label="acl.core.display.actions.forward" />
 		<priv id="core.display.actions.note" label="acl.core.display.actions.note" />
 		<priv id="core.display.actions.reply" label="acl.core.display.actions.reply" />
@@ -988,18 +1041,24 @@
 				<name>Context_Application</name>
 			</class>
 			<params>
+				<param key="names">
+					<value>
+						<data key="application" value="singular" />
+						<data key="applications" value="plural" />
+						<data key="app" value="singular short" />
+						<data key="apps" value="plural short" />
+					</value>
+				</param>
 				<param key="alias" value="app" />
 				<param key="dao_class" value="" />
 				<param key="view_class" value="" />
 				<param key="options">
-					<!--
 					<value>
-						<data key="create" />
-						<data key="find" />
-						<data key="snippets" />
-						<data key="workspace" />
+						<data key="owner" />
+						<!--
+						<data key="links" />
+						-->
 					</value>
-					-->
 				</param>
 			</params>
 		</extension>
@@ -1012,17 +1071,23 @@
 				<name>Context_Attachment</name>
 			</class>
 			<params>
+				<param key="names">
+					<value>
+						<data key="attachment" value="singular" />
+						<data key="attachments" value="plural" />
+						<data key="file" value="singular short" />
+						<data key="files" value="plural short" />
+					</value>
+				</param>
 				<param key="alias" value="attachment" />
 				<param key="dao_class" value="DAO_Attachment" />
 				<param key="view_class" value="" />
 				<param key="options">
 					<value>
-						<!--
-						<data key="create" />
-						<data key="find" />
-						<data key="snippets" />
+						<data key="cards" />
+						<data key="links" />
+						<data key="search" />
 						<data key="workspace" />
-						-->
 						<data key="va_variable" />
 					</value>
 				</param>
@@ -1030,25 +1095,32 @@
 		</extension>
 		
 		<extension point="devblocks.context">
-			<id>cerberusweb.contexts.attachment_link</id>
-			<name>Attachment Link</name>
+			<id>cerberusweb.contexts.connected_account</id>
+			<name>Connected Account</name>
 			<class>
-				<file>api/dao/attachment.php</file>
-				<name>Context_AttachmentLink</name>
+				<file>api/dao/connected_account.php</file>
+				<name>Context_ConnectedAccount</name>
 			</class>
 			<params>
-				<param key="alias" value="attachment_link" />
-				<param key="dao_class" value="DAO_AttachmentLink" />
-				<param key="view_class" value="View_AttachmentLink" />
-				<param key="options">
-					<!--
+				<param key="names">
 					<value>
-						<data key="create" />
-						<data key="find" />
-						<data key="snippets" />
+						<data key="connected account" value="singular" />
+						<data key="connected accounts" value="plural" />
+						<data key="account" value="singular" />
+						<data key="accounts" value="plural" />
+					</value>
+				</param>
+				<param key="alias" value="connected_account" />
+				<param key="dao_class" value="DAO_ConnectedAccount" />
+				<param key="view_class" value="View_ConnectedAccount" />
+				<param key="options">
+					<value>
+						<data key="cards" />
+						<data key="custom_fields" />
+						<data key="links" />
+						<data key="search" />
 						<data key="workspace" />
 					</value>
-					-->
 				</param>
 			</params>
 		</extension>
@@ -1061,16 +1133,148 @@
 				<name>Context_Contact</name>
 			</class>
 			<params>
+				<param key="names">
+					<value>
+						<data key="contact" value="singular short" />
+						<data key="contacts" value="plural short" />
+						<data key="person" value="singular short" />
+						<data key="people" value="plural short" />
+					</value>
+				</param>
 				<param key="alias" value="contact" />
 				<param key="dao_class" value="DAO_Contact" />
 				<param key="view_class" value="View_Contact" />
 				<param key="options">
 					<value>
+						<data key="autocomplete" />
 						<data key="cards" />
 						<data key="create" />
 						<data key="custom_fields" />
-						<data key="find" />
+						<data key="links" />
+						<data key="search" />
 						<data key="snippets" />
+						<data key="va_variable" />
+						<data key="workspace" />
+					</value>
+				</param>
+			</params>
+		</extension>
+		
+		<extension point="devblocks.context">
+			<id>cerberusweb.contexts.classifier</id>
+			<name>Classifier</name>
+			<class>
+				<file>api/dao/classifier.php</file>
+				<name>Context_Classifier</name>
+			</class>
+			<params>
+				<param key="names">
+					<value>
+						<data key="classifier" value="singular" />
+						<data key="classifiers" value="plural" />
+					</value>
+				</param>
+				<param key="alias" value="classifier" />
+				<param key="dao_class" value="DAO_Classifier" />
+				<param key="view_class" value="View_Classifier" />
+				<param key="options">
+					<value>
+						<data key="cards" />
+						<data key="custom_fields" />
+						<data key="links" />
+						<data key="search" />
+						<data key="va_variable" />
+						<data key="workspace" />
+					</value>
+				</param>
+			</params>
+		</extension>
+		
+		<extension point="devblocks.context">
+			<id>cerberusweb.contexts.classifier.class</id>
+			<name>Classifier Classification</name>
+			<class>
+				<file>api/dao/classifier_class.php</file>
+				<name>Context_ClassifierClass</name>
+			</class>
+			<params>
+				<param key="names">
+					<value>
+						<data key="classification" value="singular" />
+						<data key="classifications" value="plural" />
+					</value>
+				</param>
+				<param key="alias" value="classifier_class" />
+				<param key="dao_class" value="DAO_ClassifierClass" />
+				<param key="view_class" value="View_ClassifierClass" />
+				<param key="options">
+					<value>
+						<data key="cards" />
+						<data key="custom_fields" />
+						<data key="links" />
+						<!-- <data key="search" /> -->
+						<data key="va_variable" />
+						<data key="workspace" />
+					</value>
+				</param>
+			</params>
+		</extension>
+		
+		<extension point="devblocks.context">
+			<id>cerberusweb.contexts.classifier.entity</id>
+			<name>Classifier Entity</name>
+			<class>
+				<file>api/dao/classifier_entity.php</file>
+				<name>Context_ClassifierEntity</name>
+			</class>
+			<params>
+				<param key="names">
+					<value>
+						<data key="classifier entity" value="singular" />
+						<data key="classifier entities" value="plural" />
+						<data key="entity" value="singular short" />
+						<data key="entities" value="plural short" />
+					</value>
+				</param>
+				<param key="alias" value="classifier_entity" />
+				<param key="dao_class" value="DAO_ClassifierEntity" />
+				<param key="view_class" value="View_ClassifierEntity" />
+				<param key="options">
+					<value>
+						<data key="cards" />
+						<data key="links" />
+						<data key="search" />
+						<data key="va_variable" />
+						<data key="workspace" />
+					</value>
+				</param>
+			</params>
+		</extension>
+		
+		<extension point="devblocks.context">
+			<id>cerberusweb.contexts.classifier.example</id>
+			<name>Classifier Example</name>
+			<class>
+				<file>api/dao/classifier_example.php</file>
+				<name>Context_ClassifierExample</name>
+			</class>
+			<params>
+				<param key="names">
+					<value>
+						<data key="classifier example" value="singular" />
+						<data key="classifier examples" value="plural" />
+						<data key="example" value="singular short" />
+						<data key="examples" value="plural short" />
+					</value>
+				</param>
+				<param key="alias" value="classifier_example" />
+				<param key="dao_class" value="DAO_ClassifierExample" />
+				<param key="view_class" value="View_ClassifierExample" />
+				<param key="options">
+					<value>
+						<data key="cards" />
+						<data key="links" />
+						<!-- <data key="search" /> -->
 						<data key="va_variable" />
 						<data key="workspace" />
 					</value>
@@ -1086,16 +1290,23 @@
 				<name>Context_CustomField</name>
 			</class>
 			<params>
+				<param key="names">
+					<value>
+						<data key="custom field" value="singular" />
+						<data key="custom fields" value="plural" />
+						<data key="field" value="singular short" />
+						<data key="fields" value="plural short" />
+						<data key="cfield" value="singular short" />
+						<data key="cfields" value="plural short" />
+					</value>
+				</param>
 				<param key="alias" value="custom_field" />
 				<param key="dao_class" value="DAO_CustomField" />
 				<param key="view_class" value="" />
 				<param key="options">
 					<!--
 					<value>
-						<data key="create" />
-						<data key="find" />
-						<data key="snippets" />
-						<data key="workspace" />
+						<data key="search" />
 					</value>
 					-->
 				</param>
@@ -1110,15 +1321,29 @@
 				<name>Context_Address</name>
 			</class>
 			<params>
+				<param key="names">
+					<value>
+						<data key="email address" value="singular" />
+						<data key="email addresses" value="plural" />
+						<data key="address" value="singular short" />
+						<data key="addresses" value="plural short" />
+						<data key="sender" value="singular short" />
+						<data key="senders" value="plural short" />
+						<data key="addy" value="singular short" />
+						<data key="addys" value="plural short" />
+					</value>
+				</param>
 				<param key="alias" value="address" />
 				<param key="dao_class" value="DAO_Address" />
 				<param key="view_class" value="View_Address" />
 				<param key="options">
 					<value>
+						<data key="autocomplete" />
 						<data key="cards" />
 						<data key="create" />
 						<data key="custom_fields" />
-						<data key="find" />
+						<data key="links" />
+						<data key="search" />
 						<data key="snippets" />
 						<data key="va_variable" />
 						<data key="workspace" />
@@ -1136,6 +1361,12 @@
 				<name>Context_Bucket</name>
 			</class>
 			<params>
+				<param key="names">
+					<value>
+						<data key="bucket" value="singular" />
+						<data key="buckets" value="plural" />
+					</value>
+				</param>
 				<param key="alias" value="bucket" />
 				<param key="dao_class" value="DAO_Bucket" />
 				<param key="view_class" value="View_Bucket" />
@@ -1143,7 +1374,8 @@
 					<value>
 						<data key="cards" />
 						<data key="custom_fields" />
-						<data key="find" />
+						<data key="links" />
+						<data key="search" />
 						<data key="snippets" />
 						<data key="va_variable" />
 						<data key="workspace" />
@@ -1160,6 +1392,12 @@
 				<name>Context_Calendar</name>
 			</class>
 			<params>
+				<param key="names">
+					<value>
+						<data key="calendar" value="singular" />
+						<data key="calendars" value="plural" />
+					</value>
+				</param>
 				<param key="alias" value="calendar" />
 				<param key="dao_class" value="DAO_Calendar" />
 				<param key="view_class" value="View_Calendar" />
@@ -1167,7 +1405,8 @@
 					<value>
 						<data key="create" />
 						<data key="custom_fields" />
-						<data key="find" />
+						<data key="links" />
+						<data key="search" />
 						<data key="snippets" />
 						<data key="va_variable" />
 						<data key="workspace" />
@@ -1185,6 +1424,14 @@
 				<name>Context_CalendarEvent</name>
 			</class>
 			<params>
+				<param key="names">
+					<value>
+						<data key="calendar event" value="singular" />
+						<data key="calendar events" value="plural" />
+						<data key="event" value="singular short" />
+						<data key="events" value="plural short" />
+					</value>
+				</param>
 				<param key="alias" value="calendar_event" />
 				<param key="dao_class" value="DAO_CalendarEvent" />
 				<param key="view_class" value="View_CalendarEvent" />
@@ -1192,8 +1439,8 @@
 					<value>
 						<data key="create" />
 						<data key="custom_fields" />
-						<data key="find" />
-						<!--<data key="snippets" />-->
+						<data key="links" />
+						<data key="search" />
 						<data key="va_variable" />
 						<data key="workspace" />
 					</value>
@@ -1201,8 +1448,6 @@
 				<param key="context_expand_export" value="calendar_" />
 			</params>
 		</extension>
-		
-		<!-- Contexts -->
 		
 		<extension point="devblocks.context">
 			<id>cerberusweb.contexts.calendar_event.recurring</id>
@@ -1212,6 +1457,14 @@
 				<name>Context_CalendarRecurringProfile</name>
 			</class>
 			<params>
+				<param key="names">
+					<value>
+						<data key="calendar recurring event" value="singular" />
+						<data key="calendar recurring events" value="plural" />
+						<data key="recurring event" value="singular short" />
+						<data key="recurring events" value="plural short" />
+					</value>
+				</param>
 				<param key="alias" value="calendar_recurring_event" />
 				<param key="dao_class" value="DAO_CalendarRecurringProfile" />
 				<param key="view_class" value="View_CalendarRecurringProfile" />
@@ -1219,8 +1472,8 @@
 					<value>
 						<data key="create" />
 						<data key="custom_fields" />
-						<data key="find" />
-						<!-- <data key="snippets" /> -->
+						<data key="links" />
+						<data key="search" />
 						<data key="va_variable" />
 						<data key="workspace" />
 					</value>
@@ -1237,15 +1490,28 @@
 				<name>Context_Comment</name>
 			</class>
 			<params>
+				<param key="names">
+					<value>
+						<data key="comment" value="singular" />
+						<data key="comments" value="plural" />
+						<data key="note" value="singular" />
+						<data key="notes" value="plural" />
+					</value>
+				</param>
 				<param key="alias" value="comment" />
 				<param key="dao_class" value="DAO_Comment" />
 				<param key="view_class" value="View_Comment" />
-				<!--
 				<param key="options">
 					<value>
+						<data key="cards" />
+						<data key="create" />
+						<data key="custom_fields" />
+						<data key="links" />
+						<data key="search" />
+						<data key="va_variable" />
+						<data key="workspace" />
 					</value>
 				</param>
-				-->
 			</params>
 		</extension>
 		
@@ -1257,14 +1523,24 @@
 				<name>Context_CustomFieldset</name>
 			</class>
 			<params>
+				<param key="names">
+					<value>
+						<data key="custom fieldset" value="singular" />
+						<data key="custom fieldsets" value="plural" />
+						<data key="fieldset" value="singular short" />
+						<data key="fieldsets" value="plural short" />
+					</value>
+				</param>
 				<param key="alias" value="custom_fieldset" />
 				<param key="dao_class" value="DAO_CustomFieldset" />
 				<param key="view_class" value="View_CustomFieldset" />
 				<param key="options">
 					<value>
+						<!--<data key="cards" />-->
 						<!--<data key="create" />-->
-						<data key="find" />
-						<!--<data key="snippets" />-->
+						<data key="links" />
+						<data key="search" />
+						<data key="va_variable" />
 						<data key="workspace" />
 					</value>
 				</param>
@@ -1279,12 +1555,25 @@
 				<name>Context_ContextActivityLog</name>
 			</class>
 			<params>
+				<param key="names">
+					<value>
+						<data key="activity log" value="singular" />
+						<data key="activity logs" value="plural" />
+						<data key="log" value="singular short" />
+						<data key="logs" value="plural short" />
+						<data key="activity" value="singular short" />
+						<data key="activities" value="plural short" />
+						<data key="audit log" value="singular" />
+						<data key="audit logs" value="plural" />
+					</value>
+				</param>
 				<param key="alias" value="activity_log" />
 				<param key="dao_class" value="DAO_ContextActivityLog" />
 				<param key="view_class" value="View_ContextActivityLog" />
 				<param key="options">
 					<value>
-						<data key="find" />
+						<!-- <data key="links" /> -->
+						<data key="search" />
 						<data key="va_variable" />
 						<data key="workspace" />
 					</value>
@@ -1300,14 +1589,18 @@
 				<name>Context_Draft</name>
 			</class>
 			<params>
+				<param key="names">
+					<value>
+						<data key="draft" value="singular" />
+						<data key="drafts" value="plural" />
+					</value>
+				</param>
 				<param key="alias" value="draft" />
 				<param key="dao_class" value="DAO_MailQueue" />
 				<param key="view_class" value="View_MailQueue" />
 				<param key="options">
 					<value>
-						<!--<data key="create" />-->
-						<!--<data key="find" />-->
-						<!--<data key="snippets" />-->
+						<data key="search" />
 						<data key="va_variable" />
 						<data key="workspace" />
 					</value>
@@ -1323,14 +1616,24 @@
 				<name>Context_FileBundle</name>
 			</class>
 			<params>
+				<param key="names">
+					<value>
+						<data key="file bundle" value="singular" />
+						<data key="file bundles" value="plural" />
+						<data key="bundle" value="singular short" />
+						<data key="bundles" value="plural short" />
+					</value>
+				</param>
 				<param key="alias" value="file_bundle" />
 				<param key="dao_class" value="DAO_FileBundle" />
 				<param key="view_class" value="View_FileBundle" />
 				<param key="options">
 					<value>
+						<data key="autocomplete" />
 						<data key="create" />
 						<data key="custom_fields" />
-						<data key="find" />
+						<data key="links" />
+						<data key="search" />
 						<data key="snippets" />
 						<data key="va_variable" />
 						<data key="workspace" />
@@ -1347,19 +1650,26 @@
 				<name>Context_MailHtmlTemplate</name>
 			</class>
 			<params>
+				<param key="names">
+					<value>
+						<data key="html template" value="singular" />
+						<data key="html templates" value="plural" />
+						<data key="mail template" value="singular" />
+						<data key="mail templates" value="plural" />
+					</value>
+				</param>
 				<param key="alias" value="html_template" />
 				<param key="dao_class" value="DAO_MailHtmlTemplate" />
 				<param key="view_class" value="View_MailHtmlTemplate" />
 				<param key="options">
 					<value>
-						<!-- 
-						<data key="custom_fields" />
-						<data key="snippets" />
+						<!--
+						<data key="search" /> 
 						<data key="va_variable" />
 						<data key="workspace" />
 						-->
 						<data key="create" />
-						<data key="find" />
+						<data key="links" />
 					</value>
 				</param>
 			</params>
@@ -1373,6 +1683,14 @@
 				<name>Context_Group</name>
 			</class>
 			<params>
+				<param key="names">
+					<value>
+						<data key="group" value="singular" />
+						<data key="groups" value="plural" />
+						<data key="team" value="singular" />
+						<data key="teams" value="plural" />
+					</value>
+				</param>
 				<param key="alias" value="group" />
 				<param key="dao_class" value="DAO_Group" />
 				<param key="view_class" value="View_Group" />
@@ -1380,7 +1698,9 @@
 					<value>
 						<data key="cards" />
 						<data key="custom_fields" />
-						<data key="find" />
+						<data key="links" />
+						<data key="owner" />
+						<data key="search" />
 						<data key="snippets" />
 						<data key="va_variable" />
 						<data key="workspace" />
@@ -1397,19 +1717,20 @@
 				<name>Context_MailTransport</name>
 			</class>
 			<params>
+				<param key="names">
+					<value>
+						<data key="mail transport" value="singular" />
+						<data key="mail transports" value="plural" />
+						<data key="transport" value="singular short" />
+						<data key="transports" value="plural short" />
+					</value>
+				</param>
 				<param key="alias" value="mail_transport" />
 				<param key="dao_class" value="DAO_MailTransport" />
 				<param key="view_class" value="View_MailTransport" />
 				<param key="options">
 					<value>
 						<data key="custom_fields" />
-						<!--
-						<data key="create" />
-						<data key="find" />
-						<data key="snippets" />
-						<data key="va_variable" />
-						<data key="workspace" />
-						-->
 					</value>
 				</param>
 			</params>
@@ -1423,6 +1744,16 @@
 				<name>Context_Message</name>
 			</class>
 			<params>
+				<param key="names">
+					<value>
+						<data key="message" value="singular" />
+						<data key="messages" value="plural" />
+						<data key="msg" value="singular short" />
+						<data key="msgs" value="plural short" />
+						<data key="email" value="singular short" />
+						<data key="emails" value="plural short" />
+					</value>
+				</param>
 				<param key="alias" value="message" />
 				<param key="dao_class" value="DAO_Message" />
 				<param key="view_class" value="View_Message" />
@@ -1430,6 +1761,8 @@
 					<value>
 						<data key="cards" />
 						<data key="custom_fields" />
+						<data key="links" />
+						<data key="search" />
 						<data key="snippets" />
 						<data key="va_variable" />
 						<data key="workspace" />
@@ -1447,12 +1780,21 @@
 				<name>Context_Notification</name>
 			</class>
 			<params>
+				<param key="names">
+					<value>
+						<data key="notification" value="singular" />
+						<data key="notifications" value="plural" />
+						<data key="alert" value="singular" />
+						<data key="alerts" value="plural" />
+					</value>
+				</param>
 				<param key="alias" value="notification" />
 				<param key="dao_class" value="DAO_Notification" />
 				<param key="view_class" value="View_Notification" />
 				<param key="options">
 					<value>
-						<!--<data key="snippets" />-->
+						<data key="links" />
+						<data key="search" />
 						<data key="va_variable" />
 						<data key="workspace" />
 					</value>
@@ -1468,6 +1810,18 @@
 				<name>Context_Org</name>
 			</class>
 			<params>
+				<param key="names">
+					<value>
+						<data key="organization" value="singular" />
+						<data key="organizations" value="plural" />
+						<data key="org" value="singular short" />
+						<data key="orgs" value="plural short" />
+						<data key="account" value="singular" />
+						<data key="accounts" value="plural" />
+						<data key="company" value="singular" />
+						<data key="companies" value="plural" />
+					</value>
+				</param>
 				<param key="alias" value="org" />
 				<param key="dao_class" value="DAO_ContactOrg" />
 				<param key="view_class" value="View_ContactOrg" />
@@ -1476,7 +1830,8 @@
 						<data key="cards" />
 						<data key="create" />
 						<data key="custom_fields" />
-						<data key="find" />
+						<data key="links" />
+						<data key="search" />
 						<data key="snippets" />
 						<data key="va_variable" />
 						<data key="workspace" />
@@ -1493,19 +1848,18 @@
 				<name>Context_Mailbox</name>
 			</class>
 			<params>
+				<param key="names">
+					<value>
+						<data key="mailbox" value="singular" />
+						<data key="mailboxes" value="plural" />
+					</value>
+				</param>
 				<param key="alias" value="mailbox" />
 				<param key="dao_class" value="DAO_Mailbox" />
 				<param key="view_class" value="View_Mailbox" />
 				<param key="options">
 					<value>
 						<data key="custom_fields" />
-						<!--
-						<data key="create" />
-						<data key="find" />
-						<data key="snippets" />
-						<data key="va_variable" />
-						<data key="workspace" />
-						-->
 					</value>
 				</param>
 			</params>
@@ -1519,6 +1873,12 @@
 				<name>Context_Skill</name>
 			</class>
 			<params>
+				<param key="names">
+					<value>
+						<data key="skill" value="singular" />
+						<data key="skills" value="plural" />
+					</value>
+				</param>
 				<param key="alias" value="skill" />
 				<param key="dao_class" value="DAO_Skill" />
 				<param key="view_class" value="View_Skill" />
@@ -1527,7 +1887,8 @@
 						<data key="custom_fields" />
 						<!--
 						<data key="create" />
-						<data key="find" />
+						<data key="links" />
+						<data key="search" />
 						<data key="snippets" />
 						<data key="va_variable" />
 						<data key="workspace" />
@@ -1545,6 +1906,14 @@
 				<name>Context_Skillset</name>
 			</class>
 			<params>
+				<param key="names">
+					<value>
+						<data key="skillset" value="singular" />
+						<data key="skillsets" value="plural" />
+						<data key="skill set" value="singular" />
+						<data key="skill sets" value="plural" />
+					</value>
+				</param>
 				<param key="alias" value="skillset" />
 				<param key="dao_class" value="DAO_Skillset" />
 				<param key="view_class" value="View_Skillset" />
@@ -1553,7 +1922,8 @@
 						<data key="custom_fields" />
 						<!--
 						<data key="create" />
-						<data key="find" />
+						<data key="links" />
+						<data key="search" />
 						<data key="snippets" />
 						<data key="va_variable" />
 						<data key="workspace" />
@@ -1571,15 +1941,22 @@
 				<name>Context_Snippet</name>
 			</class>
 			<params>
+				<param key="names">
+					<value>
+						<data key="snippet" value="singular" />
+						<data key="snippets" value="plural" />
+					</value>
+				</param>
 				<param key="alias" value="snippet" />
 				<param key="dao_class" value="DAO_Snippet" />
 				<param key="view_class" value="View_Snippet" />
 				<param key="options">
 					<value>
-						<!--<data key="create" />-->
+						<data key="cards" />
 						<data key="custom_fields" />
-						<data key="find" />
-						<!--<data key="snippets" />-->
+						<data key="links" />
+						<data key="search" />
+						<data key="va_variable" />
 						<data key="workspace" />
 					</value>
 				</param>
@@ -1595,6 +1972,12 @@
 				<name>Context_Task</name>
 			</class>
 			<params>
+				<param key="names">
+					<value>
+						<data key="task" value="singular" />
+						<data key="tasks" value="plural" />
+					</value>
+				</param>
 				<param key="alias" value="task" />
 				<param key="dao_class" value="DAO_Task" />
 				<param key="view_class" value="View_Task" />
@@ -1603,7 +1986,8 @@
 						<data key="cards" />
 						<data key="create" />
 						<data key="custom_fields" />
-						<data key="find" />
+						<data key="links" />
+						<data key="search" />
 						<data key="snippets" />
 						<data key="va_variable" />
 						<data key="workspace" />
@@ -1620,15 +2004,28 @@
 				<name>Context_Ticket</name>
 			</class>
 			<params>
+				<param key="names">
+					<value>
+						<data key="ticket" value="singular" />
+						<data key="tickets" value="plural" />
+						<data key="mail" value="singular plural short" />
+						<data key="conversation" value="singular" />
+						<data key="conversations" value="plural" />
+						<data key="convo" value="singular short" />
+						<data key="convos" value="plural short" />
+					</value>
+				</param>
 				<param key="alias" value="ticket" />
 				<param key="dao_class" value="DAO_Ticket" />
 				<param key="view_class" value="View_Ticket" />
 				<param key="options">
 					<value>
+						<data key="autocomplete" />
 						<data key="cards" />
 						<data key="create" />
 						<data key="custom_fields" />
-						<data key="find" />
+						<data key="links" />
+						<data key="search" />
 						<data key="snippets" />
 						<data key="va_variable" />
 						<data key="workspace" />
@@ -1639,22 +2036,64 @@
 		</extension>
 		
 		<extension point="devblocks.context">
-			<id>cerberusweb.contexts.virtual.attendant</id>
-			<name>Virtual Attendant</name>
+			<id>cerberusweb.contexts.behavior</id>
+			<name>Behavior</name>
 			<class>
-				<file>api/dao/virtual_attendant.php</file>
-				<name>Context_VirtualAttendant</name>
+				<file>api/dao/trigger_event.php</file>
+				<name>Context_TriggerEvent</name>
 			</class>
 			<params>
-				<param key="alias" value="virtual_attendant" />
-				<param key="dao_class" value="DAO_VirtualAttendant" />
-				<param key="view_class" value="View_VirtualAttendant" />
+				<param key="names">
+					<value>
+						<data key="behavior" value="singular" />
+						<data key="behaviors" value="plural" />
+					</value>
+				</param>
+				<param key="alias" value="behavior" />
+				<param key="dao_class" value="DAO_TriggerEvent" />
+				<param key="view_class" value="View_TriggerEvent" />
 				<param key="options">
 					<value>
+						<data key="cards" />
+						<data key="custom_fields" />
+						<data key="search" />
+						<data key="workspace" />
+						<data key="va_variable" />
+					</value>
+				</param>
+			</params>
+		</extension>
+		
+		<extension point="devblocks.context">
+			<id>cerberusweb.contexts.bot</id>
+			<name>Bot</name>
+			<class>
+				<file>api/dao/bot.php</file>
+				<name>Context_Bot</name>
+			</class>
+			<params>
+				<param key="names">
+					<value>
+						<data key="bot" value="singular" />
+						<data key="bots" value="plural" />
+						<data key="virtual attendant" value="singular" />
+						<data key="virtual attendants" value="plural" />
+						<data key="virtual agent" value="singular" />
+						<data key="virtual agents" value="plural" />
+					</value>
+				</param>
+				<param key="alias" value="bot" />
+				<param key="dao_class" value="DAO_Bot" />
+				<param key="view_class" value="View_Bot" />
+				<param key="options">
+					<value>
+						<data key="autocomplete" />
+						<data key="cards" />
 						<data key="create" />
 						<data key="custom_fields" />
-						<data key="find" />
-						<!--<data key="snippets" />-->
+						<data key="links" />
+						<data key="owner" />
+						<data key="search" />
 						<data key="va_variable" />
 						<data key="workspace" />
 					</value>
@@ -1670,15 +2109,32 @@
 				<name>Context_Worker</name>
 			</class>
 			<params>
+				<param key="names">
+					<value>
+						<data key="worker" value="singular" />
+						<data key="workers" value="plural" />
+						<data key="employee" value="singular" />
+						<data key="employees" value="plural" />
+						<data key="agent" value="singular" />
+						<data key="agents" value="plural" />
+						<data key="staff" value="plural" />
+						<data key="staff member" value="singular" />
+						<data key="staff members" value="plural" />
+						<data key="team member" value="singular" />
+						<data key="team members" value="plural" />
+					</value>
+				</param>
 				<param key="alias" value="worker" />
 				<param key="dao_class" value="DAO_Worker" />
 				<param key="view_class" value="View_Worker" />
 				<param key="options">
 					<value>
-						<!--<data key="create" />-->
+						<data key="autocomplete" />
 						<data key="cards" />
 						<data key="custom_fields" />
-						<data key="find" />
+						<data key="links" />
+						<data key="owner" />
+						<data key="search" />
 						<data key="snippets" />
 						<data key="va_variable" />
 						<data key="workspace" />
@@ -1696,18 +2152,25 @@
 				<name>Context_WorkerRole</name>
 			</class>
 			<params>
+				<param key="names">
+					<value>
+						<data key="role" value="singular" />
+						<data key="roles" value="plural" />
+					</value>
+				</param>
 				<param key="alias" value="role" />
 				<param key="dao_class" value="DAO_WorkerRole" />
 				<param key="view_class" value="View_WorkerRole" />
 				<param key="options">
-					<!--
 					<value>
-						<data key="create" />
-						<data key="find" />
-						<data key="snippets" />
+						<data key="cards" />
+						<data key="custom_fields" />
+						<data key="links" />
+						<data key="owner" />
+						<data key="search" />
+						<data key="va_variable" />
 						<data key="workspace" />
 					</value>
-					-->
 				</param>
 			</params>
 		</extension>
@@ -1720,16 +2183,22 @@
 				<name>Context_WorkspacePage</name>
 			</class>
 			<params>
+				<param key="names">
+					<value>
+						<data key="workspace page" value="singular" />
+						<data key="workspace pages" value="plural" />
+						<data key="page" value="singular short" />
+						<data key="pages" value="plural short" />
+					</value>
+				</param>
 				<param key="alias" value="workspace_page" />
 				<param key="dao_class" value="DAO_WorkspacePage" />
 				<param key="view_class" value="View_WorkspacePage" />
 				<param key="options">
 					<value>
-						<!--<data key="create" />-->
-						<!--<data key="find" />-->
-						<!--<data key="snippets" />-->
-						<!--<data key="va_variable" />-->
-						<!--<data key="workspace" />-->
+						<data key="search" />
+						<data key="va_variable" />
+						<data key="workspace" />
 					</value>
 				</param>
 			</params>
@@ -1743,16 +2212,20 @@
 				<name>Context_WorkspaceTab</name>
 			</class>
 			<params>
+				<param key="names">
+					<value>
+						<data key="workspace tab" value="singular" />
+						<data key="workspace tabs" value="plural" />
+						<data key="tab" value="singular short" />
+						<data key="tabs" value="plural short" />
+					</value>
+				</param>
 				<param key="alias" value="workspace_tab" />
 				<param key="dao_class" value="DAO_WorkspaceTab" />
 				<param key="view_class" value="View_WorkspaceTab" />
 				<param key="options">
 					<value>
-						<!--<data key="create" />-->
-						<!--<data key="find" />-->
-						<!--<data key="snippets" />-->
-						<!--<data key="va_variable" />-->
-						<!--<data key="workspace" />-->
+						<!-- <data key="va_variable" /> -->
 					</value>
 				</param>
 			</params>
@@ -1766,22 +2239,50 @@
 				<name>Context_WorkspaceWidget</name>
 			</class>
 			<params>
+				<param key="names">
+					<value>
+						<data key="workspace widget" value="singular" />
+						<data key="workspace widgets" value="plural" />
+						<data key="widget" value="singular short" />
+						<data key="widgets" value="plural short" />
+					</value>
+				</param>
 				<param key="alias" value="workspace_widget" />
 				<param key="dao_class" value="DAO_WorkspaceWidget" />
 				<param key="view_class" value="View_WorkspaceWidget" />
 				<param key="options">
 					<value>
-						<!--<data key="create" />-->
-						<!--<data key="find" />-->
-						<!--<data key="snippets" />-->
 						<!--<data key="va_variable" />-->
-						<!--<data key="workspace" />-->
 					</value>
 				</param>
 			</params>
 		</extension>
-
+		
 		<!-- Event Triggers -->
+		
+		<extension point="devblocks.event">
+			<id>event.interaction.chat.worker</id>
+			<name>[UI] New chat message from worker</name>
+			<class>
+				<file>api/events/interaction/interaction_chat_worker.php</file>
+				<name>Event_InteractionChatWorker</name>
+			</class>
+			<params>
+				<param key="contexts">
+					<value>
+						<data key="cerberusweb.contexts.app" />
+						<data key="cerberusweb.contexts.role" />
+						<data key="cerberusweb.contexts.group" />
+						<data key="cerberusweb.contexts.worker" />
+					</value>
+				</param>
+				<param key="options">
+					<value>
+						<data key="resumable" />
+					</value>
+				</param>
+			</params>
+		</extension>
 		
 		<extension point="devblocks.event">
 			<id>event.mail.received.app</id>
@@ -2207,14 +2708,14 @@
 		</extension>
 		
 		<extension point="devblocks.event">
-			<id>event.macro.virtual_attendant</id>
-			<name>Custom virtual attendant behavior</name>
+			<id>event.macro.bot</id>
+			<name>Custom bot behavior</name>
 			<class>
-				<file>api/events/macro/virtual_attendant_macro.php</file>
-				<name>Event_VirtualAttendantMacro</name>
+				<file>api/events/macro/bot_macro.php</file>
+				<name>Event_BotMacro</name>
 			</class>
 			<params>
-				<param key="macro_context" value="cerberusweb.contexts.virtual.attendant" />
+				<param key="macro_context" value="cerberusweb.contexts.bot" />
 				<param key="contexts">
 					<value>
 						<data key="cerberusweb.contexts.app" />
@@ -2391,7 +2892,43 @@
 			</params>
 		</extension>
 
+		<!-- Connected Services -->
+		
+		<extension point="cerb.service.provider">
+			<id>core.service.provider.cerb</id>
+			<name>Cerb</name>
+			<class>
+				<file>api/plugin.classes.php</file>
+				<name>ServiceProvider_Cerb</name>
+			</class>
+			<params>
+				<param key="contexts">
+					<value>
+						<data key="cerberusweb.contexts.app" />
+						<data key="cerberusweb.contexts.worker" />
+					</value>
+				</param>
+			</params>
+		</extension>
+		
 		<!-- VA Actions -->
+		
+		<extension point="devblocks.event.action">
+			<id>core.va.action.classifier_prediction</id>
+			<name>Classifier Prediction</name>
+			<class>
+				<file>api/plugin.classes.php</file>
+				<name>VaAction_ClassifierPrediction</name>
+			</class>
+			<params>
+				<param key="label" value="Execute classifier prediction" />
+				<param key="events">
+					<value>
+						<data key="*" />
+					</value>
+				</param>
+			</params>
+		</extension>
 		
 		<extension point="devblocks.event.action">
 			<id>core.va.action.http_request</id>
@@ -2616,6 +3153,18 @@
 			</class>
 			<params>
 				<param key="uri" value="cron" />
+			</params>
+		</extension>
+
+		<extension point="devblocks.controller">
+			<id>core.controller.oauth</id>
+			<name>OAuth Controller</name>
+			<class>
+				<file>api/uri/oauth.php</file>
+				<name>Controller_OAuth</name>
+			</class>
+			<params>
+				<param key="uri" value="oauth" />
 			</params>
 		</extension>
 
@@ -2879,7 +3428,6 @@
 			<params>
 				<param key="uri" value="contacts" />
 				<param key="menutitle" value="" />
-				<param key="acl" value="core.addybook" />
 			</params>
 		</extension>
 
@@ -2925,32 +3473,6 @@
 		
 			<!-- Setup Page Sections -->
 			
-			<extension point="cerberusweb.ui.page.section">
-				<id>core.page.setup.acl</id>
-				<name>ACL Section</name>
-				<class>
-					<file>api/uri/config/acl.php</file>
-					<name>PageSection_SetupACL</name>
-				</class>
-				<params>
-					<param key="page_id" value="core.page.configuration" />
-					<param key="uri" value="acl" />
-				</params>
-			</extension>
-			
-			<extension point="cerberusweb.ui.page.section">
-				<id>core.page.setup.virtual_attendants</id>
-				<name>Virtual Attendants Section</name>
-				<class>
-					<file>api/uri/config/attendants.php</file>
-					<name>PageSection_SetupAttendants</name>
-				</class>
-				<params>
-					<param key="page_id" value="core.page.configuration" />
-					<param key="uri" value="bots" />
-				</params>
-			</extension>
-		
 			<extension point="cerberusweb.ui.page.section">
 				<id>core.page.setup.avatars</id>
 				<name>Avatars Section</name>
@@ -3004,6 +3526,19 @@
 			</extension>
 			
 			<extension point="cerberusweb.ui.page.section">
+				<id>core.page.setup.connected_accounts</id>
+				<name>Connected Accounts Section</name>
+				<class>
+					<file>api/uri/config/connected_accounts.php</file>
+					<name>PageSection_SetupConnectedAccounts</name>
+				</class>
+				<params>
+					<param key="page_id" value="core.page.configuration" />
+					<param key="uri" value="connected_accounts" />
+				</params>
+			</extension>
+			
+			<extension point="cerberusweb.ui.page.section">
 				<id>core.page.setup.localization</id>
 				<name>Localization Section</name>
 				<class>
@@ -3039,19 +3574,6 @@
 				<params>
 					<param key="page_id" value="core.page.configuration" />
 					<param key="uri" value="skills" />
-				</params>
-			</extension>
-			
-			<extension point="cerberusweb.ui.page.section">
-				<id>core.page.setup.groups</id>
-				<name>Groups Section</name>
-				<class>
-					<file>api/uri/config/groups.php</file>
-					<name>PageSection_SetupGroups</name>
-				</class>
-				<params>
-					<param key="page_id" value="core.page.configuration" />
-					<param key="uri" value="groups" />
 				</params>
 			</extension>
 			
@@ -3196,7 +3718,7 @@
 					<param key="page_id" value="core.page.configuration" />
 					<param key="uri" value="mail_queue" />
 				</params>
-			</extension>		
+			</extension>
 		
 			<extension point="cerberusweb.ui.page.section">
 				<id>core.page.setup.mail_routing</id>
@@ -3301,7 +3823,7 @@
 					<param key="uri" value="scheduled_behavior" />
 				</params>
 			</extension>
-		
+			
 			<extension point="cerberusweb.ui.page.section">
 				<id>core.page.setup.search</id>
 				<name>Search Section</name>
@@ -3393,19 +3915,6 @@
 				</params>
 			</extension>
 		
-			<extension point="cerberusweb.ui.page.section">
-				<id>core.page.setup.workers</id>
-				<name>Workers Section</name>
-				<class>
-					<file>api/uri/config/workers.php</file>
-					<name>PageSection_SetupWorkers</name>
-				</class>
-				<params>
-					<param key="page_id" value="core.page.configuration" />
-					<param key="uri" value="workers" />
-				</params>
-			</extension>
-		
 		<extension point="cerberusweb.page">
 			<id>core.page.preferences</id>
 			<name>Preferences Page</name>
@@ -3444,6 +3953,19 @@
 				<params>
 					<param key="page_id" value="core.page.profiles" />
 					<param key="uri" value="address" />
+				</params>
+			</extension>
+			
+			<extension point="cerberusweb.ui.page.section">
+				<id>core.page.profiles.attachment</id>
+				<name>Attachment Section</name>
+				<class>
+					<file>api/uri/profiles/attachment.php</file>
+					<name>PageSection_ProfilesAttachment</name>
+				</class>
+				<params>
+					<param key="page_id" value="core.page.profiles" />
+					<param key="uri" value="attachment" />
 				</params>
 			</extension>
 			
@@ -3498,7 +4020,85 @@
 					<param key="uri" value="calendar_recurring_profile" />
 				</params>
 			</extension>
+			
+			<extension point="cerberusweb.ui.page.section">
+				<id>core.page.profiles.classifier</id>
+				<name>Classifier Section</name>
+				<class>
+					<file>api/uri/profiles/classifier.php</file>
+					<name>PageSection_ProfilesClassifier</name>
+				</class>
+				<params>
+					<param key="page_id" value="core.page.profiles" />
+					<param key="uri" value="classifier" />
+				</params>
+			</extension>
+			
+			<extension point="cerberusweb.ui.page.section">
+				<id>core.page.profiles.classifier_class</id>
+				<name>Classifier Class Section</name>
+				<class>
+					<file>api/uri/profiles/classifier_class.php</file>
+					<name>PageSection_ProfilesClassifierClass</name>
+				</class>
+				<params>
+					<param key="page_id" value="core.page.profiles" />
+					<param key="uri" value="classifier_class" />
+				</params>
+			</extension>
+			
+			<extension point="cerberusweb.ui.page.section">
+				<id>core.page.profiles.classifier_entity</id>
+				<name>Classifier Entity Section</name>
+				<class>
+					<file>api/uri/profiles/classifier_entity.php</file>
+					<name>PageSection_ProfilesClassifierEntity</name>
+				</class>
+				<params>
+					<param key="page_id" value="core.page.profiles" />
+					<param key="uri" value="classifier_entity" />
+				</params>
+			</extension>
+			
+			<extension point="cerberusweb.ui.page.section">
+				<id>core.page.profiles.classifier.example</id>
+				<name>Classifier Example Section</name>
+				<class>
+					<file>api/uri/profiles/classifier_example.php</file>
+					<name>PageSection_ProfilesClassifierExample</name>
+				</class>
+				<params>
+					<param key="page_id" value="core.page.profiles" />
+					<param key="uri" value="classifier_example" />
+				</params>
+			</extension>
+			
+			<extension point="cerberusweb.ui.page.section">
+				<id>core.page.profiles.comment</id>
+				<name>Comment Section</name>
+				<class>
+					<file>api/uri/profiles/comment.php</file>
+					<name>PageSection_ProfilesComment</name>
+				</class>
+				<params>
+					<param key="page_id" value="core.page.profiles" />
+					<param key="uri" value="comment" />
+				</params>
+			</extension>
 
+			<extension point="cerberusweb.ui.page.section">
+				<id>core.page.profiles.connected_account</id>
+				<name>Connected Account Section</name>
+				<class>
+					<file>api/uri/profiles/connected_account.php</file>
+					<name>PageSection_ProfilesConnectedAccount</name>
+				</class>
+				<params>
+					<param key="page_id" value="core.page.profiles" />
+					<param key="uri" value="connected_account" />
+				</params>
+			</extension>
+			
 			<extension point="cerberusweb.ui.page.section">
 				<id>core.page.profiles.contact</id>
 				<name>Contact Section</name>
@@ -3604,6 +4204,19 @@
 			</extension>
 			
 			<extension point="cerberusweb.ui.page.section">
+				<id>core.page.profiles.role</id>
+				<name>Role Section</name>
+				<class>
+					<file>api/uri/profiles/role.php</file>
+					<name>PageSection_ProfilesWorkerRole</name>
+				</class>
+				<params>
+					<param key="page_id" value="core.page.profiles" />
+					<param key="uri" value="role" />
+				</params>
+			</extension>
+			
+			<extension point="cerberusweb.ui.page.section">
 				<id>core.page.profiles.skill</id>
 				<name>Skill Section</name>
 				<class>
@@ -3626,6 +4239,19 @@
 				<params>
 					<param key="page_id" value="core.page.profiles" />
 					<param key="uri" value="skillset" />
+				</params>
+			</extension>
+			
+			<extension point="cerberusweb.ui.page.section">
+				<id>core.page.profiles.snippet</id>
+				<name>Snippet Section</name>
+				<class>
+					<file>api/uri/profiles/snippet.php</file>
+					<name>PageSection_ProfilesSnippet</name>
+				</class>
+				<params>
+					<param key="page_id" value="core.page.profiles" />
+					<param key="uri" value="snippet" />
 				</params>
 			</extension>
 			
@@ -3656,15 +4282,28 @@
 			</extension>
 			
 			<extension point="cerberusweb.ui.page.section">
-				<id>core.page.profiles.virtual_attendant</id>
-				<name>Virtual Attendant Section</name>
+				<id>core.page.profiles.behavior</id>
+				<name>Behavior Section</name>
 				<class>
-					<file>api/uri/profiles/virtual_attendant.php</file>
-					<name>PageSection_ProfilesVirtualAttendant</name>
+					<file>api/uri/profiles/behavior.php</file>
+					<name>PageSection_ProfilesBehavior</name>
 				</class>
 				<params>
 					<param key="page_id" value="core.page.profiles" />
-					<param key="uri" value="virtual_attendant" />
+					<param key="uri" value="behavior" />
+				</params>
+			</extension>
+			
+			<extension point="cerberusweb.ui.page.section">
+				<id>core.page.profiles.bot</id>
+				<name>Bot Section</name>
+				<class>
+					<file>api/uri/profiles/bot.php</file>
+					<name>PageSection_ProfilesBot</name>
+				</class>
+				<params>
+					<param key="page_id" value="core.page.profiles" />
+					<param key="uri" value="bot" />
 				</params>
 			</extension>
 			
@@ -4033,11 +4672,11 @@
 		</extension>
 		
 		<extension point="cerberusweb.cron">
-			<id>cron.virtual_attendant.scheduled_behavior</id>
-			<name>Virtual Attendant Scheduled Behavior</name>
+			<id>cron.bot.scheduled_behavior</id>
+			<name>Bot Scheduled Behavior</name>
 			<class>
 				<file>api/cron.classes.php</file>
-				<name>Cron_VirtualAttendantScheduledBehavior</name>
+				<name>Cron_BotScheduledBehavior</name>
 			</class>
 			<params />
 		</extension>

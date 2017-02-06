@@ -2,17 +2,17 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2017, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
 | The latest version of this license can be found here:
-| http://cerb.io/license
+| http://cerb.ai/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://cerb.io	    http://webgroup.media
+|	http://cerb.ai	    http://webgroup.media
 ***********************************************************************/
 
 class ChFilesController extends DevblocksControllerExtension {
@@ -31,44 +31,28 @@ class ChFilesController extends DevblocksControllerExtension {
 		
 		$stack = $request->path; // URLS like: /files/10000/plaintext.txt
 		array_shift($stack); // files
-		$file_guid = array_shift($stack); // GUID
+		$file_id = array_shift($stack); // 123
 		$file_name = array_shift($stack); // plaintext.txt
+		
+		if(40 == strlen($file_id))
+			$file_id = DAO_Attachment::getBySha1Hash($file_id);
 		
 		// Security
 		if(null == ($active_worker = CerberusApplication::getActiveWorker()))
 			DevblocksPlatform::dieWithHttpError($translate->_('common.access_denied'), 403);
 		
-		if(empty($file_guid) || empty($file_name))
+		if(empty($file_id) || empty($file_name))
 			DevblocksPlatform::dieWithHttpError($translate->_('files.not_found'), 404);
 		
-		// Are we being asked for the direct SHA1 hash of a file?
-		if(strlen($file_guid) == 40) {
-			if(null == ($file_id = DAO_Attachment::getBySha1Hash($file_guid)))
-				DevblocksPlatform::dieWithHttpError($translate->_('common.access_denied'), 403);
-			
-			$file = DAO_Attachment::get($file_id);
-			
-		// If not SHA1, then look for a link with this GUID
-		} else {
-			$link = DAO_AttachmentLink::getByGUID($file_guid);
-			
-			if(empty($link))
-				DevblocksPlatform::dieWithHttpError($translate->_('files.error_link_read'), 500);
-			
-			if(null == ($context = $link->getContext()))
-				DevblocksPlatform::dieWithHttpError($translate->_('common.access_denied'), 403);
-			
-			// Security
-			if(!$context->authorize($link->context_id, $active_worker))
-				DevblocksPlatform::dieWithHttpError($translate->_('common.access_denied'), 403);
-			
-			$file = $link->getAttachment();
-		}
-		
-		if(empty($file))
+		if(false == ($file = DAO_Attachment::get($file_id)))
 			DevblocksPlatform::dieWithHttpError($translate->_('files.not_found'), 404);
+		
+		if(!Context_Attachment::isDownloadableByActor($file, $active_worker))
+			DevblocksPlatform::dieWithHttpError($translate->_('common.access_denied'), 403);
+		
 		if(false === ($fp = DevblocksPlatform::getTempFile()))
 			DevblocksPlatform::dieWithHttpError($translate->_('files.error_temp_open'), 500);
+		
 		if(false === $file->getFileContents($fp))
 			DevblocksPlatform::dieWithHttpError($translate->_('files.error_resource_read'), 500);
 			
@@ -84,7 +68,7 @@ class ChFilesController extends DevblocksControllerExtension {
 // 		header("Last-Modified: " . gmdate("D, d M Y H:i:s") . " GMT");
 
 		if($is_download) {
-			header('Content-Disposition: attachment; filename=' . urlencode($file->display_name));
+			header('Content-Disposition: attachment; filename=' . urlencode($file->name));
 		}
 		
 		$handled = false;

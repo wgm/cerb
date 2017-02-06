@@ -2,17 +2,17 @@
 /***********************************************************************
  | Cerb(tm) developed by Webgroup Media, LLC.
  |-----------------------------------------------------------------------
- | All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
+ | All source code & content (c) Copyright 2002-2017, Webgroup Media LLC
  |   unless specifically noted otherwise.
  |
  | This source code is released under the Devblocks Public License.
  | The latest version of this license can be found here:
- | http://cerb.io/license
+ | http://cerb.ai/license
  |
  | By using this software, you acknowledge having read this license
  | and agree to be bound thereby.
  | ______________________________________________________________________
- |	http://cerb.io	    http://webgroup.media
+ |	http://cerb.ai	    http://webgroup.media
  ***********************************************************************/
 
 class DAO_CerbPlugin extends Cerb_ORMHelper {
@@ -139,7 +139,6 @@ class DAO_CerbPlugin extends Cerb_ORMHelper {
 			'select' => $select_sql,
 			'join' => $join_sql,
 			'where' => $where_sql,
-			'has_multiple_values' => false,
 			'sort' => $sort_sql,
 		);
 	}
@@ -165,14 +164,12 @@ class DAO_CerbPlugin extends Cerb_ORMHelper {
 		$select_sql = $query_parts['select'];
 		$join_sql = $query_parts['join'];
 		$where_sql = $query_parts['where'];
-		$has_multiple_values = $query_parts['has_multiple_values'];
 		$sort_sql = $query_parts['sort'];
 		
 		$sql =
 			$select_sql.
 			$join_sql.
 			$where_sql.
-			($has_multiple_values ? 'GROUP BY cerb_plugin.id ' : '').
 			$sort_sql;
 
 		if($limit > 0) {
@@ -202,7 +199,7 @@ class DAO_CerbPlugin extends Cerb_ORMHelper {
 			// We can skip counting if we have a less-than-full single page
 			if(!(0 == $page && $total < $limit)) {
 				$count_sql =
-					($has_multiple_values ? "SELECT COUNT(DISTINCT cerb_plugin.id) " : "SELECT COUNT(cerb_plugin.id) ").
+					"SELECT COUNT(cerb_plugin.id) ".
 					$join_sql.
 					$where_sql;
 				$total = $db->GetOneSlave($count_sql);
@@ -268,7 +265,7 @@ class SearchFields_CerbPlugin extends DevblocksSearchFields {
 			self::ENABLED => new DevblocksSearchField(self::ENABLED, 'cerb_plugin', 'enabled', $translate->_('common.enabled'), Model_CustomField::TYPE_CHECKBOX, true),
 			self::NAME => new DevblocksSearchField(self::NAME, 'cerb_plugin', 'name', $translate->_('common.name'), Model_CustomField::TYPE_SINGLE_LINE, true),
 			self::DESCRIPTION => new DevblocksSearchField(self::DESCRIPTION, 'cerb_plugin', 'description', $translate->_('dao.cerb_plugin.description'), Model_CustomField::TYPE_MULTI_LINE, true),
-			self::AUTHOR => new DevblocksSearchField(self::AUTHOR, 'cerb_plugin', 'author', $translate->_('dao.cerb_plugin.author'), Model_CustomField::TYPE_SINGLE_LINE, true),
+			self::AUTHOR => new DevblocksSearchField(self::AUTHOR, 'cerb_plugin', 'author', $translate->_('common.author'), Model_CustomField::TYPE_SINGLE_LINE, true),
 			self::VERSION => new DevblocksSearchField(self::VERSION, 'cerb_plugin', 'version', $translate->_('dao.cerb_plugin.version'), null, true),
 			self::DIR => new DevblocksSearchField(self::DIR, 'cerb_plugin', 'dir', null, null, true),
 			self::LINK => new DevblocksSearchField(self::LINK, 'cerb_plugin', 'link', $translate->_('common.url'), Model_CustomField::TYPE_URL, true),
@@ -415,7 +412,7 @@ class View_CerbPlugin extends C4_AbstractView implements IAbstractView_Subtotals
 				),
 			'id' => 
 				array(
-					'type' => DevblocksSearchCriteria::TYPE_NUMBER,
+					'type' => DevblocksSearchCriteria::TYPE_TEXT,
 					'options' => array('param_key' => SearchFields_CerbPlugin::ID),
 				),
 			'name' => 

@@ -2,17 +2,17 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2017, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
 | The latest version of this license can be found here:
-| http://cerb.io/license
+| http://cerb.ai/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://cerb.io	    http://webgroup.media
+|	http://cerb.ai	    http://webgroup.media
 ***********************************************************************/
 
 class PageSection_SetupMailFailed extends Extension_PageSection {
@@ -439,8 +439,12 @@ class View_MailParseFail extends C4_AbstractView implements IAbstractView_QuickS
 				),
 			'size' => 
 				array(
-					'type' => DevblocksSearchCriteria::TYPE_NUMBER,
+					'type' => DevblocksSearchCriteria::TYPE_VIRTUAL,
 					'options' => array('param_key' => SearchFields_MailParseFail::SIZE),
+					'examples' => [
+						'>1MB',
+						'<=512KB',
+					]
 				),
 			'updated' => 
 				array(
@@ -462,6 +466,10 @@ class View_MailParseFail extends C4_AbstractView implements IAbstractView_QuickS
 	
 	function getParamFromQuickSearchFieldTokens($field, $tokens) {
 		switch($field) {
+			case 'size':
+				return DevblocksSearchCriteria::getBytesParamFromTokens(SearchFields_MailParseFail::SIZE, $tokens);
+				break;
+				
 			default:
 				$search_fields = $this->getQuickSearchFields();
 				return DevblocksSearchCriteria::getParamFromQueryFieldTokens($field, $tokens, $search_fields);

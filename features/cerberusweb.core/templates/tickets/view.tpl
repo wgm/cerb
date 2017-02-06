@@ -74,7 +74,30 @@
 	{* Column Data *}
 	{if !$view->options.disable_recommendations}{$object_recommendations = DAO_ContextRecommendation::getByContexts($view_context, array_keys($data))}{/if}
 	{if !$view->options.disable_watchers}{$object_watchers = DAO_ContextLink::getContextLinks($view_context, array_keys($data), CerberusContexts::CONTEXT_WORKER)}{/if}
+	
+	{* Bulk load drafts *}
 	{$ticket_drafts = DAO_MailQueue::getDraftsByTicketIds(array_keys($data))} 
+	
+	{* Bulk lazy load first wrote *}
+	{$object_first_wrotes = []}
+	{if in_array(SearchFields_Ticket::TICKET_FIRST_WROTE_ID, $view->view_columns)}
+		{$first_wrote_ids = DevblocksPlatform::extractArrayValues($results, 't_first_wrote_address_id')}
+		{$object_first_wrotes = DAO_Address::getIds($first_wrote_ids)}
+	{/if}
+	
+	{* Bulk lazy load last wrote *}
+	{$object_last_wrotes = []}
+	{if in_array(SearchFields_Ticket::TICKET_LAST_WROTE_ID, $view->view_columns)}
+		{$last_wrote_ids = DevblocksPlatform::extractArrayValues($results, 't_last_wrote_address_id')}
+		{$object_last_wrotes = DAO_Address::getIds($last_wrote_ids)}
+	{/if}
+	
+	{* Bulk lazy load orgs *}
+	{$object_orgs = []}
+	{if in_array(SearchFields_Ticket::TICKET_ORG_ID, $view->view_columns)}
+		{$org_ids = DevblocksPlatform::extractArrayValues($results, 't_org_id')}
+		{$object_orgs = DAO_ContactOrg::getIds($org_ids)}
+	{/if}
 	
 	{foreach from=$data item=result key=idx name=results}
 
@@ -95,18 +118,7 @@
 	
 	{$ticket_group_id = $result.t_group_id}
 	{$ticket_group = $groups.$ticket_group_id}
-	{if $ticket_group->is_private && !$active_worker->isGroupMember($ticket_group_id)}
-	<tbody>
-	<tr class="{$tableRowClass}">
-		<td>&nbsp;</td>
-		<td rowspan="2" colspan="{$smarty.foreach.headers.total}" style="color:rgb(140,140,140);font-size:10px;text-align:left;vertical-align:middle;">[Access Denied: {$ticket_group->name} #{$result.t_mask}]</td>
-	</tr>
-	<tr class="{$tableRowClass}">
-		<td>&nbsp;</td>
-	</tr>
-	</tbody>
-	
-	{else}
+
 	<tbody style="cursor:pointer;" data-num-messages="{$result.t_num_messages}">
 	
 	{if !$view->options.disable_recommendations || !$view->options.disable_watchers || !in_array('t_subject',$view->view_columns)}
@@ -154,10 +166,20 @@
 			{else}
 			{/if}
 			</td>
-		{elseif $column=="t_first_wrote"}
-		<td data-column="{$column}"><a href="javascript:;" class="cerb-peek-trigger" data-context="{CerberusContexts::CONTEXT_ADDRESS}" data-context-id="{$result.t_first_wrote_address_id}" data-is-local="{if isset($sender_addresses.{$result.t_first_wrote_address_id})}true{/if}" title="{$result.t_first_wrote}">{$result.t_first_wrote|truncate:45:'...':true:true}</a></td>
-		{elseif $column=="t_last_wrote"}
-		<td data-column="{$column}"><a href="javascript:;" class="cerb-peek-trigger" data-context="{CerberusContexts::CONTEXT_ADDRESS}" data-context-id="{$result.t_last_wrote_address_id}" data-is-local="{if isset($sender_addresses.{$result.t_last_wrote_address_id})}true{/if}" title="{$result.t_last_wrote}">{$result.t_last_wrote|truncate:45:'...':true:true}</a></td>
+		{elseif $column=="t_first_wrote_address_id"}
+			{$first_wrote = $object_first_wrotes.{$result.$column}}
+			<td data-column="{$column}">
+				{if $first_wrote}
+				<a href="javascript:;" class="cerb-peek-trigger no-underline" data-context="{CerberusContexts::CONTEXT_ADDRESS}" data-context-id="{$result.t_first_wrote_address_id}" data-is-local="{if isset($sender_addresses.{$result.t_first_wrote_address_id})}true{/if}" title="{$first_wrote->getNameWithEmail()}">{$first_wrote->getNameWithEmail()|truncate:45:'...':true:true}</a>
+				{/if}
+			</td>
+		{elseif $column=="t_last_wrote_address_id"}
+			{$last_wrote = $object_last_wrotes.{$result.$column}}
+			<td data-column="{$column}">
+				{if $last_wrote}
+				<a href="javascript:;" class="cerb-peek-trigger no-underline" data-context="{CerberusContexts::CONTEXT_ADDRESS}" data-context-id="{$result.t_last_wrote_address_id}" data-is-local="{if isset($sender_addresses.{$result.t_last_wrote_address_id})}true{/if}" title="{$last_wrote->getNameWithEmail()}">{$last_wrote->getNameWithEmail()|truncate:45:'...':true:true}</a>
+				{/if}
+			</td>
 		{elseif $column=="t_created_date" || $column=="t_updated_date" || $column=="t_reopen_at" || $column=="t_closed_at"}
 		<td data-column="{$column}"><abbr title="{$result.$column|devblocks_date}">{$result.$column|devblocks_prettytime}</abbr></td>
 		{elseif $column=="t_elapsed_response_first" || $column=="t_elapsed_resolution_first"}
@@ -172,10 +194,12 @@
 				<a href="javascript:;" class="cerb-peek-trigger no-underline" data-context="{CerberusContexts::CONTEXT_WORKER}" data-context-id="{$owner->id}">{$owner->getName()}</a>
 			{/if}
 		</td>
-		{elseif $column=="o_name"}
+		{elseif $column=="t_org_id"}
 		<td data-column="{$column}">
-			{if $result.t_org_id}
-				<a href="javascript:;" class="cerb-peek-trigger no-underline" data-context="{CerberusContexts::CONTEXT_ORG}" data-context-id="{$result.t_org_id}">{$result.o_name}</a>
+			{$org_id = $result.t_org_id}
+			{if $org_id && isset($object_orgs.$org_id)}
+				{$org = $object_orgs.$org_id}
+				<a href="javascript:;" class="cerb-peek-trigger no-underline" data-context="{CerberusContexts::CONTEXT_ORG}" data-context-id="{$org->id}">{$org->name}</a>
 			{/if}
 		</td>
 		{elseif $column=="t_group_id"}
@@ -235,7 +259,6 @@
 	{/foreach}
 	</tr>
 	</tbody>
-	{/if}{*!censor*}
 {/foreach}
 </table>
 

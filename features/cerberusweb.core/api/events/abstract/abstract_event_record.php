@@ -2,17 +2,17 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2017, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
 | The latest version of this license can be found here:
-| http://cerb.io/license
+| http://cerb.ai/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://cerb.io	    http://webgroup.media
+|	http://cerb.ai	    http://webgroup.media
 ***********************************************************************/
 
 abstract class AbstractEvent_Record extends Extension_DevblocksEvent {
@@ -45,7 +45,7 @@ abstract class AbstractEvent_Record extends Extension_DevblocksEvent {
 			$new_model = $context_id;
 		}
 		
-		return new Model_DevblocksEvent(
+		$event_model = new Model_DevblocksEvent(
 			$this->_event_id,
 			array(
 				'context' => @$trigger->event_params['context'],
@@ -53,9 +53,11 @@ abstract class AbstractEvent_Record extends Extension_DevblocksEvent {
 				'old_model' => $old_model,
 				'new_model' => $new_model,
 				'actor' => CerberusContexts::getCurrentActor(),
-				'_trigger' => $trigger,
+				'__trigger' => $trigger,
 			)
 		);
+		
+		return $event_model;
 	}
 
 	/**
@@ -103,7 +105,7 @@ abstract class AbstractEvent_Record extends Extension_DevblocksEvent {
 	function setEvent(Model_DevblocksEvent $event_model=null, Model_TriggerEvent $trigger) {
 		$labels = array();
 		$values = array();
-
+		
 		@$context = $trigger->event_params['context'];
 		@$new_model = $event_model->params['new_model'];
 		@$old_model = $event_model->params['old_model'];
@@ -222,7 +224,7 @@ abstract class AbstractEvent_Record extends Extension_DevblocksEvent {
 				'context' => @$trigger->event_params['context'],
 			),
 			'va_watchers' => array(
-				'label' => 'Virtual Attendant Watchers',
+				'label' => 'Bot Watchers',
 				'context' => CerberusContexts::CONTEXT_WORKER,
 			),
 		);
@@ -294,7 +296,7 @@ abstract class AbstractEvent_Record extends Extension_DevblocksEvent {
 						case CerberusContexts::CONTEXT_ROLE:
 						case CerberusContexts::CONTEXT_GROUP:
 						case CerberusContexts::CONTEXT_WORKER:
-						case CerberusContexts::CONTEXT_VIRTUAL_ATTENDANT:
+						case CerberusContexts::CONTEXT_BOT:
 							$options[$context_id] = $context_mft->name;
 							break;
 					}

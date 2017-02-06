@@ -2,17 +2,17 @@
 /***********************************************************************
 | Cerb(tm) developed by Webgroup Media, LLC.
 |-----------------------------------------------------------------------
-| All source code & content (c) Copyright 2002-2016, Webgroup Media LLC
+| All source code & content (c) Copyright 2002-2017, Webgroup Media LLC
 |   unless specifically noted otherwise.
 |
 | This source code is released under the Devblocks Public License.
 | The latest version of this license can be found here:
-| http://cerb.io/license
+| http://cerb.ai/license
 |
 | By using this software, you acknowledge having read this license
 | and agree to be bound thereby.
 | ______________________________________________________________________
-|	http://cerb.io	    http://webgroup.media
+|	http://cerb.ai	    http://webgroup.media
 ***********************************************************************/
 
 class ChTicketsPage extends CerberusPageExtension {
@@ -234,7 +234,7 @@ class ChTicketsPage extends CerberusPageExtension {
 
 		$active_worker = CerberusApplication::getActiveWorker();
 		
-		header('Content-Type: application/json; charset=' . LANG_CHARSET_CODE);
+		header('Content-Type: application/json; charset=utf-8');
 		
 		try {
 			@$subject = DevblocksPlatform::importGPC($_REQUEST['subject'],'string','');
@@ -494,24 +494,11 @@ class ChTicketsPage extends CerberusPageExtension {
 			if(!empty($hash_commands))
 				$this->_handleComposeHashCommands($hash_commands, $ticket_id, $active_worker);
 			
-			// Watchers
-			@$add_watcher_ids = DevblocksPlatform::sanitizeArray(DevblocksPlatform::importGPC($_REQUEST['add_watcher_ids'],'array',array()),'integer',array('unique','nonzero'));
-			if(!empty($add_watcher_ids))
-				CerberusContexts::addWatchers(CerberusContexts::CONTEXT_TICKET, $ticket_id, $add_watcher_ids);
-			
 			// Preferences
 			
 			DAO_WorkerPref::set($active_worker->id, 'compose.group_id', $group_id);
 			DAO_WorkerPref::set($active_worker->id, 'compose.bucket_id', $bucket_id);
 
-			// Context Link (if given)
-			
-			@$link_context = DevblocksPlatform::importGPC($_REQUEST['link_context'],'string','');
-			@$link_context_id = DevblocksPlatform::importGPC($_REQUEST['link_context_id'],'integer','');
-			if(!empty($ticket_id) && !empty($link_context) && !empty($link_context_id)) {
-				DAO_ContextLink::setLink(CerberusContexts::CONTEXT_TICKET, $ticket_id, $link_context, $link_context_id);
-			}
-			
 			// View marquee
 			
 			if(!empty($ticket_id) && !empty($view_id)) {
